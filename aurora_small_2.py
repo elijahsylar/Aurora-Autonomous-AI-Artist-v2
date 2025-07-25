@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 from collections import deque
 import time
+import pyaudio
+import pygame
 try:
     from aurora_ai_backup2 import DeepMemorySystem
     DEEP_MEMORY_AVAILABLE = True
@@ -297,7 +299,58 @@ class AuroraCodeMindComplete:
         self.sleep_phase = "light"  # light, rem, waking
         self.sleep_phase_start = time.time()
         self.dream_count = 0
+        # Audio hearing system
+        self.hearing_enabled = False
+        self.audio_stream = None
+        self.audio = pyaudio.PyAudio()
         self.rest_duration = 60 * 60  # 1 hour for rest/dreaming (separate from break_duration)
+        # Audio hearing system
+        self.hearing_enabled = False
+        self.audio_stream = None
+        self.audio = pyaudio.PyAudio()
+        self.rest_duration = 60 * 60  # 1 hour for rest/dreaming (separate from break_duration)
+        
+        # Simple pygame sound system  # ADD ALL OF THIS
+        pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
+        pygame.mixer.set_num_channels(8)  # 8 simultaneous sounds
+        
+        # Pre-generate simple beeps (so they're instant to play)
+        self.sounds = {}
+        self.current_pitch = 'normal'  # ADD THIS - tracks current pitch mode
+        try:
+            import numpy as np  # Import here if not already imported
+            # Generate 8 different beeps at 3 pitches each
+            for i, char in enumerate('!@#$%^&*'):
+                base_freq = 200 + (i * 150)  # 200Hz to 1250Hz
+                
+                # Normal pitch
+                freq = base_freq
+                samples = np.sin(2 * np.pi * freq * np.arange(0, 0.05 * 22050) / 22050) * 0.3
+                sound_data = (samples * 32767).astype(np.int16)
+                sound_data = np.repeat(sound_data.reshape(-1, 1), 2, axis=1)  # Make stereo
+                self.sounds[f"{char}_normal"] = pygame.sndarray.make_sound(sound_data)
+                self.sounds[f"{char}_normal"].set_volume(0.3)
+                
+                # Low pitch (++)
+                freq = base_freq * 0.5  # Half frequency
+                samples = np.sin(2 * np.pi * freq * np.arange(0, 0.05 * 22050) / 22050) * 0.3
+                sound_data = (samples * 32767).astype(np.int16)
+                sound_data = np.repeat(sound_data.reshape(-1, 1), 2, axis=1)
+                self.sounds[f"{char}_low"] = pygame.sndarray.make_sound(sound_data)
+                self.sounds[f"{char}_low"].set_volume(0.3)
+                
+                # High pitch (--)
+                freq = base_freq * 2  # Double frequency
+                samples = np.sin(2 * np.pi * freq * np.arange(0, 0.05 * 22050) / 22050) * 0.3
+                sound_data = (samples * 32767).astype(np.int16)
+                sound_data = np.repeat(sound_data.reshape(-1, 1), 2, axis=1)
+                self.sounds[f"{char}_high"] = pygame.sndarray.make_sound(sound_data)
+                self.sounds[f"{char}_high"].set_volume(0.3)
+                
+            print("✅ Sound system ready with pitch control!")
+        except:
+            print("❌ Sound system failed - continuing without audio")
+            self.sounds = {}
         # Setup display
         print("9. About to setup display...")
         self.setup_display()
@@ -501,7 +554,9 @@ Movement codes: pen53brush53large_brush53larger_brush53"""
         self.root.bind('<Escape>', lambda e: self.root.attributes('-fullscreen', False))
         self.root.bind('<F11>', lambda e: self.root.attributes('-fullscreen', 
                                             not self.root.attributes('-fullscreen')))
-        
+        # Add hearing control
+        self.root.bind('<h>', lambda e: self.toggle_hearing())
+        self.root.bind('<H>', lambda e: self.toggle_hearing())
         # Get actual screen dimensions
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
@@ -622,7 +677,15 @@ Movement codes: pen53brush53large_brush53larger_brush53"""
             font=('Arial', 10)
         )
         self.checkin_timer_display.pack(pady=10)
-        
+        # Hearing indicator
+        self.hearing_indicator = tk.Label(
+            info_frame,
+            text="",
+            fg='cyan',
+            bg='#000',
+            font=('Arial', 10)
+        )
+        self.hearing_indicator.pack()
         # Instructions
         tk.Label(
             info_frame,
@@ -986,7 +1049,7 @@ Movement codes: pen53brush53large_brush53larger_brush53"""
 
 You have three options:
 CHAT - Stop drawing and have a conversation for 20 minutes
-DREAM! - Experience light, REM, and waking sleep cycles.   
+DREAM - Experience light, REM, and waking sleep cycles.   
 DRAW - Continue drawing (you're in the flow)
 
 Output ONLY one of these exact words: CHAT, DREAM, or DRAW
@@ -1267,6 +1330,13 @@ DRAWING TOOLS (full words):
 pen brush spray large_brush larger_brush star cross circle diamond flower
 
 
+SOUNDS (instant beeps):  # ADD ALL OF THIS
+! = 200Hz  @ = 350Hz  # = 500Hz  $ = 650Hz
+% = 800Hz  ^ = 950Hz  & = 1100Hz * = 1250Hz
+++ = next sound lower pitch (half frequency)
+-- = next sound higher pitch (double frequency)
+Mix freely: red5333!@#blue5222***
+
 PAUSE:
 0123456789 = think
 
@@ -1513,7 +1583,7 @@ Create art! Output numbers:"""
                 return
             
             # Clean the remaining output - find longest continuous sequence of valid commands
-            valid_chars = '0123456789'  # Only movement/pen chars
+            valid_chars = '0123456789!@#$%^&*+-'  # CHANGE THIS LINE (add sound chars)
             color_words = list(self.palette.keys())  # All valid color names
             
             # Convert to list of tokens (numbers + color words)
@@ -1583,12 +1653,35 @@ Create art! Output numbers:"""
                     i += len(color)
                     found_color = True
                     break
-            
+
+                
             if found_color:
                 continue
             
             # Single character operations
             char = ops[i]
+            
+            # Check for pitch modifiers first  # NEW PITCH CHECK
+            if i + 1 < len(ops) and ops[i:i+2] in ['++', '--']:
+                if ops[i:i+2] == '++':
+                    self.current_pitch = 'low'
+                else:  # '--'
+                    self.current_pitch = 'high'
+                actions_taken.append(f"pitch:{ops[i:i+2]}")
+                i += 2
+                continue
+            
+            # Check for sound characters - PYGAME VERSION  # UPDATED SOUND CHECK
+            if char in '!@#$%^&*':  # Check character directly
+                sound_key = f"{char}_{self.current_pitch}"
+                if sound_key in self.sounds:
+                    self.sounds[sound_key].play()
+                    pygame.time.wait(50)
+                    actions_taken.append(f"♪{char}")
+                self.current_pitch = 'normal'  # Reset to normal after each sound
+                i += 1
+                continue
+            
             if char in op_map:
                 # Store position before action
                 prev_x, prev_y = self.x, self.y
@@ -1708,15 +1801,7 @@ Create art! Output numbers:"""
             except Exception as e:
                 # Silently fail - don't interrupt drawing
                 pass
-        # AUTO-SWITCH TO BIGGER TOOL IF DRAWING TOO SMALL
-        if pixels_drawn < 10 and self.draw_mode == "pen":
-            print("  → Aurora needs a bigger brush for this canvas!")
-            self.draw_mode = "large_brush"
-            print(f"    Switching to {self.draw_mode} (5x5) for better coverage")
-        elif pixels_drawn < 5 and self.draw_mode == "brush":
-            print("  → Even the brush is too small for this scale!")
-            self.draw_mode = "larger_brush"
-            print(f"    Upgrading to {self.draw_mode} (7x7) for bold strokes")
+       
         # Pen state feedback
         if '4' in self.last_code and self.continuous_draws > 5:
             # Lifted pen after drawing
@@ -2191,14 +2276,52 @@ Create art! Output numbers:"""
             self.root.after(200, lambda: self.memory_status.config(fg='cyan'))
         except Exception as e:
             print(f"Error saving snapshot: {e}")
+            
+    def toggle_hearing(self):
+        """Toggle Aurora's ability to hear ambient sounds"""
+        if not self.hearing_enabled:
+            try:
+                # Start hearing
+                self.audio_stream = self.audio.open(
+                    format=pyaudio.paInt16,
+                    channels=1,
+                    rate=44100,
+                    input=True,
+                    frames_per_buffer=1024,
+                    stream_callback=self._audio_callback
+                )
+                self.audio_stream.start_stream()
+                self.hearing_enabled = True
+                print("\n👂 Aurora can now hear the world around her")
+                
+            except Exception as e:
+                print(f"\n❌ Could not enable hearing: {e}")
+                self.hearing_enabled = False
+        else:
+            # Stop hearing
+            if self.audio_stream:
+                self.audio_stream.stop_stream()
+                self.audio_stream.close()
+                self.audio_stream = None
+            self.hearing_enabled = False
+            print("\n🔇 Aurora's hearing is now disabled")
     
+    def _audio_callback(self, in_data, frame_count, time_info, status):
+        """Just receive audio data - Aurora is hearing"""
+        # Simply return to keep stream active
+        # Aurora hears but doesn't process - just experiences
+        return (in_data, pyaudio.paContinue)
     def update_memory_display(self):
         """Update memory status"""
         # Build the memory text
         memory_text = f"Code memories: {len(self.memory.code_history)}\n"
         memory_text += f"Think pauses: {getattr(self, 'skip_count', 0)}\n"
         memory_text += f"Dreams retained: {len(self.dream_memories)}"
-        
+        # Update hearing indicator
+        if self.hearing_enabled:
+            self.hearing_indicator.config(text="👂 Hearing enabled")
+        else:
+            self.hearing_indicator.config(text="")
         # ADD THIS: Show deep memory stats
         if hasattr(self, 'big_memory') and self.big_memory:
             try:
@@ -2363,7 +2486,7 @@ Dream based on these real experiences:"""
         
         # Randomly select 40% of dreams to remember
         import random
-        dreams_to_keep = int(len(self.current_dreams) * 0.4)
+        dreams_to_keep = int(len(self.current_dreams))
         retained_dreams = random.sample(self.current_dreams, min(dreams_to_keep, len(self.current_dreams)))
         
         # Add retained dreams to permanent dream memory
@@ -2530,6 +2653,12 @@ Dream based on these real experiences:"""
             self.save_canvas_state()
             self.save_snapshot()  # Final snapshot
             print("Memories saved. Goodbye!")
+            # Clean up audio
+            if self.audio_stream:
+                self.audio_stream.stop_stream()
+                self.audio_stream.close()
+            self.audio.terminate()
+            pygame.mixer.quit() 
             self.root.destroy()
             
         self.root.protocol("WM_DELETE_WINDOW", on_closing)
