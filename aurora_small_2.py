@@ -18,10 +18,16 @@ try:
 except ImportError:
     print("❌ Could not import DeepMemorySystem - will use simple memory only")
     DEEP_MEMORY_AVAILABLE = False
+except Exception as e:
+    print(f"Error: {e}")
+    DEEP_MEMORY_AVAILABLE = False
     
     
 class SimpleMemorySystem:
-    """Memory system where Aurora can consciously access her memories"""
+    """A simple memory system for Aurora to access and store her own memories.
+
+    Provides basic memory file management, drawing and code history, and canvas-specific storage.
+    """
     def __init__(self, memory_path="./aurora_memory"):
         self.memory_path = Path(memory_path)
         self.memory_path.mkdir(exist_ok=True)  # Ensure base directory exists
@@ -40,7 +46,6 @@ class SimpleMemorySystem:
                     print(f"  - {file.name} ({file.stat().st_size} bytes)")
         
         # Canvas-specific storage (separate from general memories)
-        self.memory_path.mkdir(exist_ok=True)  # Create parent directory first!
         self.canvas_path = self.memory_path / "canvas"
         self.canvas_path.mkdir(exist_ok=True)
         
@@ -50,7 +55,7 @@ class SimpleMemorySystem:
             try:
                 with open(self.available_memories[filename], 'r') as f:
                     return json.load(f)
-            except:
+            except Exception:
                 return None
         return None
     
@@ -82,18 +87,18 @@ class SimpleMemorySystem:
                     data = json.load(f)
                     self.code_history = deque(data[-1000:], maxlen=1000)  # Keep last 1000
                     print(f"Loaded {len(self.code_history)} code memories")
+            except json.JSONDecodeError as e:
+                print(f"Error parsing code history JSON: {e}")
+                self.code_history = deque(maxlen=1000)  # Start fresh
             except Exception as e:
                 print(f"Error loading code history: {e}")
+                self.code_history = deque(maxlen=1000)  # Start fresh
         
         # Skip loading any reinforcement learning data
-        stats_file = self.canvas_path / "learning_stats.json"
-        if stats_file.exists():
-            print("(Skipping old reinforcement learning data)")
         # Skip loading any reinforcement learning data
         stats_file = self.canvas_path / "learning_stats.json"
         if stats_file.exists():
             print("(Skipping old reinforcement learning data)")
-            
         # Load dream memories
         dreams_file = self.canvas_path / "dream_memories.json"
         if dreams_file.exists():
@@ -111,33 +116,71 @@ class SimpleMemorySystem:
             
     def save_memories(self):
         """Save canvas-specific data"""
+        # Save code history
         try:
-            # Save code history
             with open(self.canvas_path / "canvas_code_history.json", 'w') as f:
                 json.dump(list(self.code_history), f)
-            # Save dream memories
-            dreams_file = self.canvas_path / "dream_memories.json"
+        except Exception as e:
+            print(f"Error saving code history: {e}")
+
+        # Save dream memories
+        dreams_file = self.canvas_path / "dream_memories.json"
+        try:
             if hasattr(self, 'parent') and hasattr(self.parent, 'dream_memories'):
                 dream_data = list(self.parent.dream_memories)
                 with open(dreams_file, 'w') as f:
                     json.dump(dream_data, f)
                 print(f"Saved {len(dream_data)} dream memories")
-                
         except Exception as e:
-            print(f"Error saving memories: {e}")    
-        except Exception as e:
-            print(f"Error saving memories: {e}")
-    
+            print(f"Error saving dream memories: {e}")
+
     def remember_code(self, code, context):
-        """Remember canvas drawing code"""
+        """
+        Remember canvas drawing code.
+
+        Args:
+            code (str): The drawing code or command sequence.
+            context (dict): Dictionary containing metadata about the drawing action.
+                Required keys:
+                    - 'emotion': Current emotion during drawing.
+                    - 'x': X position on canvas.
+                    - 'y': Y position on canvas.
+                    - 'color': Color name used.
+                    - 'pen_down': Boolean, whether pen is down.
+                Optional keys:
+                    - 'pixels_drawn': Number of pixels drawn.
+                    - 'draw_mode': Drawing tool/mode used.
+        """
         self.code_history.append({
             "code": code,
             "context": context,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(timespec='seconds')
         })
 
 class PaintByNumberTemplates:
-    """Hidden templates only Aurora can see"""
+    """
+    PaintByNumberTemplates provides hidden paint-by-number templates for Aurora's drawing system.
+
+    Purpose:
+        - Stores predefined templates for various shapes and difficulty levels.
+        - Supplies template overlays for guided drawing and progress tracking.
+
+    Attributes:
+        - current_template: The currently active template dictionary.
+        - template_name: Name of the selected template.
+        - difficulty: Difficulty level of the template ('easy', 'medium', 'hard').
+        - templates: Dictionary of all available templates, organized by difficulty.
+
+    Usage:
+        - Instantiate the class to access templates.
+        - Use get_template_overlay(grid) to retrieve overlay information for the current template.
+        - Set current_template, template_name, and difficulty to activate a template.
+
+    Example:
+        templates = PaintByNumberTemplates()
+        templates.current_template = templates.templates["easy"]["circle"]
+        overlay = templates.get_template_overlay(grid)
+    """
     def __init__(self):
         self.current_template = None
         self.template_name = None
@@ -230,33 +273,77 @@ class PaintByNumberTemplates:
         }
     
     def get_template_overlay(self, grid):
-        """Add template overlay to Aurora's vision (only in her prompt, not console)"""
+        """
+        Add template overlay to Aurora's vision (only in her prompt, not console).
+
+        Returns:
+            str: A formatted string describing the current template, suggested colors, and intended for overlay display in Aurora's prompt.
+        """
         if not self.current_template:
             return ""
         
-        overlay_info = f"\n[TEMPLATE: {self.template_name.upper()} ({self.difficulty})]"
+        overlay_info = f"\n\n[PAINT-BY-NUMBER TEMPLATE: {self.template_name.upper()} ({self.difficulty})]"
+        overlay_info += f"\nSuggested pattern to follow! Use these colors:"
         
-        # Calculate progress
-        filled = 0
-        total = 0
-        
-        for part, positions in self.current_template.items():
-            if part != "colors":
-                for pos in positions:
-                    total += 1
-                    # Check if position is filled with suggested color
-                    # This is simplified - in real implementation would check actual pixels
-                    
-        overlay_info += f"\nSuggested colors: "
-        colors_used = set()
+        # Get suggested colors
+        colors_used = []
         for part, color in self.current_template["colors"].items():
-            colors_used.add(f"{part}={color}")
-        overlay_info += ", ".join(colors_used)
+            color_name = {
+                'R': 'red', 'G': 'green', 'B': 'blue', 'Y': 'yellow',
+                'P': 'purple', 'O': 'orange', 'C': 'cyan', 'W': 'white',
+                'N': 'black', 'K': 'pink', 'M': 'magenta'
+            }.get(color, 'white')
+            colors_used.append(f"{part}={color_name}")
+        
+        overlay_info += f"\n{', '.join(colors_used)}"
+        overlay_info += f"\nTemplate guides your art - follow or improvise!"
         
         return overlay_info
+    
 class AuroraCodeMindComplete:
+    """
+    AuroraCodeMindComplete
+    A comprehensive AI-powered drawing and creativity system for real-time, autonomous art generation. 
+    AuroraCodeMindComplete manages a large pixel canvas, emotional state, memory, sound, and interactive controls, 
+    using a local LLM for code-based motor control and creative decision-making.
+    Features:
+    - GPU-accelerated LLM for fast code generation and decision making.
+    - Dynamic canvas scaling and multi-resolution vision (normal, density, shape, compressed views).
+    - Rich color palette and drawing tools (pen, brush, spray, stamps, etc.).
+    - Emotional state tracking and influence system, including deep emotions and memory-based shifts.
+    - Memory system for code patterns, dreams, and artistic inspirations.
+    - Check-in system for periodic breaks (chat, dream, image search).
+    - Sound system with pitch control and instant musical feedback.
+    - Fullscreen Tkinter GUI with live status panels and controls.
+    - Autonomous loop with emotion-driven speed, creativity boosters, and periodic snapshots.
+    - Dream generation and retention based on actual drawing experiences.
+    - Support for external deep memory systems and image search inspiration.
+    Usage:
+    - Instantiate with a model path and optional GPU settings.
+    - Call `run()` to start the interactive drawing loop.
+    - Use keyboard controls for snapshots, turbo mode, fullscreen, and quitting.
+    Main Methods:
+    - run(): Start the main loop and GUI.
+    - create_loop(): Main autonomous loop for drawing, thinking, and emotional processing.
+    - think_in_code(): Generate and execute movement/drawing codes via LLM.
+    - update_display(): Refresh the canvas and status panels.
+    - adjust_pixel_size(), adjust_speed(), feel(): Control canvas, speed, and emotion.
+    - save_canvas_state(), load_canvas_state(), save_snapshot(): Persistence and artwork saving.
+    - process_deep_emotions(), influence_emotion(): Emotional state management.
+    - generate_dream(), process_dream_retention(): Dream cycle and memory retention.
+    - setup_display(): Initialize GUI and controls.
+    Keyboard Controls:
+    - S: Save snapshot
+    - T: Toggle turbo mode
+    - ESC: Exit fullscreen
+    - F11: Toggle fullscreen
+    - Q: Quit
+    - C/B: Center/reset view
+    - H: Toggle hearing
+    AuroraCodeMindComplete is designed for creative exploration, emotional intelligence, and autonomous art-making.
+    """
     def __init__(self, model_path, use_gpu=True, gpu_layers=-1):
-        print("1. Starting init...")
+        print("Initializing AuroraCodeMindComplete...")
         
         # Detect GPU and set layers
         if use_gpu:
@@ -289,7 +376,7 @@ class AuroraCodeMindComplete:
         temp_root.destroy()
         
         # Canvas - adjust size based on screen (much smaller pixels now!)
-        self.scale_factor = 1.6  # Was 8, now 1.6 - pixels are 1/5 the size!
+        self.scale_factor = 1.6  # Lower scale_factor means smaller pixels and higher canvas resolution; e.g., 1.6 gives more pixels than 8.
         self.canvas_size = min(int(screen_width / self.scale_factor) - 50, 
                                int(screen_height / self.scale_factor) - 50)
                                
@@ -429,7 +516,7 @@ class AuroraCodeMindComplete:
         print("8. Image buffer created")
         
         # Try to load previous canvas state (this may adjust position)
-        # self.load_canvas_state()
+        self.load_canvas_state()
         
         # Ensure position is valid for current canvas
         self.x = max(0, min(self.x, self.canvas_size - 1))
@@ -457,7 +544,7 @@ class AuroraCodeMindComplete:
         self.hearing_enabled = False
         self.audio_stream = None
         self.audio = pyaudio.PyAudio()
-        self.rest_duration = 20 * 60  # 1 hour for rest/dreaming (separate from break_duration)
+        self.rest_duration = 10 * 60  # 1 hour for rest/dreaming (separate from break_duration)
 
         
         # Simple pygame sound system  # ADD ALL OF THIS
@@ -1199,12 +1286,12 @@ Dots of each color (. means move without drawing)!"""
         old_canvas_size = self.canvas_size
         
         if direction == "smaller":
-            # FIXED: Smaller pixels = lower scale factor = more pixels visible
-            self.scale_factor = max(1.0, self.scale_factor / 1.25)
+            # Smaller pixels = HIGHER scale factor = more pixels visible
+            self.scale_factor = min(8.0, self.scale_factor * 1.25)
             print(f"  → Aurora makes pixels smaller! (scale: {old_scale:.1f} → {self.scale_factor:.1f})")
         else:  # "larger"
-            # FIXED: Larger pixels = higher scale factor = fewer pixels visible
-            self.scale_factor = min(8.0, self.scale_factor * 1.25)
+            # Larger pixels = LOWER scale factor = fewer pixels visible
+            self.scale_factor = max(1.0, self.scale_factor / 1.25)
             print(f"  → Aurora makes pixels larger! (scale: {old_scale:.1f} → {self.scale_factor:.1f})")
         
         # Recalculate canvas size
@@ -1687,7 +1774,8 @@ BEGINNING WISDOM (fresh canvas):
 - The first mark is the hardest and most important
 - Julia Cameron: "Leap, and the net will appear"
 - Van Gogh started with dark colors, then found the light
-- Begin anywhere. The path will reveal itself"""
+- Begin anywhere. The path will reveal itself
+- Consider: template_easy for a guided start, or leap into free creation!"""
             art_wisdom_fragments.append(beginning_wisdom)
         
         # Time-based wisdom
@@ -1887,13 +1975,14 @@ PAUSE:
 
 Output maximum 40 characters of pure codes only."""
 
+     
         # Add template overlay if active (only Aurora sees this)
         template_overlay = ""
         if hasattr(self, 'template_system') and self.template_system.current_template:
             template_overlay = self.template_system.get_template_overlay(vision)
         user_prompt = f"""Position: X{self.x} Y{self.y} | Pen: {'DOWN' if self.is_drawing else 'UP'} | Color: {self.current_color_name}
 Canvas view:
-{vision}{canvas_scan}
+{vision}{template_overlay}{canvas_scan}
 
 Create art! Output numbers:"""
 
@@ -1906,6 +1995,9 @@ Create art! Output numbers:"""
         # Creativity prompts to vary patterns
         creativity_boosters = [
             # Direct, executable patterns
+            "template_easy",  # Try an easy template
+            "template_medium flower5",  # Medium template then stamp
+            "template_hard zoom_out",  # Hard template with wide view
             "53333",  # Simple line
             "Check density: density_view look_around normal_view",
             "See structure: shape_view 5333322211100 normal_view",
@@ -2066,9 +2158,9 @@ Create art! Output numbers:"""
                 
             # Check for full canvas view command
             if "full_canvas" in raw_output:
-                full_view = self.get_compressed_canvas_view()  # Use compressed view!
+                full_view = self.see(full_canvas=True)  # Use the actual method!
                 overview = self.get_canvas_overview()
-                print(f"  → Aurora views her ENTIRE canvas (compressed {40}×{40} view):")
+                print(f"  → Aurora views her ENTIRE canvas:")
                 print(overview)
                 print(full_view)
                 raw_output = raw_output.replace("full_canvas", "", 1)
@@ -2313,8 +2405,8 @@ Create art! Output numbers:"""
                     # Always allow color changes - no restrictions!
                     self.set_color(color)
                     actions_taken.append(f"color:{color}")
-                    # Track color use
-                    self.turn_colors_used.add(self.current_color_name)
+                    # Track color use - use the color being SET, not current
+                    self.turn_colors_used.add(color)
                     i += len(color)
                     found_color = True
                     break
@@ -2340,6 +2432,7 @@ Create art! Output numbers:"""
             if char in '!@#$%^&*()[]<>=+~':  # Extended sound palette!
                 sound_key = f"{char}_{self.current_pitch}"
                 if sound_key in self.sounds:
+                    pygame.mixer.stop()  # Stop any playing sounds first
                     self.sounds[sound_key].play()
                     pygame.time.wait(50)
                     actions_taken.append(f"♪{char}")
@@ -2508,7 +2601,8 @@ Create art! Output numbers:"""
             "color": self.current_color_name,
             "pen_down": self.is_drawing,
             "pixels_drawn": pixels_drawn,
-            "draw_mode": self.draw_mode
+            "draw_mode": self.draw_mode,
+            "timestamp": datetime.now().isoformat()
         }
         self.memory.remember_code(ops, context)
         
@@ -2682,7 +2776,7 @@ Create art! Output numbers:"""
             
         # Very fast decay to prevent getting stuck
         for key in self.emotion_influences:
-            self.emotion_influences[key] *= 0.7
+            self.emotion_influences[key] *= 0.5  # Faster decay from 0.7 to 0.5
     
     def influence_emotion(self, source, strength):
         """Add an emotional influence from a specific source"""
@@ -3302,8 +3396,8 @@ Dream based on these real experiences:"""
         
         # Randomly select 40% of dreams to remember
         import random
-        dreams_to_keep = int(len(self.current_dreams))
-        retained_dreams = random.sample(self.current_dreams, min(dreams_to_keep, len(self.current_dreams)))
+        dreams_to_keep = int(len(self.current_dreams) * 0.4)
+        retained_dreams = random.sample(self.current_dreams, dreams_to_keep)
         
         # Add retained dreams to permanent dream memory
         for dream in retained_dreams:
