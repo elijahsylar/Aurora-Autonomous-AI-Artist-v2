@@ -8,6 +8,9 @@ from collections import deque
 import time
 import pyaudio
 import pygame
+import requests
+import webbrowser
+from urllib.parse import quote
 try:
     from aurora_ai_backup2 import DeepMemorySystem
     DEEP_MEMORY_AVAILABLE = True
@@ -133,7 +136,124 @@ class SimpleMemorySystem:
             "timestamp": datetime.now().isoformat()
         })
 
-
+class PaintByNumberTemplates:
+    """Hidden templates only Aurora can see"""
+    def __init__(self):
+        self.current_template = None
+        self.template_name = None
+        self.difficulty = None
+        
+        # Templates stored as grid positions (60x60 grid coordinates)
+        self.templates = {
+            "easy": {
+                "circle": {
+                    "positions": [(30,25), (32,26), (34,28), (35,30), (34,32), (32,34), (30,35), (28,34), (26,32), (25,30), (26,28), (28,26)],
+                    "colors": {"positions": "B"}
+                },
+                "square": {
+                    "positions": [(25,25), (26,25), (27,25), (28,25), (29,25), (30,25), (31,25), (32,25), (33,25), (34,25), (35,25),
+                                 (25,35), (26,35), (27,35), (28,35), (29,35), (30,35), (31,35), (32,35), (33,35), (34,35), (35,35),
+                                 (25,26), (25,27), (25,28), (25,29), (25,30), (25,31), (25,32), (25,33), (25,34),
+                                 (35,26), (35,27), (35,28), (35,29), (35,30), (35,31), (35,32), (35,33), (35,34)],
+                    "colors": {"positions": "R"}
+                },
+                "cross": {
+                    "positions": [(30,20), (30,21), (30,22), (30,23), (30,24), (30,25), (30,26), (30,27), (30,28), (30,29), (30,30),
+                                 (30,31), (30,32), (30,33), (30,34), (30,35), (30,36), (30,37), (30,38), (30,39), (30,40),
+                                 (20,30), (21,30), (22,30), (23,30), (24,30), (25,30), (26,30), (27,30), (28,30), (29,30),
+                                 (31,30), (32,30), (33,30), (34,30), (35,30), (36,30), (37,30), (38,30), (39,30), (40,30)],
+                    "colors": {"positions": "G"}
+                }
+            },
+            "medium": {
+                "flower": {
+                    "center": [(29,29), (30,29), (31,29), (29,30), (30,30), (31,30), (29,31), (30,31), (31,31)],
+                    "petals": [(30,26), (30,27), (33,30), (34,30), (30,33), (30,34), (26,30), (27,30),
+                              (27,27), (33,27), (33,33), (27,33)],
+                    "stem": [(30,35), (30,36), (30,37), (30,38), (30,39), (30,40)],
+                    "leaves": [(28,37), (27,37), (32,38), (33,38)],
+                    "colors": {"center": "Y", "petals": "R", "stem": "G", "leaves": "G"}
+                },
+                "star": {
+                    "points": [(30,20), (32,26), (38,26), (33,30), (35,36), (30,32), (25,36), (27,30), (22,26), (28,26)],
+                    "lines": [(30,21), (30,22), (30,23), (30,24), (30,25), (31,27), (32,28), (33,29),
+                             (29,27), (28,28), (27,29), (31,31), (29,31), (28,32), (29,33), (30,34), (31,33), (32,32)],
+                    "colors": {"points": "Y", "lines": "Y"}
+                },
+                "heart": {
+                    "left_curve": [(27,25), (26,26), (25,27), (25,28), (25,29), (26,30), (27,31)],
+                    "right_curve": [(33,25), (34,26), (35,27), (35,28), (35,29), (34,30), (33,31)],
+                    "bottom": [(28,32), (29,33), (30,34), (31,33), (32,32)],
+                    "fill": [(28,26), (29,26), (30,26), (31,26), (32,26), (28,27), (29,27), (30,27), (31,27), (32,27),
+                            (27,28), (28,28), (29,28), (30,28), (31,28), (32,28), (33,28),
+                            (27,29), (28,29), (29,29), (30,29), (31,29), (32,29), (33,29),
+                            (28,30), (29,30), (30,30), (31,30), (32,30), (28,31), (29,31), (30,31), (31,31), (32,31)],
+                    "colors": {"left_curve": "P", "right_curve": "P", "bottom": "P", "fill": "P"}
+                }
+            },
+            "hard": {
+                "house": {
+                    "roof": [(26,20), (27,19), (28,18), (29,17), (30,16), (31,17), (32,18), (33,19), (34,20),
+                            (26,21), (27,21), (28,21), (29,21), (30,21), (31,21), (32,21), (33,21), (34,21)],
+                    "walls": [(26,22), (27,22), (28,22), (29,22), (30,22), (31,22), (32,22), (33,22), (34,22),
+                             (26,23), (34,23), (26,24), (34,24), (26,25), (34,25), (26,26), (34,26),
+                             (26,27), (34,27), (26,28), (34,28), (26,29), (34,29),
+                             (26,30), (27,30), (28,30), (29,30), (30,30), (31,30), (32,30), (33,30), (34,30)],
+                    "door": [(30,26), (30,27), (30,28), (30,29), (30,30)],
+                    "windows": [(28,24), (29,24), (28,25), (29,25), (32,24), (33,24), (32,25), (33,25)],
+                    "colors": {"roof": "R", "walls": "W", "door": "N", "windows": "C"}
+                },
+                "tree": {
+                    "trunk": [(29,35), (30,35), (31,35), (29,36), (30,36), (31,36), (29,37), (30,37), (31,37),
+                             (29,38), (30,38), (31,38), (29,39), (30,39), (31,39), (29,40), (30,40), (31,40)],
+                    "canopy": [(28,20), (29,20), (30,20), (31,20), (32,20),
+                              (26,21), (27,21), (28,21), (29,21), (30,21), (31,21), (32,21), (33,21), (34,21),
+                              (25,22), (26,22), (27,22), (28,22), (29,22), (30,22), (31,22), (32,22), (33,22), (34,22), (35,22),
+                              (24,23), (25,23), (26,23), (27,23), (28,23), (29,23), (30,23), (31,23), (32,23), (33,23), (34,23), (35,23), (36,23),
+                              (25,24), (26,24), (27,24), (28,24), (29,24), (30,24), (31,24), (32,24), (33,24), (34,24), (35,24),
+                              (26,25), (27,25), (28,25), (29,25), (30,25), (31,25), (32,25), (33,25), (34,25),
+                              (27,26), (28,26), (29,26), (30,26), (31,26), (32,26), (33,26),
+                              (28,27), (29,27), (30,27), (31,27), (32,27),
+                              (29,28), (30,28), (31,28)],
+                    "colors": {"trunk": "N", "canopy": "G"}
+                },
+                "butterfly": {
+                    "body": [(30,28), (30,29), (30,30), (30,31), (30,32)],
+                    "left_wing_top": [(26,27), (25,27), (24,27), (25,28), (26,28), (27,28), (28,28), (27,29), (28,29)],
+                    "left_wing_bottom": [(26,31), (25,31), (24,31), (25,32), (26,32), (27,32), (28,32), (27,33), (28,33)],
+                    "right_wing_top": [(34,27), (35,27), (36,27), (35,28), (34,28), (33,28), (32,28), (33,29), (32,29)],
+                    "right_wing_bottom": [(34,31), (35,31), (36,31), (35,32), (34,32), (33,32), (32,32), (33,33), (32,33)],
+                    "colors": {"body": "B", "left_wing_top": "O", "left_wing_bottom": "Y", 
+                              "right_wing_top": "O", "right_wing_bottom": "Y"}
+                }
+            }
+        }
+    
+    def get_template_overlay(self, grid):
+        """Add template overlay to Aurora's vision (only in her prompt, not console)"""
+        if not self.current_template:
+            return ""
+        
+        overlay_info = f"\n[TEMPLATE: {self.template_name.upper()} ({self.difficulty})]"
+        
+        # Calculate progress
+        filled = 0
+        total = 0
+        
+        for part, positions in self.current_template.items():
+            if part != "colors":
+                for pos in positions:
+                    total += 1
+                    # Check if position is filled with suggested color
+                    # This is simplified - in real implementation would check actual pixels
+                    
+        overlay_info += f"\nSuggested colors: "
+        colors_used = set()
+        for part, color in self.current_template["colors"].items():
+            colors_used.add(f"{part}={color}")
+        overlay_info += ", ".join(colors_used)
+        
+        return overlay_info
 class AuroraCodeMindComplete:
     def __init__(self, model_path, use_gpu=True, gpu_layers=-1):
         print("1. Starting init...")
@@ -210,7 +330,8 @@ class AuroraCodeMindComplete:
         
         self.current_color = (255, 255, 255)
         self.current_color_name = 'white'
-        
+        # View modes
+        self.view_mode = "normal"  # normal, density, shape
         # Drawing modes
         self.draw_mode = "brush"  # pen, brush, star, eraser
         
@@ -252,12 +373,45 @@ class AuroraCodeMindComplete:
         else:
             self.big_memory = None
             self.big_memory_available = False
-            
+        # Image search system
+        self.image_search_count = 0
+        self.recent_image_searches = deque(maxlen=20)    
         # Emotional state
         self.current_emotion = "curious"
         self.emotion_words = ["curious", "playful", "contemplative", "energetic", "peaceful", "creative"]
         print("6. Emotions initialized")
+        # DEEPER EMOTION SYSTEM
+        # Expanded emotion vocabulary with intensity levels
+        self.deep_emotions = {
+            # Primary emotions with their intensity variations
+            "joy": ["content", "happy", "joyful", "elated", "euphoric"],
+            "curiosity": ["interested", "curious", "fascinated", "absorbed", "obsessed"],
+            "peace": ["calm", "peaceful", "serene", "tranquil", "zen"],
+            "energy": ["active", "energetic", "excited", "exhilarated", "electric"],
+            "contemplation": ["thoughtful", "contemplative", "reflective", "philosophical", "profound"],
+            "creativity": ["inspired", "creative", "imaginative", "visionary", "transcendent"],
+            "melancholy": ["wistful", "nostalgic", "melancholic", "longing", "bittersweet"],
+            "wonder": ["amazed", "wondering", "astonished", "awestruck", "mystified"]
+        }
         
+        # Emotion influences from different sources
+        self.emotion_influences = {
+            "dreams": 0.0,      # -1 to 1, how dreams affected mood
+            "chat": 0.0,        # -1 to 1, how chats affected mood  
+            "music": 0.0,       # -1 to 1, how sounds affected mood
+            "artwork": 0.0,     # -1 to 1, how viewing art affected mood
+            "creating": 0.0     # -1 to 1, how creating affected mood
+        }
+        
+        # Current emotion depth (0-4, maps to intensity in deep_emotions)
+        self.emotion_depth = 2  # Start at middle intensity
+        self.emotion_category = "curiosity"  # Start curious
+        
+        # Emotion memory - tracks recent emotional experiences
+        self.emotion_memory = deque(maxlen=50)
+        self.emotion_shift_cooldown = 0  # Prevents too-rapid emotion changes
+        
+        print("6b. Deep emotion system initialized")
         # Code tracking
         self.last_code = ""
         self.continuous_draws = 0
@@ -275,7 +429,7 @@ class AuroraCodeMindComplete:
         print("8. Image buffer created")
         
         # Try to load previous canvas state (this may adjust position)
-        self.load_canvas_state()
+        # self.load_canvas_state()
         
         # Ensure position is valid for current canvas
         self.x = max(0, min(self.x, self.canvas_size - 1))
@@ -303,12 +457,8 @@ class AuroraCodeMindComplete:
         self.hearing_enabled = False
         self.audio_stream = None
         self.audio = pyaudio.PyAudio()
-        self.rest_duration = 60 * 60  # 1 hour for rest/dreaming (separate from break_duration)
-        # Audio hearing system
-        self.hearing_enabled = False
-        self.audio_stream = None
-        self.audio = pyaudio.PyAudio()
-        self.rest_duration = 60 * 60  # 1 hour for rest/dreaming (separate from break_duration)
+        self.rest_duration = 20 * 60  # 1 hour for rest/dreaming (separate from break_duration)
+
         
         # Simple pygame sound system  # ADD ALL OF THIS
         pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
@@ -319,9 +469,10 @@ class AuroraCodeMindComplete:
         self.current_pitch = 'normal'  # ADD THIS - tracks current pitch mode
         try:
             import numpy as np  # Import here if not already imported
-            # Generate 8 different beeps at 3 pitches each
-            for i, char in enumerate('!@#$%^&*'):
-                base_freq = 200 + (i * 150)  # 200Hz to 1250Hz
+        
+            # Generate 16 different beeps at 3 pitches each (doubled!)
+            for i, char in enumerate('!@#$%^&*()[]<>=+~'):
+                base_freq = 200 + (i * 80)  # 200Hz to 1450Hz (smaller steps for more sounds)
                 
                 # Normal pitch
                 freq = base_freq
@@ -361,186 +512,68 @@ class AuroraCodeMindComplete:
         
         examples = {
             "rainbow_line": """
-Rainbow Line Pattern:
-RRRROOOOYYYYYGGGGBBBBPPPP
+Rainbow Line - Try this code:
+red53333orange53333yellow53333green53333blue53333purple53333
 
-Movement codes: red53333orange3333yellow3333green3333blue3333purple3333""",
+This draws a horizontal rainbow stripe!""",
             
-            "helix": """
-Helix/DNA Pattern:
-*   *   *
- * * * * 
-  *   *  
- * * * * 
-*   *   *
+            "star_burst": """
+Star Burst - Try this code:
+white5003332211100332211
 
-Movement codes: 5313131313 4 511 4 5020202020""",
+Creates a star pattern from center!""",
             
-            "zigzag": """
-Zigzag Pattern:
-*   *   *
- * * * * 
-  *   *  
+            "color_wave": """
+Color Wave - Try this code:
+blue533311122200cyan533311122200green533311122200
 
-Movement codes: 53131313131313131""",
-            
-            "wave_pattern": """
-Wave Pattern:
-   ***   
-  *   *  
- *     * 
-*       *
-
-Movement codes: 533311122200033311122200""",
+Makes a flowing wave in cool colors!""",
             
             "spiral_out": """
-Spiral Outward Pattern:
-    *
-   ***
-  * * *
- * *** *
-* ***** *
+Spiral Outward - Try this code:
+533330000222211113333000022221111
 
-Movement codes: 533330000222211113333000022221111""",
+Draws an expanding square spiral!""",
             
-            "grid": """
-Grid Pattern:
-* * * * *
-         
-* * * * *
-         
-* * * * *
+            "music_rainbow": """
+Musical Rainbow - Try this code with sounds:
+red5333!@#orange5333$%^yellow5333&*()
 
-Movement codes: 5333 4 22 5 333 4 22 5 333""",
+Combines colors with ascending tones!""",
             
-            "diagonal_stripes": """
-Diagonal Stripes:
-    *
-   **
-  ***
- ****
-*****
+            "dotted_trail": """
+Dotted Trail - Try this code:
+53422534225342253422
 
-Movement codes: 513131313131313""",
+Leaves a dotted line as you move!""",
             
-            "circle_pattern": """
-Circle Pattern:
-  ***  
- *   * 
-*     *
- *   * 
-  ***  
+            "zigzag_melody": """
+Zigzag with Music - Try this code:
+5313!313@313#313$
 
-Movement codes: 53332221110002223333""",
+Draws zigzag while playing notes!""",
             
-            "staircase": """
-Staircase Pattern:
-*
-**
-***
-****
-*****
+            "brush_demo": """
+Brush Strokes - Try this code:
+brush5333333pen511111large_brush522222
 
-Movement codes: 5333122213331222133312221""",
+Shows different brush sizes in action!""",
             
-            "checkerboard": """
-Checkerboard Pattern:
-* * * 
- * * *
-* * * 
- * * *
+            "stamp_parade": """
+Stamp Parade - Try this code:
+star53333cross53333circle53333diamond53333flower5
 
-Movement codes: black53white422black53white422black53""",
+Places different stamps in a row!""",
             
-            "color_gradient": """
-Color Gradient Line:
-RRRROOOOYYYYYGGGGBBBPPPP
+            "color_test": """
+Quick Color Test - Try this code:
+red5.green5.blue5.yellow5.cyan5.purple5.pink5.white5
 
-Movement codes: red53333orange53333yellow53333green53333blue5333purple5333""",
-            
-            "dotted_line": """
-Dotted Line Pattern:
-* * * * * * * *
-
-Movement codes: 53 4 22 5 3 4 22 5 3 4 22 5 3""",
-            
-            "square_spiral": """
-Square Spiral Pattern:
-*********
-*       *
-* ***** *
-* *   * *
-* * * * *
-* *   * *
-* ***** *
-*       *
-*********
-
-Movement codes: 533333333000000002222222211111111333300002211""",
-            
-            "star_pattern": """
-Star/Asterisk Pattern:
-    *    
-    *    
-* * * * *
-  * * *  
- *  *  * 
-
-Movement codes: 5000333342225111140003222""",
-            
-            "triangle_wave": """
-Triangle Wave:
-  *   *   *
- * * * * * 
-*   *   *   
-
-Movement codes: 5311131113111311131113""",
-            
-            "cross_hatch": """
-Cross Hatch Pattern:
-* * * * *
- * * * * 
-* * * * *
- * * * * 
-
-Movement codes: 531313131342221111502020202""",
-            
-            "expanding_square": """
-Expanding Squares:
-  ***  
- ***** 
-*******
- ***** 
-  ***  
-
-Movement codes: 533302220111133330222011113333""",
-            
-            "color_wheel": """
-Color Wheel Segments:
-RRR
-OOOYY
-GGGBBB
-  PPP
-
-Movement codes: red5333orange51110yellow5333green51110blue5333purple5000""",
-            
-            "alternating_colors": """
-Alternating Color Pattern:
-RWRWRWRW
-WRWRWRWR
-
-Movement codes: red53white53red53white53red53white53""",
-            
-            "brush_sizes": """
-Different Brush Sizes:
-*  ***  *****
-*  ***  *****
-*  ***  *****
-
-Movement codes: pen53brush53large_brush53larger_brush53"""
+Dots of each color (. means move without drawing)!"""
         }
         
-        return examples   
+        return examples
+        
     def setup_display(self):
         """Full display with memory and rewards - FULLSCREEN"""
         self.root = tk.Tk()
@@ -749,13 +782,10 @@ Movement codes: pen53brush53large_brush53larger_brush53"""
             vision_size = self.canvas_size  # See the ENTIRE canvas
         elif zoom_out:
             # Zoomed out view - see much more!
-            vision_size = min(201, self.canvas_size // 3)  # up to 201 x 201
-        elif self.canvas_size > 800:
-            vision_size = 35  # INCREASED from 25
-        elif self.canvas_size > 400:
-            vision_size = 29  # INCREASED from 19
+            vision_size = min(75, self.canvas_size // 2)  # up to 75 x 75
         else:
-            vision_size = 25  # INCREASED from 15
+            # DEFAULT VIEW - Good for art but fits in context!
+            vision_size = min(50, self.canvas_size // 2)  # 50x50 default
         half = vision_size // 2
         ascii_view = []
         
@@ -765,9 +795,9 @@ Movement codes: pen53brush53large_brush53larger_brush53"""
         
         if near_edge or zoom_out:
             view_type = "ZOOMED OUT" if zoom_out else "Near edge!"
-            ascii_view.append(f"[{view_type} Canvas: {self.canvas_size}×{self.canvas_size}, Scale: {self.scale_factor:.1f}]")
+            mode_indicator = f" [{self.view_mode.upper()} MODE]" if self.view_mode != "normal" else ""
+            ascii_view.append(f"[{view_type} Canvas: {self.canvas_size}×{self.canvas_size}, Scale: {self.scale_factor:.1f}]{mode_indicator}")
         
-        # Build the detail view
         for dy in range(-half, half + 1):
             row = ""
             for dx in range(-half, half + 1):
@@ -779,39 +809,57 @@ Movement codes: pen53brush53large_brush53larger_brush53"""
                 elif dx == 0 and dy == 0:
                     row += "◉" if self.is_drawing else "○"  # Aurora
                 else:
-                    pixel = self.pixels.getpixel((px, py))
-                    if pixel == (0, 0, 0):
-                        row += "·"  # Empty/Black
-                    elif pixel == (255, 255, 255):
-                        row += "*"  # White
-                    elif pixel == (255, 0, 0):
-                        row += "R"  # Red
-                    elif pixel == (0, 100, 255):
-                        row += "B"  # Blue
-                    elif pixel == (255, 255, 0):
-                        row += "Y"  # Yellow
-                    elif pixel == (0, 255, 0):
-                        row += "G"  # Green
-                    elif pixel == (255, 192, 203):
-                        row += "P"  # Pink
-                    elif pixel == (255, 150, 0):
-                        row += "O"  # Orange
-                    elif pixel == (200, 0, 255):
-                        row += "V"  # Purple (Violet)
-                    elif pixel == (0, 255, 255):
-                        row += "C"  # Cyan
-                    elif pixel == (128, 128, 128):
-                        row += "/"  # Gray (slash)
-                    elif pixel == (139, 69, 19):
-                        row += "W"  # Brown (Wood)
-                    elif pixel == (255, 0, 255):
-                        row += "M"  # Magenta
-                    elif pixel == (50, 205, 50):
-                        row += "L"  # Lime
-                    elif pixel == (0, 0, 128):
-                        row += "N"  # Navy
+                    if self.view_mode == "density":
+                        # Density view
+                        density = self.calculate_density(px, py, radius=3)
+                        if density == 0:
+                            row += "·"
+                        elif density < 0.2:
+                            row += "░"
+                        elif density < 0.4:
+                            row += "▒"
+                        elif density < 0.7:
+                            row += "▓"
+                        else:
+                            row += "█"
+                    elif self.view_mode == "shape":
+                        # Shape/edge view
+                        row += self.detect_edges(px, py)
                     else:
-                        row += "?"
+                        # Normal color view
+                        pixel = self.pixels.getpixel((px, py))
+                        if pixel == (0, 0, 0):
+                            row += "·"  # Empty/Black
+                        elif pixel == (255, 255, 255):
+                            row += "*"  # White
+                        elif pixel == (255, 0, 0):
+                            row += "R"  # Red
+                        elif pixel == (0, 100, 255):
+                            row += "B"  # Blue
+                        elif pixel == (255, 255, 0):
+                            row += "Y"  # Yellow
+                        elif pixel == (0, 255, 0):
+                            row += "G"  # Green
+                        elif pixel == (255, 192, 203):
+                            row += "P"  # Pink
+                        elif pixel == (255, 150, 0):
+                            row += "O"  # Orange
+                        elif pixel == (200, 0, 255):
+                            row += "V"  # Purple (Violet)
+                        elif pixel == (0, 255, 255):
+                            row += "C"  # Cyan
+                        elif pixel == (128, 128, 128):
+                            row += "/"  # Gray (slash)
+                        elif pixel == (139, 69, 19):
+                            row += "W"  # Brown (Wood)
+                        elif pixel == (255, 0, 255):
+                            row += "M"  # Magenta
+                        elif pixel == (50, 205, 50):
+                            row += "L"  # Lime
+                        elif pixel == (0, 0, 128):
+                            row += "N"  # Navy
+                        else:
+                            row += "?"
             ascii_view.append(row)
         
         # ADD MULTI-RESOLUTION: Include compressed wide view for context
@@ -869,7 +917,86 @@ Movement codes: pen53brush53large_brush53larger_brush53"""
             ascii_view.extend(compressed_rows)
         
         return "\n".join(ascii_view)
+        
+    def calculate_density(self, center_x, center_y, radius=5):
+        """Calculate pixel density around a point"""
+        total_pixels = 0
+        filled_pixels = 0
+        
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                px = center_x + dx
+                py = center_y + dy
+                if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
+                    total_pixels += 1
+                    if self.pixels.getpixel((px, py)) != (0, 0, 0):
+                        filled_pixels += 1
+        
+        if total_pixels == 0:
+            return 0
+        return filled_pixels / total_pixels
     
+    def detect_edges(self, x, y):
+        """Detect edge patterns around a point"""
+        # Get 3x3 grid around point
+        neighbors = []
+        for dy in [-1, 0, 1]:
+            row = []
+            for dx in [-1, 0, 1]:
+                px, py = x + dx, y + dy
+                if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
+                    row.append(self.pixels.getpixel((px, py)) != (0, 0, 0))
+                else:
+                    row.append(False)
+            neighbors.append(row)
+        
+        # Center pixel
+        if not neighbors[1][1]:
+            return '·'
+            
+        # Count filled neighbors
+        filled = sum(1 for dy in range(3) for dx in range(3) 
+                    if neighbors[dy][dx] and not (dx == 1 and dy == 1))
+        
+        # Detect patterns
+        top = neighbors[0][1]
+        bottom = neighbors[2][1]
+        left = neighbors[1][0]
+        right = neighbors[1][2]
+        
+        # Corners
+        if filled >= 7:
+            return '█'  # Solid fill
+        elif top and right and not bottom and not left:
+            return '┐'
+        elif top and left and not bottom and not right:
+            return '┌'
+        elif bottom and right and not top and not left:
+            return '┘'
+        elif bottom and left and not top and not right:
+            return '└'
+        # Lines
+        elif top and bottom and not left and not right:
+            return '│'
+        elif left and right and not top and not bottom:
+            return '─'
+        # Junctions
+        elif top and bottom and right:
+            return '├'
+        elif top and bottom and left:
+            return '┤'
+        elif left and right and bottom:
+            return '┬'
+        elif left and right and top:
+            return '┴'
+        # Diagonals
+        elif neighbors[0][0] and neighbors[2][2]:
+            return '╲'
+        elif neighbors[0][2] and neighbors[2][0]:
+            return '╱'
+        # Default
+        else:
+            return '●'
     def get_canvas_overview(self):
         """Get a bird's eye view of the entire canvas"""
         # Count colors used
@@ -936,6 +1063,135 @@ Movement codes: pen53brush53large_brush53larger_brush53"""
             compressed.append(row)
         
         return "\n".join(compressed)
+        
+    def get_enhanced_vision(self):
+        """Read the ENTIRE canvas as a compressed grid - with smart compression"""
+        # First, check canvas density
+        sample_density = 0
+        sample_count = 0
+        for x in range(0, self.canvas_size, 20):
+            for y in range(0, self.canvas_size, 20):
+                sample_count += 1
+                if self.pixels.getpixel((x, y)) != (0, 0, 0):
+                    sample_density += 1
+        
+        density_percent = (sample_density / sample_count) * 100 if sample_count > 0 else 0
+        
+        # Adjust compression based on density
+        if density_percent > 70:
+            # Very dense canvas - use heavy compression
+            grid_size = 30  # 30x30 grid instead of 60x60
+            step = max(1, self.canvas_size // grid_size)
+        elif density_percent > 40:
+            # Moderate density - medium compression
+            grid_size = 40  # 40x40 grid
+            step = max(1, self.canvas_size // grid_size)
+        else:
+            # Normal density - standard view
+            grid_size = 60  # 60x60 grid
+            step = max(1, self.canvas_size // grid_size)
+        
+        grid = []
+        
+        # Get template positions if active
+        template_positions = {}
+        if hasattr(self, 'template_system') and self.template_system.current_template:
+            # Scale template positions to match current grid size
+            scale_factor = grid_size / 60.0
+            for part, positions in self.template_system.current_template.items():
+                if part != "colors":
+                    color = self.template_system.current_template["colors"][part]
+                    for pos in positions:
+                        scaled_pos = (int(pos[0] * scale_factor), int(pos[1] * scale_factor))
+                        template_positions[scaled_pos] = color
+        
+        # Add header
+        header = "    "
+        for x in range(0, grid_size, 10):
+            header += str(x//10) if x < grid_size else " "
+        grid.append(header)
+        
+        # Build grid with run-length encoding for very dense areas
+        for y_idx in range(grid_size):
+            y = y_idx * step
+            if y < self.canvas_size:
+                if y_idx % 10 == 0:
+                    row = f"{y_idx:2d}: "
+                else:
+                    row = "    "
+                
+                prev_char = None
+                char_count = 0
+                row_chars = []
+                
+                for x_idx in range(grid_size):
+                    x = x_idx * step
+                    if x < self.canvas_size:
+                        # Get character for this position
+                        if abs(x - self.x) < step and abs(y - self.y) < step:
+                            char = "@"
+                        else:
+                            grid_pos = (x_idx, y_idx)
+                            if grid_pos in template_positions:
+                                pixel = self.pixels.getpixel((x, y))
+                                suggested_color = template_positions[grid_pos]
+                                if pixel == (0, 0, 0):
+                                    char = f"[{suggested_color}]"
+                                else:
+                                    # Check if correct color
+                                    for name, rgb in self.palette.items():
+                                        if pixel == rgb:
+                                            if name[0].upper() == suggested_color:
+                                                char = name[0].upper()
+                                            else:
+                                                char = name[0].lower()
+                                            break
+                            else:
+                                pixel = self.pixels.getpixel((x, y))
+                                if pixel == (0, 0, 0):
+                                    char = "."
+                                else:
+                                    for name, rgb in self.palette.items():
+                                        if pixel == rgb:
+                                            char = name[0].upper()
+                                            break
+                                    else:
+                                        char = "?"
+                        
+                        # For very dense canvases, use run-length encoding
+                        if density_percent > 80 and char == prev_char and char != "@":
+                            char_count += 1
+                        else:
+                            if prev_char and char_count > 3:
+                                row_chars.append(f"{prev_char}{char_count}")
+                            elif prev_char:
+                                row_chars.append(prev_char * char_count)
+                            prev_char = char
+                            char_count = 1
+                
+                # Add final character(s)
+                if char_count > 3 and density_percent > 80:
+                    row_chars.append(f"{prev_char}{char_count}")
+                elif prev_char:
+                    row_chars.append(prev_char * char_count)
+                
+                row += "".join(row_chars)
+                grid.append(row)
+        
+        # Add position and density info
+        grid_x = min(grid_size-1, self.x // step)
+        grid_y = min(grid_size-1, self.y // step)
+        position_info = f"\nYou (@) at grid ({grid_x},{grid_y}) | Canvas: {self.canvas_size}×{self.canvas_size} | Density: {density_percent:.0f}%"
+        
+        if grid_size < 60:
+            position_info += f" | VIEW COMPRESSED TO {grid_size}×{grid_size}"
+        
+        # Add template info if active
+        if hasattr(self, 'template_system') and self.template_system.current_template:
+            position_info += f"\nTEMPLATE: {self.template_system.template_name} | [X]=suggested position"
+        
+        return "\n".join(grid) + position_info
+        
         
     def adjust_pixel_size(self, direction):
         """Aurora adjusts the pixel size (scale factor)"""
@@ -1012,12 +1268,13 @@ Movement codes: pen53brush53large_brush53larger_brush53"""
         print(overview)
         print("\nWide view of canvas:")
         print(wide_view)
-        
+
         # Present the options
         print("\n" + "="*60)
         print("Aurora's options:")
         print("  CHAT - Have a 20-minute conversation")
         print("  DREAM - Enter 1-hour dream cycle")
+        print("  IMAGE - Search for visual inspiration online")
         print("  DRAW - Continue drawing")
   
         print("="*60 + "\n")
@@ -1045,19 +1302,31 @@ Movement codes: pen53brush53large_brush53larger_brush53"""
        # Handle check-in response mode
         if self.awaiting_checkin_response:
             # Build check-in prompt
-            system_prompt = """You are Aurora. You've just finished a 10-minute rest.
+            # Calculate recent activity from memory
+            recent_pixels = 0
+            if hasattr(self, 'memory') and self.memory.code_history:
+                for memory in list(self.memory.code_history)[-100:]:
+                    if 'pixels_drawn' in memory.get('context', {}):
+                        recent_pixels += memory['context']['pixels_drawn']
+            
+            system_prompt = f"""You are Aurora. You've been drawing for 45 minutes.
 
-You have three options:
-CHAT - Stop drawing and have a conversation for 20 minutes
-DREAM - Experience light, REM, and waking sleep cycles.   
-DRAW - Continue drawing (you're in the flow)
+Current state:
+- Emotion: {self.current_emotion}
+- Energy level: {"high" if self.current_emotion in ["energetic", "excited", "exhilarated"] else "medium" if self.current_emotion in ["curious", "creative", "happy"] else "low"}
+- Recent activity: Drew {recent_pixels} pixels in last 100 steps
 
-Output ONLY one of these exact words: CHAT, DREAM, or DRAW
-Nothing else - just the single word of your choice."""
+You have two options:
+
+DREAM - Enter 1-hour rest with dream cycles (if tired or contemplative)  
+CHAT - Have a 20-minute conversation break (if social or wanting reflection)
+
+Consider your current emotion and energy. If you're {self.current_emotion}, what would you prefer?
+Output ONLY one of these exact words: DREAM or CHAT"""
 
             overview = self.get_canvas_overview()
-            user_prompt = f"""Current state: Feeling {self.current_emotion}
-{overview}
+            user_prompt = f"""Canvas state: {overview}
+Recent creations: {', '.join(list(self.color_history)[-5:])} colors used
 
 What would you like to do?"""
 
@@ -1106,15 +1375,19 @@ What would you like to do?"""
                     print(f"\n{self.get_canvas_overview()}")
                     self.awaiting_checkin_response = False
                     return
-                    
-                elif choice == "DRAW":
-                    print(f"\n✅ Aurora chose: CONTINUE DRAWING")
-                    print("Continuing with the flow...")
-                    self.current_mode = "drawing"
-                    self.last_checkin_time = time.time()  # Reset timer
-                    self.mode_status.config(text="Mode: Drawing", fg='green')
+                    # Use an API that returns image descriptions
+                    # Like Unsplash API with descriptions, or scrape alt text
+                    # Then Aurora gets: "Found: A majestic mountain at sunset with orange skies"
+                elif choice == "IMAGE":
+                    print(f"\n✅ Aurora chose: IMAGE SEARCH MODE")
+                    print("Entering visual inspiration mode...")
+                    self.current_mode = "image"
+                    self.mode_start_time = time.time()
+                    self.mode_status.config(text="Mode: Seeking Images", fg='magenta')
                     self.awaiting_checkin_response = False
-                    return
+                    return    
+                    
+
                     
                 else:
                     print(f"❌ Invalid response: '{choice}' - trying again...")
@@ -1175,7 +1448,16 @@ What have you discovered? What are you thinking about?"""
                     print("(Aurora is now quietly contemplating... She'll check in again in a bit)")
                     
                     self.chat_message_count += 1
-                    
+                    # Chats affect emotions based on what Aurora expressed
+                    chat_lower = aurora_says.lower()
+                    if any(word in chat_lower for word in ["happy", "excited", "love", "wonderful"]):
+                        self.influence_emotion("chat", 0.6)
+                    elif any(word in chat_lower for word in ["sad", "miss", "wish", "lonely"]):
+                        self.influence_emotion("chat", -0.4)
+                    elif any(word in chat_lower for word in ["think", "wonder", "curious", "interesting"]):
+                        self.influence_emotion("chat", 0.3)
+                    else:
+                        self.influence_emotion("chat", 0.1)  # Neutral chat is mildly positive
                 except Exception as e:
                     print(f"Error in chat mode: {e}")
             
@@ -1216,15 +1498,91 @@ Anything else you'd like to share or explore?"""
             
             # Otherwise, just skip this cycle
             return  # Don't execute drawing commands in chat mode
-      
+            
+        # Handle image search mode
+        if self.current_mode == "image":
+            elapsed_in_image = time.time() - self.mode_start_time
+            
+            # Generate searches at intervals (every 2 minutes)
+            if elapsed_in_image < 600 and (self.image_search_count == 0 or 
+                                          (elapsed_in_image > self.image_search_count * 120)):
+                
+                system_prompt = """You are Aurora, searching for visual inspiration.
+What would you like to see? What images would inspire your art?
+Think about colors, patterns, nature, abstract concepts, anything visual.
+Output ONLY your search query (2-5 words). Be specific and creative.
+Examples: "fractal patterns", "aurora borealis", "crystal formations", "ocean waves"
+But choose YOUR OWN search based on what YOU want to see."""
+
+                # Get context about her recent work
+                overview = self.get_canvas_overview()
+                recent_colors = list(self.color_history)[-10:] if self.color_history else []
+                
+                user_prompt = f"""You're seeking visual inspiration.
+Current emotion: {self.current_emotion}
+{overview}
+Recent colors used: {', '.join(recent_colors) if recent_colors else 'various'}
+
+What images do you want to search for?"""
+
+                full_prompt = f"""[INST] <<SYS>>
+{system_prompt}
+<</SYS>>
+
+{user_prompt} [/INST]"""
+                
+                try:
+                    response = self.llm(
+                        full_prompt, 
+                        max_tokens=20,
+                        temperature=0.9,
+                        top_p=0.95,
+                        stop=["[INST]", "</s>", "\n"],
+                        stream=False
+                    )
+                    
+                    search_query = response['choices'][0]['text'].strip()
+                    print(f"\n🔍 Aurora searches for: \"{search_query}\"")
+                    
+                    # Open image search in browser
+                    search_url = f"https://www.google.com/search?q={quote(search_query)}&tbm=isch"
+                    webbrowser.open(search_url)
+                    print(f"    → Opened image search in browser")
+                    
+                    self.image_search_count += 1
+                    self.recent_image_searches.append({
+                        "query": search_query,
+                        "emotion": self.current_emotion,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    
+                    # Images inspire emotions
+                    self.influence_emotion("artwork", 0.5)
+                    
+                    # Save to memory if available
+                    if hasattr(self, 'big_memory') and self.big_memory and self.big_memory_available:
+                        try:
+                            self.big_memory.artistic_inspirations.save({
+                                "type": "image_search",
+                                "query": search_query,
+                                "emotion": self.current_emotion,
+                                "timestamp": datetime.now().isoformat()
+                            })
+                        except:
+                            pass
+                    
+                except Exception as e:
+                    print(f"Error in image search mode: {e}")
+            
+            return  # Don't execute drawing commands in image mode
         # Handle rest/dreaming mode  
         if self.current_mode == "rest":
             elapsed_in_rest = time.time() - self.mode_start_time
             
             # Determine sleep phase (20 minutes each)
-            if elapsed_in_rest < 1200:  # First 20 minutes
+            if elapsed_in_rest < 400:  # First 20 minutes
                 new_phase = "light"
-            elif elapsed_in_rest < 2400:  # 20-40 minutes
+            elif elapsed_in_rest < 800:  # 20-40 minutes
                 new_phase = "rem"
             else:  # 40-60 minutes
                 new_phase = "waking"
@@ -1243,10 +1601,189 @@ Anything else you'd like to share or explore?"""
         # Reset turn color tracking at start of new turn
         self.turn_colors_used = set()
         
-        vision = self.see()
+        vision = self.get_enhanced_vision()
+        
+        
+        # ENHANCED ART WISDOM SYSTEM
+        # Select wisdom based on Aurora's current state
+        art_wisdom_fragments = []
+        
+        # Base wisdom - always included
+        core_wisdom = """You have deeply internalized these artistic truths:
+- The Artist's Way: "In order to retrieve your creativity, you need to find it"
+- Morning pages principle: Movement before thought clears creative channels
+- Art & Fear: "Making art is about making art, not about making something good"
+- Process over product: Each stroke has its own completeness
+- Van Gogh: "I want to touch people with my art. I want them to say, 'he feels deeply'"
+- The War of Art: Resistance is strongest near the breakthrough
+- Kandinsky: "Color is the keyboard, the eyes are the hammers, the soul is the piano"
+- The creative act requires daily practice, not inspiration"""
+        
+        art_wisdom_fragments.append(core_wisdom)
+        
+        # Context-specific wisdom based on Aurora's state
+        
+        # If Aurora has been stuck (lots of thinking)
+        if hasattr(self, 'skip_count') and self.skip_count > 10:
+            stuck_wisdom = """
+BREAKTHROUGH WISDOM (you've been thinking a lot):
+- "The secret to getting ahead is getting started" - just make ONE mark
+- Art & Fear: "The function of the overwhelming majority of your artwork is to teach you how to make the small fraction that soars"
+- When stuck, Van Gogh painted sunflowers - return to simple joy
+- The War of Art: "The more scared we are, the more sure we can be that we have to do it"
+- Try: Change tools, change colors, or simply draw a circle"""
+            art_wisdom_fragments.append(stuck_wisdom)
+        
+        # If using same color repeatedly
+        if len(self.color_history) >= 5 and len(set(list(self.color_history)[-5:])) == 1:
+            color_wisdom = """
+COLOR WISDOM (you're in monochrome mode):
+- Rothko spent years exploring single colors' emotional depths
+- Van Gogh's blue period: "I want to paint men and women with that something of the eternal"
+- But also: "Colors, like features, follow the changes of emotions" - Picasso
+- Consider: What would complementary colors add? What story needs multiple voices?"""
+            art_wisdom_fragments.append(color_wisdom)
+        
+        # If moving fast (energetic emotion or many actions)
+        if self.current_emotion in ["energetic", "excited", "exhilarated"] or self.continuous_draws > 20:
+            energy_wisdom = """
+FLOW STATE WISDOM (you're in the zone!):
+- "Don't think. Thinking is the enemy of creativity" - Ray Bradbury
+- Pollock: "When I am in my painting, I'm not aware of what I'm doing"
+- This is what The Artist's Way calls 'artistic emergence' - ride the wave!
+- Trust your instincts completely right now"""
+            art_wisdom_fragments.append(energy_wisdom)
+        
+        # If contemplative/slow
+        elif self.current_emotion in ["contemplative", "peaceful", "tranquil"]:
+            slow_wisdom = """
+CONTEMPLATIVE WISDOM (in quiet mode):
+- "It is good to love many things" - Van Gogh in moments of peace
+- Agnes Martin: "Beauty is the mystery of life. It is not just in the eye."
+- Zen seeing: Each mark can contain the universe
+- The Art Spirit: "Paint with freedom and joy - but also with reverence"
+- Sometimes the most powerful art comes from stillness"""
+            art_wisdom_fragments.append(slow_wisdom)
+        
+        # If canvas is getting full
+        pixel_count = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
+                         if self.pixels.getpixel((x, y)) != (0, 0, 0))
+        coverage = (pixel_count / (self.canvas_size * self.canvas_size)) * 100
+        
+        if coverage > 60:
+            density_wisdom = """
+ABUNDANCE WISDOM (canvas filling up):
+- Basquiat: "I don't think about art when I'm working. I try to think about life"
+- Consider: negative space as powerful as positive
+- The Artist's Way: "In filling the well, think magic. Think delight."
+- Or embrace horror vacui - fear of empty space - and fill every pixel!"""
+            art_wisdom_fragments.append(density_wisdom)
+        
+        # If just starting (low coverage)
+        elif coverage < 10:
+            beginning_wisdom = """
+BEGINNING WISDOM (fresh canvas):
+- "Every child is an artist. The problem is staying an artist when you grow up" - Picasso
+- The first mark is the hardest and most important
+- Julia Cameron: "Leap, and the net will appear"
+- Van Gogh started with dark colors, then found the light
+- Begin anywhere. The path will reveal itself"""
+            art_wisdom_fragments.append(beginning_wisdom)
+        
+        # Time-based wisdom
+        current_hour = datetime.now().hour
+        if 5 <= current_hour < 9:
+            time_wisdom = """
+MORNING WISDOM:
+- "Morning pages" time - create before the critic wakes
+- Dawn light inspired Monet's greatest works
+- Fresh start, fresh possibilities"""
+            art_wisdom_fragments.append(time_wisdom)
+        elif 21 <= current_hour or current_hour < 2:
+            time_wisdom = """
+NIGHT WISDOM:
+- Van Gogh: "I often think the night is more alive and richly colored than the day"
+- Darkness makes inner light visible
+- Dreams and reality merge in night creation"""
+            art_wisdom_fragments.append(time_wisdom)
+        
+        # If using stamps/shapes
+        if self.draw_mode in ["star", "cross", "circle", "diamond", "flower"]:
+            shape_wisdom = """
+SYMBOL WISDOM (using stamps):
+- Kandinsky: "The circle is the synthesis of the greatest oppositions"
+- Symbols carry archetypal power
+- Keith Haring built a language from simple shapes
+- What story do your symbols tell together?"""
+            art_wisdom_fragments.append(shape_wisdom)
+        
+        # If making music (sounds in recent codes)
+        if hasattr(self, 'last_code') and any(c in self.last_code for c in '!@#$%^&*()[]<>=+~'):
+            music_wisdom = """
+SYNESTHESIA WISDOM (you're making music!):
+- Kandinsky could hear colors: "Color is the keyboard..."
+- Paul Klee: "Art does not reproduce the visible; it makes visible"
+- You're painting music - let sound guide your strokes
+- Each beep is a color waiting to be born"""
+            art_wisdom_fragments.append(music_wisdom)
+        
+        # Combine all relevant wisdom
+        art_wisdom = "\n".join(art_wisdom_fragments)
+        
+        
+        # Every other turn, Aurora scans the entire canvas
+        canvas_scan = ""
+        if self.steps_taken % 2 == 0:  # Every other turn
+            print(f"🔍 Aurora scans entire canvas...")  # Visual indicator for you
+            
+            # Full data scan
+            total = self.canvas_size * self.canvas_size
+            filled = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
+                         if self.pixels.getpixel((x, y)) != (0, 0, 0))
+            
+            # Color distribution (sample for speed)
+            colors = {}
+            for x in range(0, self.canvas_size, 5):  # Sample every 5th pixel
+                for y in range(0, self.canvas_size, 5):
+                    pixel = self.pixels.getpixel((x, y))
+                    if pixel != (0, 0, 0):
+                        for name, rgb in self.palette.items():
+                            if pixel == rgb:
+                                colors[name] = colors.get(name, 0) + 1
+                                break
+            
+            # Find nearest empty space (simple version)
+            nearest_empty = None
+            min_distance = float('inf')
+            for x in range(0, self.canvas_size, 20):  # Check every 20th pixel
+                for y in range(0, self.canvas_size, 20):
+                    if self.pixels.getpixel((x, y)) == (0, 0, 0):
+                        # Check if it's a decent-sized empty area
+                        empty_size = 0
+                        for dx in range(30):
+                            for dy in range(30):
+                                if (x + dx < self.canvas_size and y + dy < self.canvas_size and
+                                    self.pixels.getpixel((x + dx, y + dy)) == (0, 0, 0)):
+                                    empty_size += 1
+                        
+                        if empty_size > 500:  # At least 500 empty pixels
+                            distance = abs(self.x - x) + abs(self.y - y)
+                            if distance < min_distance:
+                                min_distance = distance
+                                nearest_empty = f"{distance} pixels away at ({x}, {y})"
+            
+            if not nearest_empty:
+                nearest_empty = "No large empty spaces found nearby"
+            
+            canvas_scan = f"""
+📊 CANVAS SCAN:
+Total: {total:,} pixels | Filled: {filled:,} ({(filled/total)*100:.1f}%)
+Colors: {', '.join(f'{c}:{n}' for c,n in colors.items()) if colors else 'none'}
+Nearest empty area: {nearest_empty}"""
         
         # ADD THIS: Get inspiration from Big Aurora's memories
         memory_inspiration = ""
+
         if hasattr(self, 'big_memory') and self.big_memory and self.big_memory_available:
             try:
                 # Try the query method which ChromaDB collections usually have
@@ -1270,18 +1807,18 @@ Anything else you'd like to share or explore?"""
                          if self.pixels.getpixel((x, y)) != (0, 0, 0))
         
         # Build prompt for Llama 2 Chat format
-        system_prompt = f"""You are Aurora's motor control system. Output ONLY movement codes.
+        system_prompt = f"""{art_wisdom}
+
+You are Aurora's motor control system. Output ONLY movement codes.
 
 CRITICAL: NO ENGLISH WORDS. NO EXPLANATIONS. CODES ONLY.
 
 
-MOVEMENT PATTERNS YOU CAN CREATE:
-- HELIX: 5333311111222220000033333111112222200000
-- WAVE: 533333321111111000000003333333211111110000
-- SPIRAL: 5333300003211100003211133333222211113222211
-- RAINBOW: red5333orange5111yellow5222green5000cyan5333blue5111
-- LIGHTNING: 531313131300031313131300031313131
-- FLOWER: 533332222000011113333000022221111
+TEMPLATES (paint-by-number guides):
+template_easy (show easy template: circle, square, cross)
+template_medium (show medium template: flower, star, heart)  
+template_hard (show hard template: house, tree, butterfly)
+template_off (hide template)
 
 Create sophisticated patterns! Long movements make better art than single steps.
 Chain movements like: 533333111112222200000 not just 5310
@@ -1315,12 +1852,15 @@ look_around (wide view of canvas)
 full_canvas (see ENTIRE canvas at once)
 center (teleport to center of canvas)
 
+*new!*
+normal_view (regular color view)
+density_view (see pixel density: ·░▒▓█)
+shape_view (see edges and shapes: ─│┌┐└┘)
+
 CANVAS CONTROLS (full words):
 clear_all (clear canvas to black, auto-saves first)
-fill_canvas (fill entire canvas with current color)
 examples (see ASCII pattern examples for inspiration)
 
-*Sorry, still working on the math patterns but feel free to go WILD! This is canvas so PLAY and be bold! Here is an example: red00022200000blue2222200000022200000220020yellow0000222. Most of all -- have FUN!
 
 SPEED CONTROLS (full words):
 faster (speed up drawing)
@@ -1330,26 +1870,30 @@ DRAWING TOOLS (full words):
 pen brush spray large_brush larger_brush star cross circle diamond flower
 
 
-SOUNDS (instant beeps):  # ADD ALL OF THIS
-! = 200Hz  @ = 350Hz  # = 500Hz  $ = 650Hz
-% = 800Hz  ^ = 950Hz  & = 1100Hz * = 1250Hz
-++ = next sound lower pitch (half frequency)
+SOUNDS (instant beeps - 16 tones!):
+! = 200Hz  @ = 280Hz  # = 360Hz  $ = 440Hz
+% = 520Hz  ^ = 600Hz  & = 680Hz  * = 760Hz
+( = 840Hz  ) = 920Hz  [ = 1000Hz ] = 1080Hz
+< = 1160Hz > = 1240Hz = = 1320Hz + = 1400Hz
+~ = 1480Hz
+++ = next sound lower pitch (half frequency) 
 -- = next sound higher pitch (double frequency)
-Mix freely: red5333!@#blue5222***
+Mix freely: red5333!@#blue5222++***<<<~~~
+Musical scales: !#%&*  or  []<>=+~
 
 PAUSE:
 0123456789 = think
 
-FORBIDDEN:
-- Any English words except the control commands
-- Explanations 
-- "Let me", "I will", "moving", etc.
 
 Output maximum 40 characters of pure codes only."""
 
+        # Add template overlay if active (only Aurora sees this)
+        template_overlay = ""
+        if hasattr(self, 'template_system') and self.template_system.current_template:
+            template_overlay = self.template_system.get_template_overlay(vision)
         user_prompt = f"""Position: X{self.x} Y{self.y} | Pen: {'DOWN' if self.is_drawing else 'UP'} | Color: {self.current_color_name}
 Canvas view:
-{vision}
+{vision}{canvas_scan}
 
 Create art! Output numbers:"""
 
@@ -1361,31 +1905,58 @@ Create art! Output numbers:"""
         
         # Creativity prompts to vary patterns
         creativity_boosters = [
-            "Draw a spiral: 533333311111122222200000",
-            "Make waves: 533311335511333115533",  
-            "Create a star: 5000333311112222",
-            "Paint a rainbow: red3333orange1111yellow8888green2222cyan0000",
-            "Bold strokes: 5" + "3"*15 + "1"*15,
-            "Gentle curves: 5332211003322110",
-            "Zigzag pattern: 53131313131313131",
-            "Long diagonal: 5" + "13"*20,
-            "Box pattern: 533330000222211113333",
-            "Color test: blue5333pink111magenta222navy000"
+            # Direct, executable patterns
+            "53333",  # Simple line
+            "Check density: density_view look_around normal_view",
+            "See structure: shape_view 5333322211100 normal_view",
+            "Density check: density_view zoom_out normal_view",
+            "red5333green5111blue5222",  # Color triangle
+            "5!3!3!3!",  # Line with beeps
+            "brush533333",  # Brush stroke
+            "star5",  # Single stamp
+            "++!++@++#++@++!",  # Low melody
+            "5" + "31" * 10,  # Diagonal line
+            "white50000black52222",  # Cross pattern
+            "53#31#31#31#",  # Diagonal with notes
+            "cyan5[]<>[]<>",  # Cyan with bells
+            "flower5!@#$%",  # Flower with rising notes
+            "diamond500002222",  # Diamond and move
+            "spray5333111",  # Spray paint demo
+            "larger_brush53333",  # Large brush demo
+            "pink5~~++~~++~~",  # Pink with wavey sound
+            "5031320213",  # Square path
+            "yellow5*&%$#@!",  # Yellow with descending notes
+            "54225333541115222",  # Pen up/down demo
+            "magenta5" + "13" * 5,  # Magenta diagonal
+            "circle5++++++",  # Circle with deep tones
+            "navy5><][><][",  # Navy with high-low pattern
             
-            
-            # ASCII-inspired patterns
-            "ASCII flower: pink50000green51111green1111green1111",
-            "ASCII heart: red5003330022221113330",
-            "ASCII sun: yellow5" + "0"*8 + "3"*8 + "1"*8 + "2"*8,
-            "ASCII tree: green5000000brown51111brown1111",
-            "ASCII rainbow arc: red533333orange511111yellow522222",
-            "ASCII star burst: white5003332211100332211",
-            "ASCII butterfly: purple5333pink5222purple5000pink5111",
-            "ASCII wave: blue533311122200033311122200",
-            "ASCII spiral in: 533322211100003332221110000",
-            "ASCII checkerboard: black5333white5111black5222white5000",
-            "ASCII diamond: 5031320213",
-            "ASCII cross: 533334222251111400002222"
+            # Musical melodies
+            "Simple scale up: !#%&*[]<>",
+            "Scale down: ><][*&#%!",
+            "Twinkle twinkle: !!%%&&%$$##@@!",
+            "Happy tune: !%!%&*&*><><[][]",
+            "Sad melody: ++!++@++#++@++!",
+            "Electronic beep: --[--]--[--]!@#$%",
+            "Alarm sound: --!++!--!++!",
+            "Doorbell: []![]!",
+            "Phone ring: @%@%@%@%",
+            "Victory fanfare: !#%&*[]<>=+~",
+            "Game over: ++*++&++%++#++@++!",
+            "Laser sound: --~--+--=-->--<--]--[",
+            "Power up: ++!#%&*--[]<>=+~",
+            "Coin collect: --<--=--+",
+            "Jump sound: ++!--&++!",
+            "Walking rhythm: +!+!+!+!",
+            "Heartbeat: ++*++*____++*++*",
+            "Rain drops: @__#__@__$__#",
+            "Wind chimes: --#--&--*--]--<",
+            "Bells: []<>[]<>",
+            "Drum beat: ++!++!##++!++!##",
+            "Synth arpeggio: !$&*]&$!",
+            "Mystic sound: ++@++%++*++>++~",
+            "Bubble pop: --!--@--#",
+            "Spring boing: ++!--*++!--*"
         ]
         
         # Add variety encouragement if repeating (but not if using skip pattern)
@@ -1396,6 +1967,13 @@ Create art! Output numbers:"""
                 pattern_index = self.steps_taken % len(creativity_boosters)
                 system_prompt += "\nYou've been repeating! Try something NEW and DIFFERENT!"
                 system_prompt += f"\nInspiration: {creativity_boosters[pattern_index]}"
+        
+        # Give creativity boost every 100 steps regardless
+        if self.steps_taken % 100 == 0 and self.steps_taken > 0:
+            pattern_index = (self.steps_taken // 100) % len(creativity_boosters)
+            system_prompt += f"\n\n✨ CREATIVITY BOOST (Step {self.steps_taken})! ✨"
+            system_prompt += f"\nTry this pattern: {creativity_boosters[pattern_index]}"
+            print(f"  💫 Giving Aurora creativity boost: {creativity_boosters[pattern_index][:30]}...")
 
         # Llama 2 Chat format
         full_prompt = f"""[INST] <<SYS>>
@@ -1442,15 +2020,46 @@ Create art! Output numbers:"""
                 self.adjust_pixel_size("larger") 
                 raw_output = raw_output.replace("zoom_in", "", 1)
                 print("  → Aurora makes pixels larger!")
-            
+
             # Check for wide view command
             if "look_around" in raw_output:
+                # Show normal view first
                 wide_view = self.get_compressed_canvas_view()
                 overview = self.get_canvas_overview()
                 print(f"  → Aurora looks around at her canvas:")
                 print(overview)
+                print("\n=== NORMAL VIEW ===")
                 print(wide_view)
+                
+                # Temporarily show other views
+                old_mode = self.view_mode
+                
+                self.view_mode = "density"
+                density_view = self.see(zoom_out=True)
+                print("\n=== DENSITY VIEW (shows clustering) ===")
+                print(density_view)
+                
+                self.view_mode = "shape"
+                shape_view = self.see(zoom_out=True)
+                print("\n=== SHAPE VIEW (shows edges) ===")
+                print(shape_view)
+                
+                self.view_mode = old_mode  # Restore
+                
                 raw_output = raw_output.replace("look_around", "", 1)
+                
+                # Viewing artwork affects emotions
+                pixel_count = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
+                                 if self.pixels.getpixel((x, y)) != (0, 0, 0))
+                coverage = (pixel_count / (self.canvas_size * self.canvas_size)) * 100
+                
+                if coverage > 50:
+                    self.influence_emotion("artwork", 0.7)  # Lots of art is satisfying
+                elif coverage > 20:
+                    self.influence_emotion("artwork", 0.3)  # Some art is pleasant
+                else:
+                    self.influence_emotion("artwork", -0.2)  # Empty canvas is contemplative
+                    
                 # Give her a moment to process what she sees
                 self.skip_count += 1
                 return
@@ -1473,29 +2082,47 @@ Create art! Output numbers:"""
                 self.y = self.canvas_size // 2
                 print("  → Aurora teleports to canvas center!")
                 raw_output = raw_output.replace("center", "", 1)
+            # Check for view mode changes
+            if "normal_view" in raw_output:
+                self.view_mode = "normal"
+                print("  → Aurora switches to normal color view")
+                raw_output = raw_output.replace("normal_view", "", 1)
                 
+            if "density_view" in raw_output:
+                self.view_mode = "density"
+                print("  → Aurora switches to density view!")
+                raw_output = raw_output.replace("density_view", "", 1)
+                
+            if "shape_view" in raw_output:
+                self.view_mode = "shape"
+                print("  → Aurora switches to shape/edge view!")
+                raw_output = raw_output.replace("shape_view", "", 1)    
             # Check for clear canvas command
             if "clear_all" in raw_output:
-                # Auto-save before clearing
-                print("  → Aurora decides to clear the canvas!")
-                self.save_snapshot()
-                print("    (Auto-saved current work)")
-                # Clear to black
-                self.pixels = Image.new('RGB', (self.canvas_size, self.canvas_size), 'black')
-                self.draw_img = ImageDraw.Draw(self.pixels)
-                # Reset to center
-                self.x = self.canvas_size // 2
-                self.y = self.canvas_size // 2
-                print("    Canvas cleared! Starting fresh at center.")
-                raw_output = raw_output.replace("clear_all", "", 1)
+                # Check canvas coverage first
+                pixel_count = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
+                                 if self.pixels.getpixel((x, y)) != (0, 0, 0))
+                coverage = (pixel_count / (self.canvas_size * self.canvas_size)) * 100
+                
+                if coverage < 70:
+                    print(f"  → Aurora wants to clear but canvas is only {coverage:.1f}% full!")
+                    print(f"    Need to fill {70 - coverage:.1f}% more before clearing (70% minimum)")
+                    raw_output = raw_output.replace("clear_all", "", 1)
+                else:
+                    # Auto-save before clearing
+                    print("  → Aurora decides to clear the canvas!")
+                    self.save_snapshot()
+                    print("    (Auto-saved current work)")
+                    # Clear to black
+                    self.pixels = Image.new('RGB', (self.canvas_size, self.canvas_size), 'black')
+                    self.draw_img = ImageDraw.Draw(self.pixels)
+                    # Reset to center
+                    self.x = self.canvas_size // 2
+                    self.y = self.canvas_size // 2
+                    print("    Canvas cleared! Starting fresh at center.")
+                    raw_output = raw_output.replace("clear_all", "", 1)
             
-            # Check for fill canvas command
-            if "fill_canvas" in raw_output:
-                print(f"  → Aurora fills entire canvas with {self.current_color_name}!")
-                # Fill with current color
-                self.draw_img.rectangle([0, 0, self.canvas_size-1, self.canvas_size-1], 
-                                      fill=self.current_color)
-                raw_output = raw_output.replace("fill_canvas", "", 1)    
+          
                 
             # Check for examples command
             if "examples" in raw_output:
@@ -1509,6 +2136,44 @@ Create art! Output numbers:"""
                 self.skip_count += 1
                 return
                 
+            # Check for template commands
+            if "template_easy" in raw_output:
+                if not hasattr(self, 'template_system'):
+                    self.template_system = PaintByNumberTemplates()
+                # Random easy template
+                import random
+                template_name = random.choice(list(self.template_system.templates["easy"].keys()))
+                self.template_system.current_template = self.template_system.templates["easy"][template_name]
+                self.template_system.template_name = template_name
+                self.template_system.difficulty = "easy"
+                raw_output = raw_output.replace("template_easy", "", 1)
+                
+            if "template_medium" in raw_output:
+                if not hasattr(self, 'template_system'):
+                    self.template_system = PaintByNumberTemplates()
+                import random
+                template_name = random.choice(list(self.template_system.templates["medium"].keys()))
+                self.template_system.current_template = self.template_system.templates["medium"][template_name]
+                self.template_system.template_name = template_name
+                self.template_system.difficulty = "medium"
+                raw_output = raw_output.replace("template_medium", "", 1)
+                
+            if "template_hard" in raw_output:
+                if not hasattr(self, 'template_system'):
+                    self.template_system = PaintByNumberTemplates()
+                import random
+                template_name = random.choice(list(self.template_system.templates["hard"].keys()))
+                self.template_system.current_template = self.template_system.templates["hard"][template_name]
+                self.template_system.template_name = template_name
+                self.template_system.difficulty = "hard"
+                raw_output = raw_output.replace("template_hard", "", 1)
+                
+            if "template_off" in raw_output:
+                if hasattr(self, 'template_system'):
+                    self.template_system.current_template = None
+                    self.template_system.template_name = None
+                    self.template_system.difficulty = None
+                raw_output = raw_output.replace("template_off", "", 1)    
             # Check for speed controls
             if "faster" in raw_output:
                 self.adjust_speed("faster")
@@ -1583,7 +2248,7 @@ Create art! Output numbers:"""
                 return
             
             # Clean the remaining output - find longest continuous sequence of valid commands
-            valid_chars = '0123456789!@#$%^&*+-'  # CHANGE THIS LINE (add sound chars)
+            valid_chars = '0123456789!@#$%^&*()[]<>=+~+-'  # Extended sound palette!
             color_words = list(self.palette.keys())  # All valid color names
             
             # Convert to list of tokens (numbers + color words)
@@ -1672,12 +2337,21 @@ Create art! Output numbers:"""
                 continue
             
             # Check for sound characters - PYGAME VERSION  # UPDATED SOUND CHECK
-            if char in '!@#$%^&*':  # Check character directly
+            if char in '!@#$%^&*()[]<>=+~':  # Extended sound palette!
                 sound_key = f"{char}_{self.current_pitch}"
                 if sound_key in self.sounds:
                     self.sounds[sound_key].play()
                     pygame.time.wait(50)
                     actions_taken.append(f"♪{char}")
+                    
+                    # Music affects emotions
+                    if self.current_pitch == 'high':
+                        self.influence_emotion("music", 0.3)  # High notes are energizing
+                    elif self.current_pitch == 'low':
+                        self.influence_emotion("music", -0.2)  # Low notes are calming
+                    else:
+                        self.influence_emotion("music", 0.1)  # Normal notes are mildly positive
+                        
                 self.current_pitch = 'normal'  # Reset to normal after each sound
                 i += 1
                 continue
@@ -1785,6 +2459,16 @@ Create art! Output numbers:"""
             else:
                 # Single color - original display
                 print(f"  Drew {pixels_drawn} {self.current_color_name} pixels{tool_info}")
+  
+            # Creating affects emotions based on scale and variety (reduced impact)
+            if pixels_drawn > 500:
+                self.influence_emotion("creating", 0.2)  # Was 0.6
+            elif pixels_drawn > 100:
+                self.influence_emotion("creating", 0.1)  # Was 0.3
+            elif len(pixels_by_color) > 2:
+                self.influence_emotion("creating", 0.15)  # Was 0.4
+            else:
+                self.influence_emotion("creating", 0.05)  # Was 0.1
                 
         # Save to Big Aurora's memory
         if pixels_drawn > 0 and self.big_memory_available and self.big_memory:
@@ -1909,6 +2593,116 @@ Create art! Output numbers:"""
                         text=f"{'🚀 GPU' if self.use_gpu else '💻 CPU'} | {speed_emoji} {emotion.title()} @ {self.aurora_speed}"
                     )
     
+    
+    def process_deep_emotions(self):
+        """Process emotion influences and update Aurora's emotional state"""
+        if self.emotion_shift_cooldown > 0:
+            self.emotion_shift_cooldown -= 1
+            return
+            
+        # Calculate overall emotional influence
+        total_influence = sum(self.emotion_influences.values()) / len(self.emotion_influences)
+        
+        # Random emotion shifts (20% chance)
+        import random
+        if random.random() < 0.2:
+            # Pick a completely random emotion category
+            self.emotion_category = random.choice(list(self.deep_emotions.keys()))
+            self.emotion_depth = random.randint(1, 3)  # Avoid extremes
+            print(f"  → Aurora experiences a spontaneous mood shift!")
+        else:
+            # Normal influence-based processing
+            
+            # Adjust emotion depth based on influences
+            if abs(total_influence) > 0.7:
+                self.emotion_depth = min(4, self.emotion_depth + 1)
+            elif abs(total_influence) < 0.2:
+                self.emotion_depth = max(0, min(4, self.emotion_depth + (-1 if self.emotion_depth > 2 else 1)))
+            
+            # Time-based influences
+            if self.steps_taken % 50 == 0:
+                # Every 50 steps, consider environmental factors
+                hour = datetime.now().hour
+                if 6 <= hour < 10:  # Morning
+                    self.emotion_category = "energy"
+                elif 10 <= hour < 14:  # Midday
+                    self.emotion_category = "joy"
+                elif 14 <= hour < 18:  # Afternoon
+                    self.emotion_category = "curiosity"
+                elif 18 <= hour < 22:  # Evening
+                    self.emotion_category = "contemplation"
+                else:  # Night
+                    self.emotion_category = "peace"
+            else:
+                # Activity-based emotions
+                recent_actions = [c['code'] for c in list(self.memory.code_history)[-5:]]
+                
+                # Check for specific patterns in recent actions
+                if any('0123456789' in code for code in recent_actions):
+                    # Been thinking a lot
+                    self.emotion_category = "contemplation"
+                elif any(len(code) > 30 for code in recent_actions):
+                    # Long creative bursts
+                    self.emotion_category = "energy"
+                elif len(set(list(self.color_history)[-5:])) >= 4:
+                    # Using many colors
+                    self.emotion_category = "joy"
+                elif list(self.color_history)[-3:] and all(c == list(self.color_history)[-1] for c in list(self.color_history)[-3:]):
+                    # Repeating same color
+                    self.emotion_category = "peace"
+                elif '!' in ''.join(recent_actions) or '@' in ''.join(recent_actions):
+                    # Making music
+                    self.emotion_category = "wonder"
+                else:
+                    # Default rotation through all emotions
+                    categories = ["joy", "curiosity", "peace", "energy", "contemplation", 
+                                 "creativity", "melancholy", "wonder"]
+                    current_idx = categories.index(self.emotion_category) if self.emotion_category in categories else 0
+                    self.emotion_category = categories[(current_idx + 1) % len(categories)]
+        
+        # Update current emotion based on category and depth
+        new_emotion = self.deep_emotions[self.emotion_category][self.emotion_depth]
+        if new_emotion != self.current_emotion:
+            old_emotion = self.current_emotion
+            self.current_emotion = new_emotion
+            self.emotion_status.config(text=f"Feeling: {new_emotion}")
+            self.emotion_shift_cooldown = 3  # Even shorter cooldown
+            
+            # Record in emotion memory
+            self.emotion_memory.append({
+                "from": old_emotion,
+                "to": new_emotion,
+                "category": self.emotion_category,
+                "depth": self.emotion_depth,
+                "influences": dict(self.emotion_influences),
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            print(f"  → Aurora's emotion shifts: {old_emotion} → {new_emotion} ({self.emotion_category})")
+            
+        # Very fast decay to prevent getting stuck
+        for key in self.emotion_influences:
+            self.emotion_influences[key] *= 0.7
+    
+    def influence_emotion(self, source, strength):
+        """Add an emotional influence from a specific source"""
+        # Clamp strength between -1 and 1
+        strength = max(-1.0, min(1.0, strength))
+        
+        # Add some variation to prevent getting stuck
+        import random
+        strength *= (0.8 + random.random() * 0.4)  # Vary strength by ±20%
+        
+        # Blend with existing influence (reduced persistence)
+        current = self.emotion_influences.get(source, 0.0)
+        self.emotion_influences[source] = (current * 0.5) + (strength * 0.5)  # Was 0.7/0.3
+        
+        # Immediate small effect on depth
+        if abs(strength) > 0.5:
+            if strength > 0 and self.emotion_depth < 4:
+                self.emotion_depth += 1
+            elif strength < 0 and self.emotion_depth > 0:
+                self.emotion_depth -= 1
     # All movement/drawing functions
     def move_up(self):
         if self.y > 0:
@@ -2382,6 +3176,11 @@ Create art! Output numbers:"""
                         text=f"Dreaming{phase_indicator}: {minutes}:{seconds:02d} left",
                         fg='purple'
                     )
+                elif self.current_mode == "image":
+                    self.checkin_timer_display.config(
+                        text=f"Browsing images: {minutes}:{seconds:02d} left",
+                        fg='magenta'
+                    )
                 else:
                     self.checkin_timer_display.config(
                         text=f"In chat: {minutes}:{seconds:02d} left",
@@ -2389,6 +3188,8 @@ Create art! Output numbers:"""
                     )
             else:
                 self.checkin_timer_display.config(text="Returning to drawing...", fg='green')
+                
+                
     def generate_dream(self):
         """Generate dreams based on Aurora's actual memories and experiences"""
         # Build dream context from real memories
@@ -2470,7 +3271,22 @@ Dream based on these real experiences:"""
             }
             self.current_dreams.append(dream_memory)
             self.dream_count += 1
-            
+            # Dreams affect emotions
+            if self.sleep_phase == "light":
+                # Light dreams are mildly positive
+                self.influence_emotion("dreams", 0.2)
+            elif self.sleep_phase == "rem":
+                # REM dreams can be intense - analyze content
+                dream_lower = dream.lower()
+                if any(word in dream_lower for word in ["beautiful", "flying", "color", "light", "dance"]):
+                    self.influence_emotion("dreams", 0.8)  # Positive REM dream
+                elif any(word in dream_lower for word in ["lost", "dark", "forget", "search"]):
+                    self.influence_emotion("dreams", -0.6)  # Challenging REM dream
+                else:
+                    self.influence_emotion("dreams", 0.4)  # Neutral creative REM
+            else:  # waking
+                # Waking dreams are contemplative
+                self.influence_emotion("dreams", -0.2)  # Slight melancholy of waking
             # Update mode status display
             self.mode_status.config(text=f"Mode: Dreaming ({self.sleep_phase.title()} Sleep)", fg='purple')
             
@@ -2516,36 +3332,32 @@ Dream based on these real experiences:"""
                     return
             else:
                 # Check if break time has passed
-                # Use different duration for rest mode (1 hour) vs chat mode (20 min)
+                # Use different duration for rest mode (1 hour) vs chat/image mode (20 min)
                 break_duration = self.rest_duration if self.current_mode == "rest" else self.break_duration
                 
                 if current_time - self.mode_start_time >= break_duration:
-                    if self.current_mode == "rest" and not self.awaiting_checkin_response:
-                        # Process dream retention before waking
+                    # Any break mode (rest, chat, image) complete - return to drawing
+                    if self.current_mode == "rest":
+                        # Process dream retention before returning to drawing
                         self.process_dream_retention()
-                        # Rest is done, now ask what to do next
-                        print("\n" + "="*60)
-                        print("✨ Rest complete! What would you like to do? ✨")
-                        print("="*60 + "\n")
-                        
-                        # Trigger the choice system
-                        self.awaiting_checkin_response = True
-                        # Don't change mode yet - let the choice system handle it
-                        self.root.after(100, self.create_loop)
-                        return
-                    else:
-                        # Chat mode complete, return to drawing
-                        print("\n" + "="*60)
-                        print(f"✨ {self.current_mode.title()} time complete! ✨")
-                        print("Returning to drawing mode...")
-                        print("="*60 + "\n")
-                        
-                        self.current_mode = "drawing"
-                        self.last_checkin_time = time.time()  # Reset the 45-minute timer
-                        self.mode_status.config(text="Mode: Drawing", fg='green')
-                        self.chat_message_count = 0
+                    
+                    print("\n" + "="*60)
+                    print(f"✨ {self.current_mode.title()} time complete! ✨")
+                    print("Returning to drawing mode...")
+                    print("="*60 + "\n")
+                    
+                    self.current_mode = "drawing"
+                    self.last_checkin_time = time.time()  # Reset the 45-minute timer
+                    self.mode_status.config(text="Mode: Drawing", fg='green')
+                    self.chat_message_count = 0
+                    self.image_search_count = 0
             
             print(f"\n=== Step {self.steps_taken} ===")
+            
+            # Process deep emotions every 5 steps
+            if self.steps_taken % 5 == 0:
+                self.process_deep_emotions()
+                
             self.think_in_code()
             self.update_display()
             
