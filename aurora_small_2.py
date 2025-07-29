@@ -95,7 +95,6 @@ class SimpleMemorySystem:
                 self.code_history = deque(maxlen=1000)  # Start fresh
         
         # Skip loading any reinforcement learning data
-        # Skip loading any reinforcement learning data
         stats_file = self.canvas_path / "learning_stats.json"
         if stats_file.exists():
             print("(Skipping old reinforcement learning data)")
