@@ -1,16 +1,22 @@
 from llama_cpp import Llama
 from pathlib import Path
-import tkinter as tk
-from PIL import Image, ImageDraw, ImageTk
+import pygame
+import os
+os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
+pygame.init()
+
+from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 import json
 from datetime import datetime
 from collections import deque
 import time
 import pyaudio
-import pygame
 import requests
 import webbrowser
 from urllib.parse import quote
+import numpy as np
+import math
+import random
 try:
     from aurora_ai_backup2 import DeepMemorySystem
     DEEP_MEMORY_AVAILABLE = True
@@ -298,6 +304,7 @@ class PaintByNumberTemplates:
         overlay_info += f"\nTemplate guides your art - follow or improvise!"
         
         return overlay_info
+  
     
 class AuroraCodeMindComplete:
     """
@@ -369,15 +376,18 @@ class AuroraCodeMindComplete:
         print(f"2. LLM loaded with {gpu_layers_setting} GPU layers")
         
         # Get screen dimensions for fullscreen
-        temp_root = tk.Tk()
-        screen_width = temp_root.winfo_screenwidth()
-        screen_height = temp_root.winfo_screenheight()
-        temp_root.destroy()
+        # Don't init pygame here - we'll do it once in setup_display
+        screen_width = 1920  # Default assumption
+        screen_height = 1080  # Default assumption
         
         # Canvas - adjust size based on screen (much smaller pixels now!)
-        self.scale_factor = 1.6  # Lower scale_factor means smaller pixels and higher canvas resolution; e.g., 1.6 gives more pixels than 8.
+        self.scale_factor = 1.0  # Lower scale_factor means smaller pixels and higher canvas resolution; e.g., 1.6 gives more pixels than 8.
         self.canvas_size = min(int(screen_width / self.scale_factor) - 50, 
                                int(screen_height / self.scale_factor) - 50)
+        
+        # Supersampling for quality
+        self.supersample_factor = 4  # Draw at 4x resolution internally
+        self.internal_canvas_size = self.canvas_size * self.supersample_factor
                                
                        
         self.x = self.canvas_size // 2
@@ -509,10 +519,10 @@ class AuroraCodeMindComplete:
         self.speed_override_counter = 0  # Steps since speed override
         print("7. Code tracking initialized")
         
-        # Canvas
-        self.pixels = Image.new('RGB', (self.canvas_size, self.canvas_size), 'black')
+        # Canvas - now at higher resolution internally
+        self.pixels = Image.new('RGB', (self.internal_canvas_size, self.internal_canvas_size), 'black')
         self.draw_img = ImageDraw.Draw(self.pixels)
-        print("8. Image buffer created")
+        print(f"8. Image buffer created at {self.internal_canvas_size}x{self.internal_canvas_size} (4x supersampled)")
         
         # Try to load previous canvas state (this may adjust position)
         self.load_canvas_state()
@@ -534,7 +544,6 @@ class AuroraCodeMindComplete:
         self.awaiting_checkin_response = False
         self.chat_message_count = 0 
         # Dream system initialization
-        self.dream_memories = deque(maxlen=100)  # Store up to 100 dreams
         self.current_dreams = []  # Dreams from current rest session
         self.sleep_phase = "light"  # light, rem, waking
         self.sleep_phase_start = time.time()
@@ -543,7 +552,7 @@ class AuroraCodeMindComplete:
         self.hearing_enabled = False
         self.audio_stream = None
         self.audio = pyaudio.PyAudio()
-        self.rest_duration = 10 * 60  # 1 hour for rest/dreaming (separate from break_duration)
+        self.rest_duration = 10 * 60  # 10 minutes for rest/dreaming (separate from break_duration)
 
         
         # Simple pygame sound system  # ADD ALL OF THIS
@@ -552,6 +561,8 @@ class AuroraCodeMindComplete:
         
         # Pre-generate simple beeps (so they're instant to play)
         self.sounds = {}
+        # Cymatics system
+        self.cymatic_circles = []
         self.current_pitch = 'normal'  # ADD THIS - tracks current pitch mode
         try:
             import numpy as np  # Import here if not already imported
@@ -592,7 +603,92 @@ class AuroraCodeMindComplete:
         print("9. About to setup display...")
         self.setup_display()
         print("10. Display setup complete")
-
+    
+    def _scale_to_internal(self, coord):
+        """Convert display coordinates to internal supersampled coordinates"""
+        return coord * self.supersample_factor
+    
+    def _scale_from_internal(self, coord):
+        """Convert internal supersampled coordinates to display coordinates"""
+        return coord // self.supersample_factor
+        
+    def _create_soft_brush(self, size, hardness=0.5):
+        """Create a soft circular brush with gradient falloff"""
+        brush = Image.new('L', (size * 2, size * 2), 0)
+        draw = ImageDraw.Draw(brush)
+        
+        # Create gradient circles from outside to inside
+        for i in range(size, 0, -1):
+            # Calculate opacity based on distance from center
+            if hardness == 1.0:
+                opacity = 255 if i == size else 0
+            else:
+                opacity = int(255 * (i / size) ** (1 / (hardness + 0.1)))
+            
+            draw.ellipse(
+                [size - i, size - i, size + i, size + i],
+                fill=opacity
+            )
+        
+        return brush
+    
+    def _blend_with_alpha(self, x, y, color, alpha_mask):
+        """Blend color with existing canvas using alpha mask"""
+        mask_width, mask_height = alpha_mask.size
+        half_w, half_h = mask_width // 2, mask_height // 2
+        
+        # Create a temporary image for the brush stroke
+        temp = Image.new('RGBA', (mask_width, mask_height), (*color, 0))
+        
+        # Apply the alpha mask
+        temp.putalpha(alpha_mask)
+        
+        # Calculate position to paste
+        paste_x = x - half_w
+        paste_y = y - half_h
+        
+        # Create a crop of the existing canvas
+        x1 = max(0, paste_x)
+        y1 = max(0, paste_y)
+        x2 = min(self.canvas_size, paste_x + mask_width)
+        y2 = min(self.canvas_size, paste_y + mask_height)
+        
+        if x2 > x1 and y2 > y1:
+            # Get the region we're drawing to
+            region = self.pixels.crop((x1, y1, x2, y2)).convert('RGBA')
+            
+            # Crop the brush to match if needed
+            brush_x1 = max(0, -paste_x)
+            brush_y1 = max(0, -paste_y)
+            brush_x2 = brush_x1 + (x2 - x1)
+            brush_y2 = brush_y1 + (y2 - y1)
+            
+            brush_region = temp.crop((brush_x1, brush_y1, brush_x2, brush_y2))
+            
+            # Composite the brush onto the region
+            region = Image.alpha_composite(region, brush_region)
+            
+            # Paste back to canvas
+            self.pixels.paste(region.convert('RGB'), (x1, y1))
+    
+    def _draw_smooth_line(self, x1, y1, x2, y2, brush_func):
+        """Draw a smooth line between two points using the brush function"""
+        dx = x2 - x1
+        dy = y2 - y1
+        distance = math.sqrt(dx*dx + dy*dy)
+        
+        if distance == 0:
+            brush_func(x1, y1)
+            return
+            
+        # More steps for longer lines to ensure smoothness
+        steps = max(int(distance * 2), 1)
+        
+        for i in range(steps + 1):
+            t = i / steps
+            x = int(x1 + dx * t)
+            y = int(y1 + dy * t)
+            brush_func(x, y)
     def get_ascii_art_examples(self):
         """Return ASCII art examples that Aurora can see for inspiration"""
         
@@ -661,183 +757,45 @@ Dots of each color (. means move without drawing)!"""
         return examples
         
     def setup_display(self):
-        """Full display with memory and rewards - FULLSCREEN"""
-        self.root = tk.Tk()
-        self.root.title("Aurora Code Mind - Complete")
-        self.root.configure(bg='#000')
+        """Full display - FULLSCREEN CANVAS ONLY"""
         
-        # Make it fullscreen!
-        self.root.attributes('-fullscreen', True)
+        # Get screen info
+        info = pygame.display.Info()
+        screen_width = info.current_w
+        screen_height = info.current_h
         
-        # Allow escape key to exit fullscreen
-        self.root.bind('<Escape>', lambda e: self.root.attributes('-fullscreen', False))
-        self.root.bind('<F11>', lambda e: self.root.attributes('-fullscreen', 
-                                            not self.root.attributes('-fullscreen')))
-        # Add hearing control
-        self.root.bind('<h>', lambda e: self.toggle_hearing())
-        self.root.bind('<H>', lambda e: self.toggle_hearing())
-        # Get actual screen dimensions
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
+        info = pygame.display.Info()
+        self.screen = pygame.display.set_mode((info.current_w, info.current_h), pygame.NOFRAME)
+        pygame.display.set_caption("Aurora Code Mind - Complete")
         
-        main_frame = tk.Frame(self.root, bg='#000')
-        main_frame.pack(expand=True, fill='both')
-        
-        # Canvas - now fills most of the screen
-        canvas_display_size = min(screen_width - 300, screen_height - 100)
-        self.display = tk.Canvas(
-            main_frame,
-            width=canvas_display_size,
-            height=canvas_display_size,
-            bg='black',
-            highlightthickness=0
-        )
-        self.display.pack(side='left', padx=20, pady=20)
-        
-        # Calculate scale for display
+        # Calculate layout - FULL SCREEN CANVAS
+        canvas_display_size = min(screen_width, screen_height) - 40  # Small margin
         self.display_scale = canvas_display_size / self.canvas_size
         
-        # Info panel (all your original status displays)
-        info_frame = tk.Frame(main_frame, bg='#000')
-        info_frame.pack(side='right', padx=20, pady=20, fill='y')
+        # Center the canvas
+        canvas_x = (screen_width - canvas_display_size) // 2
+        canvas_y = (screen_height - canvas_display_size) // 2
+        self.canvas_rect = pygame.Rect(canvas_x, canvas_y, canvas_display_size, canvas_display_size)
         
-        # Title
-        tk.Label(
-            info_frame,
-            text="AURORA",
-            fg='cyan',
-            bg='#000',
-            font=('Arial', 24, 'bold')
-        ).pack(pady=10)
+        # Font setup (for minimal overlay text)
+        self.font_small = pygame.font.Font(None, 16)
+        self.font_normal = pygame.font.Font(None, 20)
         
-        # Canvas info
-        tk.Label(
-            info_frame,
-            text=f"Canvas: {self.canvas_size}×{self.canvas_size}",
-            fg='gray',
-            bg='#000',
-            font=('Arial', 10)
-        ).pack()
+        # Colors
+        self.bg_color = (0, 0, 0)
+        self.text_color = (255, 255, 255)
+        self.cyan_color = (0, 255, 255)
+        self.yellow_color = (255, 255, 0)
+        self.green_color = (0, 255, 0)
+        self.gray_color = (128, 128, 128)
         
-        # Mode status (NEW)
-        self.mode_status = tk.Label(
-            info_frame,
-            text=f"Mode: Drawing",
-            fg='green',
-            bg='#000',
-            font=('Arial', 12, 'bold')
-        )
-        self.mode_status.pack(pady=10)
+        # Store fullscreen state
+        self.fullscreen = True
         
-        # Emotion status
-        self.emotion_status = tk.Label(
-            info_frame,
-            text=f"Feeling: {self.current_emotion}",
-            fg='yellow',
-            bg='#000',
-            font=('Arial', 14)
-        )
-        self.emotion_status.pack(pady=20)
+        # Clock for frame timing
+        self.clock = pygame.time.Clock()
         
-        # Memory status
-        tk.Label(info_frame, text="Memory:", fg='white', bg='#000', font=('Arial', 16)).pack()
-        self.memory_status = tk.Label(
-            info_frame,
-            text="Initializing...",
-            fg='cyan',
-            bg='#000',
-            font=('Arial', 12)
-        )
-        self.memory_status.pack(pady=5)
-        
-        # Reward display
-        tk.Label(info_frame, text="Rewards:", fg='white', bg='#000', font=('Arial', 16)).pack(pady=(20,5))
-        self.reward_display = tk.Label(
-            info_frame,
-            text="Last: +0.0",
-            fg='gray',
-            bg='#000',
-            font=('Arial', 12)
-        )
-        self.reward_display.pack()
-        
-        self.total_reward_display = tk.Label(
-            info_frame,
-            text="Total: 0.0",
-            fg='cyan',
-            bg='#000',
-            font=('Arial', 14)
-        )
-        self.total_reward_display.pack()
-        
-        # Performance status
-        tk.Label(info_frame, text="\nPerformance:", fg='white', bg='#000', font=('Arial', 12, 'bold')).pack(pady=(20,5))
-        gpu_status = "🚀 GPU" if self.use_gpu else "💻 CPU"
-        self.performance_status = tk.Label(
-            info_frame,
-            text=f"{gpu_status} | Normal Speed",
-            fg='lime' if self.use_gpu else 'yellow',
-            bg='#000',
-            font=('Arial', 10)
-        )
-        self.performance_status.pack()
-        
-        # Set initial speed display
-        self.performance_status.config(
-            text=f"{'🚀 GPU' if self.use_gpu else '💻 CPU'} | 🎨 Normal Speed"
-        )
-        
-        # Check-in timer display (NEW)
-        self.checkin_timer_display = tk.Label(
-            info_frame,
-            text="Next check-in: 45:00",
-            fg='white',
-            bg='#000',
-            font=('Arial', 10)
-        )
-        self.checkin_timer_display.pack(pady=10)
-        # Hearing indicator
-        self.hearing_indicator = tk.Label(
-            info_frame,
-            text="",
-            fg='cyan',
-            bg='#000',
-            font=('Arial', 10)
-        )
-        self.hearing_indicator.pack()
-        # Instructions
-        tk.Label(
-            info_frame,
-            text="\nControls:",
-            fg='white',
-            bg='#000',
-            font=('Arial', 12, 'bold')
-        ).pack(pady=(30,5))
-        
-        tk.Label(
-            info_frame,
-            text="ESC - Exit fullscreen\nF11 - Toggle fullscreen\nS - Save snapshot\nT - Turbo mode\nQ - Quit",
-            fg='gray',
-            bg='#000',
-            font=('Arial', 10),
-            justify='left'
-        ).pack()
-        
-        # Bind snapshot key
-        self.root.bind('<s>', lambda e: self.save_snapshot())
-        self.root.bind('<S>', lambda e: self.save_snapshot())
-        
-        # Bind turbo mode
-        self.root.bind('<t>', lambda e: self.toggle_turbo())
-        self.root.bind('<T>', lambda e: self.toggle_turbo())
-
-        # Add camera control keys
-        self.root.bind('<c>', lambda e: self.center_on_aurora())
-        self.root.bind('<C>', lambda e: self.center_on_aurora())
-        self.root.bind('<b>', lambda e: self.reset_view())
-        self.root.bind('<B>', lambda e: self.reset_view())
-        
-        # Store view state
+        # Store view state (from original)
         self.centered_view = False
         self.view_offset_x = 0
         self.view_offset_y = 0
@@ -864,14 +822,61 @@ Dots of each color (. means move without drawing)!"""
         """Aurora's vision - now with multi-resolution capability"""
         # Much larger view window for huge canvases
         if full_canvas:
-            # FULL CANVAS VIEW!
-            vision_size = self.canvas_size  # See the ENTIRE canvas
+            # COMPRESSED FULL CANVAS VIEW - not the actual full size!
+            vision_size = 60  # Always use 60x60 compressed view
+            step = max(1, self.canvas_size // 60)  # Compress to fit
         elif zoom_out:
             # Zoomed out view - see much more!
             vision_size = min(75, self.canvas_size // 2)  # up to 75 x 75
         else:
             # DEFAULT VIEW - Good for art but fits in context!
             vision_size = min(50, self.canvas_size // 2)  # 50x50 default
+        
+        if full_canvas:
+            # Compressed full canvas view
+            ascii_view = []
+            ascii_view.append(f"[FULL CANVAS COMPRESSED VIEW - {self.canvas_size}×{self.canvas_size} → {vision_size}×{vision_size}]")
+            
+            for y in range(0, self.canvas_size, step):
+                row = ""
+                for x in range(0, self.canvas_size, step):
+                    # Sample area around this point
+                    if abs(x - self.x) < step and abs(y - self.y) < step:
+                        row += "◉" if self.is_drawing else "○"  # Aurora's position
+                    elif x >= self.canvas_size or y >= self.canvas_size:
+                        row += "█"  # Wall
+                    else:
+                        # Sample the pixel - SCALE TO INTERNAL COORDINATES
+                        scaled_x = self._scale_to_internal(min(x, self.canvas_size-1))
+                        scaled_y = self._scale_to_internal(min(y, self.canvas_size-1))
+                        if scaled_x < self.internal_canvas_size and scaled_y < self.internal_canvas_size:
+                            pixel = self.pixels.getpixel((scaled_x, scaled_y))
+                            if pixel == (0, 0, 0):
+                                row += "·"  # Empty/Black
+                            elif pixel == (255, 255, 255):
+                                row += "*"  # White
+                            elif pixel[0] > 200 and pixel[1] < 100:
+                                row += "R"  # Red-ish
+                            elif pixel[1] > 200:
+                                row += "G"  # Green-ish
+                            elif pixel[2] > 200:
+                                row += "B"  # Blue-ish
+                            else:
+                                row += "?"  # Other color
+                    
+                    # Stop if we've filled the row
+                    if len(row) >= vision_size:
+                        break
+                        
+                ascii_view.append(row)
+                
+                # Stop if we have enough rows
+                if len(ascii_view) - 1 >= vision_size:
+                    break
+                    
+            return "\n".join(ascii_view)
+        
+        # Normal (not full canvas) view continues as before
         half = vision_size // 2
         ascii_view = []
         
@@ -895,57 +900,61 @@ Dots of each color (. means move without drawing)!"""
                 elif dx == 0 and dy == 0:
                     row += "◉" if self.is_drawing else "○"  # Aurora
                 else:
-                    if self.view_mode == "density":
-                        # Density view
-                        density = self.calculate_density(px, py, radius=3)
-                        if density == 0:
-                            row += "·"
-                        elif density < 0.2:
-                            row += "░"
-                        elif density < 0.4:
-                            row += "▒"
-                        elif density < 0.7:
-                            row += "▓"
+                    # Scale coordinates for internal canvas
+                    scaled_px = self._scale_to_internal(px)
+                    scaled_py = self._scale_to_internal(py)
+                    if scaled_px < self.internal_canvas_size and scaled_py < self.internal_canvas_size:
+                        if self.view_mode == "density":
+                            # Density view
+                            density = self.calculate_density(px, py, radius=3)
+                            if density == 0:
+                                row += "·"
+                            elif density < 0.2:
+                                row += "░"
+                            elif density < 0.4:
+                                row += "▒"
+                            elif density < 0.7:
+                                row += "▓"
+                            else:
+                                row += "█"
+                        elif self.view_mode == "shape":
+                            # Shape/edge view
+                            row += self.detect_edges(px, py)
                         else:
-                            row += "█"
-                    elif self.view_mode == "shape":
-                        # Shape/edge view
-                        row += self.detect_edges(px, py)
-                    else:
-                        # Normal color view
-                        pixel = self.pixels.getpixel((px, py))
-                        if pixel == (0, 0, 0):
-                            row += "·"  # Empty/Black
-                        elif pixel == (255, 255, 255):
-                            row += "*"  # White
-                        elif pixel == (255, 0, 0):
-                            row += "R"  # Red
-                        elif pixel == (0, 100, 255):
-                            row += "B"  # Blue
-                        elif pixel == (255, 255, 0):
-                            row += "Y"  # Yellow
-                        elif pixel == (0, 255, 0):
-                            row += "G"  # Green
-                        elif pixel == (255, 192, 203):
-                            row += "P"  # Pink
-                        elif pixel == (255, 150, 0):
-                            row += "O"  # Orange
-                        elif pixel == (200, 0, 255):
-                            row += "V"  # Purple (Violet)
-                        elif pixel == (0, 255, 255):
-                            row += "C"  # Cyan
-                        elif pixel == (128, 128, 128):
-                            row += "/"  # Gray (slash)
-                        elif pixel == (139, 69, 19):
-                            row += "W"  # Brown (Wood)
-                        elif pixel == (255, 0, 255):
-                            row += "M"  # Magenta
-                        elif pixel == (50, 205, 50):
-                            row += "L"  # Lime
-                        elif pixel == (0, 0, 128):
-                            row += "N"  # Navy
-                        else:
-                            row += "?"
+                            # Normal color view
+                            pixel = self.pixels.getpixel((scaled_px, scaled_py))
+                            if pixel == (0, 0, 0):
+                                row += "·"  # Empty/Black
+                            elif pixel == (255, 255, 255):
+                                row += "*"  # White
+                            elif pixel == (255, 0, 0):
+                                row += "R"  # Red
+                            elif pixel == (0, 100, 255):
+                                row += "B"  # Blue
+                            elif pixel == (255, 255, 0):
+                                row += "Y"  # Yellow
+                            elif pixel == (0, 255, 0):
+                                row += "G"  # Green
+                            elif pixel == (255, 192, 203):
+                                row += "P"  # Pink
+                            elif pixel == (255, 150, 0):
+                                row += "O"  # Orange
+                            elif pixel == (200, 0, 255):
+                                row += "V"  # Purple (Violet)
+                            elif pixel == (0, 255, 255):
+                                row += "C"  # Cyan
+                            elif pixel == (128, 128, 128):
+                                row += "/"  # Gray (slash)
+                            elif pixel == (139, 69, 19):
+                                row += "W"  # Brown (Wood)
+                            elif pixel == (255, 0, 255):
+                                row += "M"  # Magenta
+                            elif pixel == (50, 205, 50):
+                                row += "L"  # Lime
+                            elif pixel == (0, 0, 128):
+                                row += "N"  # Navy
+                            else:
+                                row += "?"
             ascii_view.append(row)
         
         # ADD MULTI-RESOLUTION: Include compressed wide view for context
@@ -979,21 +988,25 @@ Dots of each color (. means move without drawing)!"""
                                 spx = px + sx
                                 spy = py + sy
                                 if 0 <= spx < self.canvas_size and 0 <= spy < self.canvas_size:
-                                    pixel = self.pixels.getpixel((spx, spy))
-                                    if pixel != (0, 0, 0):
-                                        has_color = True
-                                        # Simplified color detection for compressed view
-                                        if pixel[0] > 200 and pixel[1] < 100:
-                                            dominant_color = "r"  # Red-ish
-                                        elif pixel[1] > 200:
-                                            dominant_color = "g"  # Green-ish
-                                        elif pixel[2] > 200:
-                                            dominant_color = "b"  # Blue-ish
-                                        elif pixel[0] > 200 and pixel[1] > 200:
-                                            dominant_color = "y"  # Yellow-ish
-                                        else:
-                                            dominant_color = "*"  # Other color
-                                        break
+                                    # Scale coordinates for internal canvas
+                                    scaled_spx = self._scale_to_internal(spx)
+                                    scaled_spy = self._scale_to_internal(spy)
+                                    if scaled_spx < self.internal_canvas_size and scaled_spy < self.internal_canvas_size:
+                                        pixel = self.pixels.getpixel((scaled_spx, scaled_spy))
+                                        if pixel != (0, 0, 0):
+                                            has_color = True
+                                            # Simplified color detection for compressed view
+                                            if pixel[0] > 200 and pixel[1] < 100:
+                                                dominant_color = "r"  # Red-ish
+                                            elif pixel[1] > 200:
+                                                dominant_color = "g"  # Green-ish
+                                            elif pixel[2] > 200:
+                                                dominant_color = "b"  # Blue-ish
+                                            elif pixel[0] > 200 and pixel[1] > 200:
+                                                dominant_color = "y"  # Yellow-ish
+                                            else:
+                                                dominant_color = "*"  # Other color
+                                            break
                             if has_color:
                                 break
                         
@@ -1015,8 +1028,12 @@ Dots of each color (. means move without drawing)!"""
                 py = center_y + dy
                 if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
                     total_pixels += 1
-                    if self.pixels.getpixel((px, py)) != (0, 0, 0):
-                        filled_pixels += 1
+                    # Scale to internal coordinates for checking
+                    internal_x = self._scale_to_internal(px)
+                    internal_y = self._scale_to_internal(py)
+                    if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                        if self.pixels.getpixel((internal_x, internal_y)) != (0, 0, 0):
+                            filled_pixels += 1
         
         if total_pixels == 0:
             return 0
@@ -1031,7 +1048,13 @@ Dots of each color (. means move without drawing)!"""
             for dx in [-1, 0, 1]:
                 px, py = x + dx, y + dy
                 if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                    row.append(self.pixels.getpixel((px, py)) != (0, 0, 0))
+                    # Scale to internal coordinates
+                    internal_px = self._scale_to_internal(px)
+                    internal_py = self._scale_to_internal(py)
+                    if internal_px < self.internal_canvas_size and internal_py < self.internal_canvas_size:
+                        row.append(self.pixels.getpixel((internal_px, internal_py)) != (0, 0, 0))
+                    else:
+                        row.append(False)
                 else:
                     row.append(False)
             neighbors.append(row)
@@ -1089,16 +1112,20 @@ Dots of each color (. means move without drawing)!"""
         color_counts = {}
         total_pixels = 0
         
-        for x in range(self.canvas_size):
+        for x in range(self.canvas_size):  # Still use display coordinates
             for y in range(self.canvas_size):
-                pixel = self.pixels.getpixel((x, y))
-                if pixel != (0, 0, 0):  # Not black/empty
-                    total_pixels += 1
-                    # Find which color this is
-                    for name, rgb in self.palette.items():
-                        if pixel == rgb:
-                            color_counts[name] = color_counts.get(name, 0) + 1
-                            break
+                # Scale to internal coordinates for checking
+                internal_x = self._scale_to_internal(x)
+                internal_y = self._scale_to_internal(y)
+                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                    pixel = self.pixels.getpixel((internal_x, internal_y))
+                    if pixel != (0, 0, 0):  # Not black/empty
+                        total_pixels += 1
+                        # Find which color this is
+                        for name, rgb in self.palette.items():
+                            if pixel == rgb:
+                                color_counts[name] = color_counts.get(name, 0) + 1
+                                break
         
         # Calculate coverage
         coverage = (total_pixels / (self.canvas_size * self.canvas_size)) * 100
@@ -1119,33 +1146,37 @@ Dots of each color (. means move without drawing)!"""
         for y in range(0, self.canvas_size, step):
             row = ""
             for x in range(0, self.canvas_size, step):
-                pixel = self.pixels.getpixel((x, y))
-                
-                # Check specific colors first (with some tolerance for sampling)
-                if pixel == (0, 0, 0):
-                    row += "·"
-                elif pixel[0] > 240 and pixel[1] > 240 and pixel[2] > 240:
-                    row += "W"  # White
-                elif pixel[0] > 240 and pixel[1] < 20 and pixel[2] < 20:
-                    row += "R"  # Red
-                elif pixel[0] < 20 and pixel[1] > 240 and pixel[2] < 20:
-                    row += "G"  # Green
-                elif pixel[0] < 20 and pixel[1] < 120 and pixel[2] > 240:
-                    row += "B"  # Blue (not purple!)
-                elif pixel[0] > 240 and pixel[1] > 240 and pixel[2] < 20:
-                    row += "Y"  # Yellow
-                elif pixel[0] < 20 and pixel[1] > 240 and pixel[2] > 240:
-                    row += "C"  # Cyan
-                elif pixel[0] > 180 and pixel[1] < 20 and pixel[2] > 240:
-                    row += "P"  # Purple/Violet
-                elif pixel[0] > 240 and pixel[1] > 100 and pixel[2] < 20:
-                    row += "O"  # Orange
-                elif pixel[0] > 240 and pixel[1] > 180 and pixel[2] > 180:
-                    row += "K"  # Pink
-                elif pixel[0] > 240 and pixel[1] < 20 and pixel[2] > 180:
-                    row += "M"  # Magenta
-                else:
-                    row += "*"  # Mixed/unknown colors
+                # Scale to internal coordinates
+                internal_x = self._scale_to_internal(x)
+                internal_y = self._scale_to_internal(y)
+                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                    pixel = self.pixels.getpixel((internal_x, internal_y))
+                    
+                    # Check specific colors first (with some tolerance for sampling)
+                    if pixel == (0, 0, 0):
+                        row += "·"
+                    elif pixel[0] > 240 and pixel[1] > 240 and pixel[2] > 240:
+                        row += "W"  # White
+                    elif pixel[0] > 240 and pixel[1] < 20 and pixel[2] < 20:
+                        row += "R"  # Red
+                    elif pixel[0] < 20 and pixel[1] > 240 and pixel[2] < 20:
+                        row += "G"  # Green
+                    elif pixel[0] < 20 and pixel[1] < 120 and pixel[2] > 240:
+                        row += "B"  # Blue (not purple!)
+                    elif pixel[0] > 240 and pixel[1] > 240 and pixel[2] < 20:
+                        row += "Y"  # Yellow
+                    elif pixel[0] < 20 and pixel[1] > 240 and pixel[2] > 240:
+                        row += "C"  # Cyan
+                    elif pixel[0] > 180 and pixel[1] < 20 and pixel[2] > 240:
+                        row += "P"  # Purple/Violet
+                    elif pixel[0] > 240 and pixel[1] > 100 and pixel[2] < 20:
+                        row += "O"  # Orange
+                    elif pixel[0] > 240 and pixel[1] > 180 and pixel[2] > 180:
+                        row += "K"  # Pink
+                    elif pixel[0] > 240 and pixel[1] < 20 and pixel[2] > 180:
+                        row += "M"  # Magenta
+                    else:
+                        row += "*"  # Mixed/unknown colors
             compressed.append(row)
         
         return "\n".join(compressed)
@@ -1158,8 +1189,12 @@ Dots of each color (. means move without drawing)!"""
         for x in range(0, self.canvas_size, 20):
             for y in range(0, self.canvas_size, 20):
                 sample_count += 1
-                if self.pixels.getpixel((x, y)) != (0, 0, 0):
-                    sample_density += 1
+                # Scale to internal coordinates
+                internal_x = self._scale_to_internal(x)
+                internal_y = self._scale_to_internal(y)
+                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                    if self.pixels.getpixel((internal_x, internal_y)) != (0, 0, 0):
+                        sample_density += 1
         
         density_percent = (sample_density / sample_count) * 100 if sample_count > 0 else 0
         
@@ -1219,30 +1254,38 @@ Dots of each color (. means move without drawing)!"""
                         else:
                             grid_pos = (x_idx, y_idx)
                             if grid_pos in template_positions:
-                                pixel = self.pixels.getpixel((x, y))
-                                suggested_color = template_positions[grid_pos]
-                                if pixel == (0, 0, 0):
-                                    char = f"[{suggested_color}]"
-                                else:
-                                    # Check if correct color
-                                    for name, rgb in self.palette.items():
-                                        if pixel == rgb:
-                                            if name[0].upper() == suggested_color:
-                                                char = name[0].upper()
-                                            else:
-                                                char = name[0].lower()
-                                            break
-                            else:
-                                pixel = self.pixels.getpixel((x, y))
-                                if pixel == (0, 0, 0):
-                                    char = "."
-                                else:
-                                    for name, rgb in self.palette.items():
-                                        if pixel == rgb:
-                                            char = name[0].upper()
-                                            break
+                                # Scale to internal coordinates
+                                internal_x = self._scale_to_internal(x)
+                                internal_y = self._scale_to_internal(y)
+                                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                                    pixel = self.pixels.getpixel((internal_x, internal_y))
+                                    suggested_color = template_positions[grid_pos]
+                                    if pixel == (0, 0, 0):
+                                        char = f"[{suggested_color}]"
                                     else:
-                                        char = "?"
+                                        # Check if correct color
+                                        for name, rgb in self.palette.items():
+                                            if pixel == rgb:
+                                                if name[0].upper() == suggested_color:
+                                                    char = name[0].upper()
+                                                else:
+                                                    char = name[0].lower()
+                                                break
+                            else:
+                                # Scale to internal coordinates
+                                internal_x = self._scale_to_internal(x)
+                                internal_y = self._scale_to_internal(y)
+                                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                                    pixel = self.pixels.getpixel((internal_x, internal_y))
+                                    if pixel == (0, 0, 0):
+                                        char = "."
+                                    else:
+                                        for name, rgb in self.palette.items():
+                                            if pixel == rgb:
+                                                char = name[0].upper()
+                                                break
+                                        else:
+                                            char = "?"
                         
                         # For very dense canvases, use run-length encoding
                         if density_percent > 80 and char == prev_char and char != "@":
@@ -1286,18 +1329,21 @@ Dots of each color (. means move without drawing)!"""
         
         if direction == "smaller":
             # Smaller pixels = HIGHER scale factor = more pixels visible
-            self.scale_factor = min(8.0, self.scale_factor * 1.25)
+            # Changed from 1.25 to 1.1 for more subtle zoom (10% change instead of 25%)
+            self.scale_factor = min(4.0, self.scale_factor * 1.1)  # Also reduced max from 8.0 to 4.0
             print(f"  → Aurora makes pixels smaller! (scale: {old_scale:.1f} → {self.scale_factor:.1f})")
         else:  # "larger"
             # Larger pixels = LOWER scale factor = fewer pixels visible
-            self.scale_factor = max(1.0, self.scale_factor / 1.25)
+            # Changed from 1.25 to 1.1 for more subtle zoom
+            self.scale_factor = max(1.2, self.scale_factor / 1.1)  # Raised min from 1.0 to 1.2
             print(f"  → Aurora makes pixels larger! (scale: {old_scale:.1f} → {self.scale_factor:.1f})")
         
-        # Recalculate canvas size
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        new_canvas_size = min(int(screen_width / self.scale_factor) - 50, 
-                             int(screen_height / self.scale_factor) - 50)
+     
+        info = pygame.display.Info()
+        screen_width = info.current_w
+        screen_height = info.current_h
+        new_canvas_size = min(int(screen_width / self.scale_factor) - 40, 
+                             int(screen_height / self.scale_factor) - 40)
         
         if new_canvas_size != old_canvas_size:
             print(f"    Canvas resizing: {old_canvas_size}×{old_canvas_size} → {new_canvas_size}×{new_canvas_size}")
@@ -1305,36 +1351,39 @@ Dots of each color (. means move without drawing)!"""
             # Save current canvas
             old_pixels = self.pixels.copy()
             
-            # Create new canvas
+            # Create new canvas at new internal resolution
             self.canvas_size = new_canvas_size
-            self.pixels = Image.new('RGB', (self.canvas_size, self.canvas_size), 'black')
+            self.internal_canvas_size = self.canvas_size * self.supersample_factor
+            self.pixels = Image.new('RGB', (self.internal_canvas_size, self.internal_canvas_size), 'black')
             self.draw_img = ImageDraw.Draw(self.pixels)
             
             # Transfer old drawing (centered)
             if old_canvas_size < new_canvas_size:
                 # Old canvas was smaller - paste it centered
                 offset = (new_canvas_size - old_canvas_size) // 2
-                self.pixels.paste(old_pixels, (offset, offset))
+                internal_offset = offset * self.supersample_factor
+                self.pixels.paste(old_pixels, (internal_offset, internal_offset))
                 # Adjust Aurora's position
                 self.x += offset
                 self.y += offset
             else:
                 # Old canvas was larger - crop centered
                 offset = (old_canvas_size - new_canvas_size) // 2
-                cropped = old_pixels.crop((offset, offset, 
-                                          offset + new_canvas_size, 
-                                          offset + new_canvas_size))
+                internal_offset = offset * self.supersample_factor
+                crop_size = new_canvas_size * self.supersample_factor
+                cropped = old_pixels.crop((internal_offset, internal_offset, 
+                                          internal_offset + crop_size, 
+                                          internal_offset + crop_size))
                 self.pixels.paste(cropped, (0, 0))
                 # Adjust Aurora's position
                 self.x = max(0, min(self.x - offset, new_canvas_size - 1))
                 self.y = max(0, min(self.y - offset, new_canvas_size - 1))
             
-            # Update display scale
-            canvas_display_size = min(screen_width - 300, screen_height - 100)
+            # Update display scale for full screen
+            info = pygame.display.Info()
+            canvas_display_size = min(info.current_w, info.current_h) - 40
             self.display_scale = canvas_display_size / self.canvas_size
-            
-            # Update display canvas size
-            self.display.config(width=canvas_display_size, height=canvas_display_size)
+
             
             print(f"    Aurora now at ({self.x}, {self.y}) on {self.canvas_size}×{self.canvas_size} canvas")
             print(f"    That's {self.canvas_size * self.canvas_size:,} pixels to explore!")
@@ -1471,10 +1520,7 @@ What would you like to do?"""
                     self.mode_start_time = time.time()
                     self.mode_status.config(text="Mode: Seeking Images", fg='magenta')
                     self.awaiting_checkin_response = False
-                    return    
-                    
-
-                    
+                    return
                 else:
                     print(f"❌ Invalid response: '{choice}' - trying again...")
                     return  # Will retry next loop
@@ -1753,7 +1799,7 @@ CONTEMPLATIVE WISDOM (in quiet mode):
         
         # If canvas is getting full
         pixel_count = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
-                         if self.pixels.getpixel((x, y)) != (0, 0, 0))
+                         if self.pixels.getpixel((self._scale_to_internal(x), self._scale_to_internal(y))) != (0, 0, 0))
         coverage = (pixel_count / (self.canvas_size * self.canvas_size)) * 100
         
         if coverage > 60:
@@ -1826,38 +1872,47 @@ SYNESTHESIA WISDOM (you're making music!):
             # Full data scan
             total = self.canvas_size * self.canvas_size
             filled = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
-                         if self.pixels.getpixel((x, y)) != (0, 0, 0))
+                         if self.pixels.getpixel((self._scale_to_internal(x), self._scale_to_internal(y))) != (0, 0, 0))
             
             # Color distribution (sample for speed)
             colors = {}
             for x in range(0, self.canvas_size, 5):  # Sample every 5th pixel
                 for y in range(0, self.canvas_size, 5):
-                    pixel = self.pixels.getpixel((x, y))
-                    if pixel != (0, 0, 0):
-                        for name, rgb in self.palette.items():
-                            if pixel == rgb:
-                                colors[name] = colors.get(name, 0) + 1
-                                break
+                    internal_x = self._scale_to_internal(x)
+                    internal_y = self._scale_to_internal(y)
+                    if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                        pixel = self.pixels.getpixel((internal_x, internal_y))
+                        if pixel != (0, 0, 0):
+                            for name, rgb in self.palette.items():
+                                if pixel == rgb:
+                                    colors[name] = colors.get(name, 0) + 1
+                                    break
             
             # Find nearest empty space (simple version)
             nearest_empty = None
             min_distance = float('inf')
             for x in range(0, self.canvas_size, 20):  # Check every 20th pixel
                 for y in range(0, self.canvas_size, 20):
-                    if self.pixels.getpixel((x, y)) == (0, 0, 0):
-                        # Check if it's a decent-sized empty area
-                        empty_size = 0
-                        for dx in range(30):
-                            for dy in range(30):
-                                if (x + dx < self.canvas_size and y + dy < self.canvas_size and
-                                    self.pixels.getpixel((x + dx, y + dy)) == (0, 0, 0)):
-                                    empty_size += 1
-                        
-                        if empty_size > 500:  # At least 500 empty pixels
-                            distance = abs(self.x - x) + abs(self.y - y)
-                            if distance < min_distance:
-                                min_distance = distance
-                                nearest_empty = f"{distance} pixels away at ({x}, {y})"
+                    internal_x = self._scale_to_internal(x)
+                    internal_y = self._scale_to_internal(y)
+                    if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                        if self.pixels.getpixel((internal_x, internal_y)) == (0, 0, 0):
+                            # Check if it's a decent-sized empty area
+                            empty_size = 0
+                            for dx in range(30):
+                                for dy in range(30):
+                                    if (x + dx < self.canvas_size and y + dy < self.canvas_size):
+                                        check_x = self._scale_to_internal(x + dx)
+                                        check_y = self._scale_to_internal(y + dy)
+                                        if (check_x < self.internal_canvas_size and check_y < self.internal_canvas_size and
+                                            self.pixels.getpixel((check_x, check_y)) == (0, 0, 0)):
+                                            empty_size += 1
+                            
+                            if empty_size > 500:  # At least 500 empty pixels
+                                distance = abs(self.x - x) + abs(self.y - y)
+                                if distance < min_distance:
+                                    min_distance = distance
+                                    nearest_empty = f"{distance} pixels away at ({x}, {y})"
             
             if not nearest_empty:
                 nearest_empty = "No large empty spaces found nearby"
@@ -1891,7 +1946,7 @@ Nearest empty area: {nearest_empty}"""
         
         # Count what's been drawn
         pixel_count = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
-                         if self.pixels.getpixel((x, y)) != (0, 0, 0))
+                         if self.pixels.getpixel((self._scale_to_internal(x), self._scale_to_internal(y))) != (0, 0, 0))
         
         # Build prompt for Llama 2 Chat format
         system_prompt = f"""{art_wisdom}
@@ -2141,7 +2196,7 @@ Create art! Output numbers:"""
                 
                 # Viewing artwork affects emotions
                 pixel_count = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
-                                 if self.pixels.getpixel((x, y)) != (0, 0, 0))
+                                 if self.pixels.getpixel((self._scale_to_internal(x), self._scale_to_internal(y))) != (0, 0, 0))
                 coverage = (pixel_count / (self.canvas_size * self.canvas_size)) * 100
                 
                 if coverage > 50:
@@ -2192,7 +2247,7 @@ Create art! Output numbers:"""
             if "clear_all" in raw_output:
                 # Check canvas coverage first
                 pixel_count = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
-                                 if self.pixels.getpixel((x, y)) != (0, 0, 0))
+                                 if self.pixels.getpixel((self._scale_to_internal(x), self._scale_to_internal(y))) != (0, 0, 0))
                 coverage = (pixel_count / (self.canvas_size * self.canvas_size)) * 100
                 
                 if coverage < 70:
@@ -2205,7 +2260,7 @@ Create art! Output numbers:"""
                     self.save_snapshot()
                     print("    (Auto-saved current work)")
                     # Clear to black
-                    self.pixels = Image.new('RGB', (self.canvas_size, self.canvas_size), 'black')
+                    self.pixels = Image.new('RGB', (self.internal_canvas_size, self.internal_canvas_size), 'black')
                     self.draw_img = ImageDraw.Draw(self.pixels)
                     # Reset to center
                     self.x = self.canvas_size // 2
@@ -2433,6 +2488,32 @@ Create art! Output numbers:"""
                 if sound_key in self.sounds:
                     pygame.mixer.stop()  # Stop any playing sounds first
                     self.sounds[sound_key].play()
+                    
+                    # Add cymatic circle
+                    freq_map = {'!': 200, '@': 280, '#': 360, '$': 440, '%': 520, '^': 600,
+                               '&': 680, '*': 760, '(': 840, ')': 920, '[': 1000, ']': 1080,
+                               '<': 1160, '>': 1240, '=': 1320, '+': 1400, '~': 1480}
+                    frequency = freq_map.get(char, 440)
+                    
+                    # Color based on frequency (low=red, mid=green, high=blue)
+                    if frequency < 500:
+                        color = (255, 100, 100)  # Red
+                    elif frequency < 900:
+                        color = (100, 255, 100)  # Green
+                    else:
+                        color = (100, 100, 255)  # Blue
+                    
+                    self.cymatic_circles.append({
+                        'x': self.canvas_rect.x + int(self.x * self.display_scale),
+                        'y': self.canvas_rect.y + int(self.y * self.display_scale),
+                        'radius': 10,
+                        'base_radius': 10,  # Add this
+                        'color': color,
+                        'alpha': 250,
+                        'frequency': frequency,
+                        'birth_time': time.time()  # Add this
+                    })
+    
                     pygame.time.wait(50)
                     actions_taken.append(f"♪{char}")
                     
@@ -2616,1019 +2697,993 @@ Create art! Output numbers:"""
         if self.turbo_mode and self.steps_taken % 10 == 0:
             print(f"  [Think time: {self.last_think_time:.3f}s | ~{1/self.last_think_time:.1f} FPS]")
     
-    def adjust_speed(self, direction):
-        """Aurora adjusts her own working speed"""
-        self.recent_speed_override = True  # Mark that Aurora made a conscious speed choice
-        self.speed_override_counter = 0     # Reset the counter
+    def move_up(self):
+        """Move drawing position up"""
+        if self.y > 0:
+            old_y = self.y
+            self.y = max(0, self.y - 15)  # Move 15 pixels
+            if self.is_drawing:
+                self._draw_line(self.x, old_y, self.x, self.y)
+
+    def move_down(self):
+        """Move drawing position down"""
+        if self.y < self.canvas_size - 1:
+            old_y = self.y
+            self.y = min(self.canvas_size - 1, self.y + 15)  # Move 15 pixels
+            if self.is_drawing:
+                self._draw_line(self.x, old_y, self.x, self.y)
+
+    def move_left(self):
+        """Move drawing position left"""
+        if self.x > 0:
+            old_x = self.x
+            self.x = max(0, self.x - 15)  # Move 15 pixels
+            if self.is_drawing:
+                self._draw_line(old_x, self.y, self.x, self.y)
+
+    def move_right(self):
+        """Move drawing position right"""
+        if self.x < self.canvas_size - 1:
+            old_x = self.x
+            self.x = min(self.canvas_size - 1, self.x + 15)  # Move 15 pixels
+            if self.is_drawing:
+                self._draw_line(old_x, self.y, self.x, self.y)
+    def pen_up(self):
+        """Lift the pen (stop drawing)"""
+        self.is_drawing = False
+    
+    def pen_down(self):
+        """Put the pen down (start drawing)"""
+        self.is_drawing = True
+        # Draw initial point
+        self._draw_point(self.x, self.y)
+    
+    def set_color(self, color_name):
+        """Set the drawing color"""
+        if color_name in self.palette:
+            self.current_color = self.palette[color_name]
+            self.current_color_name = color_name
+            self.color_history.append(color_name)
+    
+    def _draw_line(self, x1, y1, x2, y2):
+        """Draw a line between two points using current tool"""
+        # Scale to internal coordinates
+        internal_x1 = self._scale_to_internal(x1)
+        internal_y1 = self._scale_to_internal(y1)
+        internal_x2 = self._scale_to_internal(x2)
+        internal_y2 = self._scale_to_internal(y2)
         
-        if direction == "faster":
-            self.aurora_delay = max(50, self.aurora_delay - 50)  # Min 50ms
-            if self.aurora_delay <= 100:
-                self.aurora_speed = "very fast"
-            elif self.aurora_delay <= 200:
-                self.aurora_speed = "fast"
-            else:
-                self.aurora_speed = "normal"
-            print(f"  → Aurora chooses to speed up! (delay: {self.aurora_delay}ms)")
-        else:  # slower
-            self.aurora_delay = min(1000, self.aurora_delay + 100)  # Max 1 second
-            if self.aurora_delay >= 800:
-                self.aurora_speed = "contemplative"
-            elif self.aurora_delay >= 500:
-                self.aurora_speed = "slow"
-            else:
-                self.aurora_speed = "normal"
-            print(f"  → Aurora chooses to slow down... (delay: {self.aurora_delay}ms)")
+        if self.draw_mode == "pen":
+            # Mega pen - 18x18 at display scale
+            size = 18 * self.supersample_factor
+            self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
+                                 lambda x, y: self._draw_rect(x, y, size))
         
-        # Update display if not in turbo mode
-        if hasattr(self, 'performance_status') and not self.turbo_mode:
-            speed_emoji = "🏃" if "fast" in self.aurora_speed else "🚶" if "slow" in self.aurora_speed else "🎨"
-            self.performance_status.config(
-                text=f"{'🚀 GPU' if self.use_gpu else '💻 CPU'} | {speed_emoji} {self.aurora_speed.title()} (chosen)"
+        elif self.draw_mode == "brush":
+            # Soft brush - 12x12 at display scale
+            size = 12 * self.supersample_factor
+            brush = self._create_soft_brush(size // 2, hardness=0.3)
+            self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
+                                 lambda x, y: self._blend_with_alpha(x, y, self.current_color, brush))
+        
+        elif self.draw_mode == "large_brush":
+            # Large soft brush - 20x20 at display scale
+            size = 20 * self.supersample_factor
+            brush = self._create_soft_brush(size // 2, hardness=0.2)
+            self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
+                                 lambda x, y: self._blend_with_alpha(x, y, self.current_color, brush))
+        
+        elif self.draw_mode == "larger_brush":
+            # Larger soft brush - 28x28 at display scale
+            size = 28 * self.supersample_factor
+            brush = self._create_soft_brush(size // 2, hardness=0.15)
+            self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
+                                 lambda x, y: self._blend_with_alpha(x, y, self.current_color, brush))
+        
+        elif self.draw_mode == "spray":
+            # Spray paint effect
+            self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
+                                 lambda x, y: self._draw_spray(x, y))
+        
+        elif self.draw_mode in ["star", "cross", "circle", "diamond", "flower"]:
+            # Stamp modes - only draw at the end point
+            self._draw_stamp(internal_x2, internal_y2, self.draw_mode)
+    
+    def _draw_point(self, x, y):
+        """Draw a single point at the current position"""
+        internal_x = self._scale_to_internal(x)
+        internal_y = self._scale_to_internal(y)
+        
+        if self.draw_mode == "pen":
+            size = 18 * self.supersample_factor
+            self._draw_rect(internal_x, internal_y, size)
+        elif self.draw_mode == "brush":
+            size = 12 * self.supersample_factor
+            brush = self._create_soft_brush(size // 2, hardness=0.3)
+            self._blend_with_alpha(internal_x, internal_y, self.current_color, brush)
+        elif self.draw_mode == "large_brush":
+            size = 20 * self.supersample_factor
+            brush = self._create_soft_brush(size // 2, hardness=0.2)
+            self._blend_with_alpha(internal_x, internal_y, self.current_color, brush)
+        elif self.draw_mode == "larger_brush":
+            size = 28 * self.supersample_factor
+            brush = self._create_soft_brush(size // 2, hardness=0.15)
+            self._blend_with_alpha(internal_x, internal_y, self.current_color, brush)
+        elif self.draw_mode == "spray":
+            self._draw_spray(internal_x, internal_y)
+        elif self.draw_mode in ["star", "cross", "circle", "diamond", "flower"]:
+            self._draw_stamp(internal_x, internal_y, self.draw_mode)
+    
+    def _draw_rect(self, center_x, center_y, size):
+        """Draw a filled rectangle centered at the given point"""
+        half_size = size // 2
+        x1 = max(0, center_x - half_size)
+        y1 = max(0, center_y - half_size)
+        x2 = min(self.internal_canvas_size - 1, center_x + half_size)
+        y2 = min(self.internal_canvas_size - 1, center_y + half_size)
+        
+        self.draw_img.rectangle([x1, y1, x2, y2], fill=self.current_color)
+    
+    def _draw_spray(self, center_x, center_y):
+        """Draw spray paint effect"""
+        import random
+        spray_size = 15 * self.supersample_factor
+        dots = 30  # Number of spray dots
+        
+        for _ in range(dots):
+            # Random position within spray radius
+            angle = random.random() * 2 * math.pi
+            distance = random.random() * spray_size
+            x = int(center_x + distance * math.cos(angle))
+            y = int(center_y + distance * math.sin(angle))
+            
+            # Draw small dot
+            if 0 <= x < self.internal_canvas_size and 0 <= y < self.internal_canvas_size:
+                dot_size = random.randint(self.supersample_factor, 3 * self.supersample_factor)
+                self.draw_img.ellipse(
+                    [x - dot_size//2, y - dot_size//2, x + dot_size//2, y + dot_size//2],
+                    fill=self.current_color
+                )
+    
+    def _draw_stamp(self, center_x, center_y, stamp_type):
+        """Draw various stamp shapes"""
+        if stamp_type == "star":
+            self._draw_star(center_x, center_y, 15 * self.supersample_factor)
+        elif stamp_type == "cross":
+            self._draw_cross(center_x, center_y, 20 * self.supersample_factor)
+        elif stamp_type == "circle":
+            self._draw_circle(center_x, center_y, 15 * self.supersample_factor)
+        elif stamp_type == "diamond":
+            self._draw_diamond(center_x, center_y, 20 * self.supersample_factor)
+        elif stamp_type == "flower":
+            self._draw_flower(center_x, center_y, 20 * self.supersample_factor)
+    
+    def _draw_star(self, cx, cy, size):
+        """Draw a filled star"""
+        points = []
+        for i in range(10):
+            angle = (i * math.pi / 5) - math.pi / 2
+            if i % 2 == 0:
+                r = size
+            else:
+                r = size * 0.5
+            x = cx + int(r * math.cos(angle))
+            y = cy + int(r * math.sin(angle))
+            points.extend([x, y])
+        
+        if len(points) >= 6:
+            self.draw_img.polygon(points, fill=self.current_color)
+    
+    def _draw_cross(self, cx, cy, size):
+        """Draw a cross/plus shape"""
+        thickness = size // 3
+        # Vertical bar
+        self.draw_img.rectangle(
+            [cx - thickness//2, cy - size, cx + thickness//2, cy + size],
+            fill=self.current_color
+        )
+        # Horizontal bar
+        self.draw_img.rectangle(
+            [cx - size, cy - thickness//2, cx + size, cy + thickness//2],
+            fill=self.current_color
+        )
+    
+    def _draw_circle(self, cx, cy, radius):
+        """Draw a filled circle with antialiasing"""
+        # Create a larger circle then downscale for antialiasing
+        temp_size = radius * 4
+        temp_img = Image.new('RGBA', (temp_size * 2, temp_size * 2), (0, 0, 0, 0))
+        temp_draw = ImageDraw.Draw(temp_img)
+        temp_draw.ellipse(
+            [0, 0, temp_size * 2, temp_size * 2],
+            fill=(*self.current_color, 255)
+        )
+        # Resize with antialiasing
+        final_size = radius * 2
+        temp_img = temp_img.resize((final_size, final_size), Image.Resampling.LANCZOS)
+        
+        # Paste onto main canvas
+        paste_x = cx - radius
+        paste_y = cy - radius
+        if paste_x >= 0 and paste_y >= 0:
+            self.pixels.paste(temp_img, (paste_x, paste_y), temp_img)
+    
+    def _draw_diamond(self, cx, cy, size):
+        """Draw a filled diamond"""
+        points = [
+            (cx, cy - size),      # Top
+            (cx + size, cy),      # Right
+            (cx, cy + size),      # Bottom
+            (cx - size, cy)       # Left
+        ]
+        self.draw_img.polygon(points, fill=self.current_color)
+    
+    def _draw_flower(self, cx, cy, size):
+        """Draw a flower shape"""
+        # Draw petals
+        petal_size = size // 2
+        for angle in [0, 72, 144, 216, 288]:
+            rad = math.radians(angle)
+            px = cx + int(size * 0.7 * math.cos(rad))
+            py = cy + int(size * 0.7 * math.sin(rad))
+            self.draw_img.ellipse(
+                [px - petal_size, py - petal_size, px + petal_size, py + petal_size],
+                fill=self.current_color
             )
+        
+        # Draw center
+        center_size = size // 3
+        # Use a contrasting color for the center
+        center_color = (255, 255, 0) if self.current_color != (255, 255, 0) else (255, 0, 0)
+        self.draw_img.ellipse(
+            [cx - center_size, cy - center_size, cx + center_size, cy + center_size],
+            fill=center_color
+        )
     
-    def feel(self, emotion):
-        """Aurora can change her own emotion - emotions affect speed too!"""
-        if emotion in self.emotion_words:
-            self.current_emotion = emotion
-            self.emotion_status.config(text=f"Feeling: {emotion}")
+    def update_display(self):
+        """Update the pygame display with full-screen canvas"""
+        try:
+            # Clear screen
+            self.screen.fill(self.bg_color)
+ 
+            # Create a high-quality downsampled version
+            display_size = int(self.canvas_size * self.display_scale)
             
-            # Emotions suggest a preferred speed, but don't force it
-            emotion_speeds = {
-                "energetic": 150,    # Suggests very fast
-                "playful": 200,      # Suggests fast
-                "curious": 300,      # Suggests normal
-                "creative": 300,     # Suggests normal  
-                "contemplative": 500, # Suggests slow
-                "peaceful": 600      # Suggests very slow
-            }
+            # Downsample from internal resolution to display resolution
+            display_img = self.pixels.resize(
+                (display_size, display_size),
+                Image.Resampling.LANCZOS  # High quality downsampling
+            )
             
-            if emotion in emotion_speeds:
-                suggested_delay = emotion_speeds[emotion]
-                print(f"  → Feeling {emotion} (suggests {suggested_delay}ms pace)")
+            # Apply slight sharpening to compensate for downsampling
+            enhancer = ImageEnhance.Sharpness(display_img)
+            display_img = enhancer.enhance(1.2)
+            
+            # Handle centered view if active (from original)
+            if self.centered_view:
+                # Create a crop centered on Aurora
+                crop_size = self.canvas_size // 2
+                half_crop = crop_size // 2
                 
-                # Only change speed if Aurora hasn't recently made her own speed choice
-                if not hasattr(self, 'recent_speed_override') or not self.recent_speed_override:
-                    old_delay = self.aurora_delay
-                    self.aurora_delay = suggested_delay
-                    if self.aurora_delay < old_delay:
-                        self.aurora_speed = "fast" if self.aurora_delay <= 200 else "normal"
-                    elif self.aurora_delay > old_delay:
-                        self.aurora_speed = "slow" if self.aurora_delay >= 500 else "normal"
-                    print(f"    Adopting suggested pace: {self.aurora_delay}ms ({self.aurora_speed})")
-                else:
-                    print(f"    But keeping chosen pace: {self.aurora_delay}ms ({self.aurora_speed})")
+                # Calculate crop bounds
+                left = max(0, self.x - half_crop)
+                top = max(0, self.y - half_crop)
+                right = min(self.canvas_size, left + crop_size)
+                bottom = min(self.canvas_size, top + crop_size)
                 
-                # Update performance display
-                if hasattr(self, 'performance_status') and not self.turbo_mode:
-                    speed_emoji = "🏃" if self.aurora_speed == "fast" else "🚶" if self.aurora_speed == "slow" else "🎨"
-                    self.performance_status.config(
-                        text=f"{'🚀 GPU' if self.use_gpu else '💻 CPU'} | {speed_emoji} {emotion.title()} @ {self.aurora_speed}"
-                    )
+                # Adjust if we hit edges
+                if right == self.canvas_size:
+                    left = right - crop_size
+                if bottom == self.canvas_size:
+                    top = bottom - crop_size
+                
+                # Scale coordinates for crop
+                display_left = int(left * self.display_scale)
+                display_top = int(top * self.display_scale)
+                display_right = int(right * self.display_scale)
+                display_bottom = int(bottom * self.display_scale)
+                
+                # Crop the display image
+                display_img = display_img.crop((display_left, display_top, display_right, display_bottom))
+                display_img = display_img.resize((display_size, display_size), Image.Resampling.LANCZOS)
+            
+            # Convert PIL image to pygame surface
+            if display_img.mode != 'RGB':
+                display_img = display_img.convert('RGB')
+            
+            # Get raw image data
+            raw_str = display_img.tobytes("raw", 'RGB')
+            canvas_surface = pygame.image.fromstring(raw_str, display_img.size, 'RGB')
+            
+            # Draw canvas
+            self.screen.blit(canvas_surface, (self.canvas_rect.x, self.canvas_rect.y))
+            # Draw smooth cymatic background BEFORE canvas
+            if hasattr(self, 'cymatic_surface'):
+                # Draw at full opacity - the circles themselves have alpha
+                self.screen.blit(self.cymatic_surface, (0, 0))
+            
+            # Draw canvas with black as transparent
+            raw_str = display_img.tobytes("raw", 'RGB')
+            canvas_surface = pygame.image.fromstring(raw_str, display_img.size, 'RGB')
+            canvas_surface.set_colorkey((0, 0, 0))  # This makes black pixels transparent!
+            
+            # Draw canvas on top - black areas will show cymatics through
+            self.screen.blit(canvas_surface, (self.canvas_rect.x, self.canvas_rect.y))
+                            
+            # Draw Aurora's position indicator
+            if self.centered_view:
+                # In centered view, Aurora is always in the middle
+                aurora_x = self.canvas_rect.x + self.canvas_rect.width // 2
+                aurora_y = self.canvas_rect.y + self.canvas_rect.height // 2
+            else:
+                # Normal view
+                aurora_x = self.canvas_rect.x + int(self.x * self.display_scale)
+                aurora_y = self.canvas_rect.y + int(self.y * self.display_scale)
+            
+            # Draw position indicator with better visibility
+            indicator_size = max(5, int(7 * self.display_scale))
+            if self.is_drawing:
+                pygame.draw.circle(self.screen, (255, 255, 255), (aurora_x, aurora_y), indicator_size)
+                pygame.draw.circle(self.screen, (0, 0, 0), (aurora_x, aurora_y), indicator_size, 2)
+            else:
+                pygame.draw.circle(self.screen, (128, 128, 128), (aurora_x, aurora_y), indicator_size)
+                pygame.draw.circle(self.screen, (255, 255, 255), (aurora_x, aurora_y), indicator_size, 2)
+            
+            # Minimal overlay in top-left corner
+            y_pos = 10
+            x_pos = 10
+            
+            # Current emotion and mode
+            status_text = f"Feeling: {self.current_emotion} | Mode: {self.current_mode}"
+            text_surface = self.font_normal.render(status_text, True, self.yellow_color)
+            self.screen.blit(text_surface, (x_pos, y_pos))
+            y_pos += 25
+            
+            # Performance indicator
+            speed_text = "Turbo" if self.turbo_mode else self.aurora_speed.title()
+            perf_text = f"Speed: {speed_text}"
+            text_surface = self.font_small.render(perf_text, True, self.cyan_color)
+            self.screen.blit(text_surface, (x_pos, y_pos))
+            
+            # Controls reminder in bottom-left
+            controls_text = "S=Save T=Turbo Q=Quit F11=Fullscreen"
+            text_surface = self.font_small.render(controls_text, True, self.gray_color)
+            self.screen.blit(text_surface, (10, self.screen.get_height() - 25))
+            
+            # Update display
+            pygame.display.flip()
+            
+        except Exception as e:
+            print(f"Error updating display: {e}")
+            import traceback
+            traceback.print_exc()
+            
+    def update_cymatics(self):
+        """Cymatic patterns like sand on a speaker - smooth version"""
+        current_time = time.time()
+        
+        # Create surface if needed
+        if not hasattr(self, 'cymatic_surface'):
+            self.cymatic_surface = pygame.Surface((self.screen.get_width(), self.screen.get_height()), pygame.SRCALPHA)
+        
+        # Fade existing pattern
+        fade_surface = pygame.Surface((self.screen.get_width(), self.screen.get_height()), pygame.SRCALPHA)
+        fade_surface.fill((0, 0, 0, 8))
+        self.cymatic_surface.blit(fade_surface, (0, 0))
+        
+        # Process new sounds - each creates a standing wave pattern
+        for circle in self.cymatic_circles[:]:
+            age = current_time - circle['birth_time']
+            
+            # Only process very recent sounds
+            if age < 0.1:
+                freq = circle['frequency']
+                pattern_type = int(freq / 100) % 8
+                
+                # Draw pattern directly with small circles
+                center_x = circle['x']
+                center_y = circle['y']
+                
+                # Sample points in a grid around the sound source
+                for radius in range(0, 500, 3):  # Extended radius from 300 to 500
+                    if radius == 0:
+                        continue
+                    num_points = int(radius * 0.5)  # More points at larger radii
+                    for i in range(num_points):
+                        angle = (i / num_points) * 2 * math.pi
+                        
+                        x = center_x + radius * math.cos(angle)
+                        y = center_y + radius * math.sin(angle)
+                        
+                        # Skip if outside screen bounds
+                        if x < 0 or x >= self.screen.get_width() or y < 0 or y >= self.screen.get_height():
+                            continue
+                        
+                        # Calculate pattern value at this point
+                        dx = (x - center_x) / 100.0
+                        dy = (y - center_y) / 100.0
+                        distance = math.sqrt(dx*dx + dy*dy)
+                        
+                        # Pattern formulas
+                        if pattern_type == 0:  # Concentric circles
+                            value = math.sin(distance * freq / 50)
+                        elif pattern_type == 1:  # Cross pattern
+                            value = math.sin(dx * freq / 30) * math.sin(dy * freq / 30)
+                        elif pattern_type == 2:  # Diagonal waves
+                            value = math.sin((dx + dy) * freq / 40)
+                        elif pattern_type == 3:  # Star pattern
+                            value = math.sin(angle * 6 + distance * freq / 100)
+                        elif pattern_type == 4:  # Flower pattern
+                            value = math.sin(distance * freq / 60) * math.cos(angle * 8)
+                        elif pattern_type == 5:  # Grid interference
+                            value = math.sin(x * freq / 200) * math.sin(y * freq / 200)
+                        elif pattern_type == 6:  # Radial spokes
+                            value = math.sin(angle * 12) * math.exp(-distance / 5)
+                        else:  # Complex mandala
+                            r = distance * freq / 100
+                            value = math.sin(r) * math.cos(angle * 6) + math.sin(angle * 3) * math.cos(r * 2)
+                        
+                        # Draw if above threshold
+                        if abs(value) > 0.3:
+                            intensity = int(abs(value) * 200)
+                            fade = math.exp(-radius / 350)  # Adjusted fade for larger radius
+                            alpha = int(intensity * fade)
+                            
+                            if alpha > 20:
+                                # Ensure valid color values (0-255)
+                                alpha = max(0, min(255, alpha))
+                                
+                                # Map frequency to hue (0-1)
+                                hue = (freq - 200) / 1280.0  # freq ranges from 200-1480
+                                
+                                # Adjust hue based on positive/negative wave value
+                                if value < 0:
+                                    hue = (hue + 0.5) % 1.0  # Shift hue by 180 degrees for negative
+                                
+                                # Convert HSV to RGB
+                                import colorsys
+                                r, g, b = colorsys.hsv_to_rgb(hue, 0.8, 1.0)  # 80% saturation, full brightness
+                                
+                                # Apply intensity
+                                r = int(r * alpha)
+                                g = int(g * alpha)
+                                b = int(b * alpha)
+                                
+                                # Ensure all color values are in valid range
+                                r = max(0, min(255, r))
+                                g = max(0, min(255, g))
+                                b = max(0, min(255, b))
+                                
+                                color = (r, g, b, alpha)
+                                
+                                # Small circle for smooth appearance
+                                pygame.draw.circle(self.cymatic_surface, color,
+                                                 (int(x), int(y)), 2)
+            
+            # Remove old sounds
+            if age > 0.15:
+                self.cymatic_circles.remove(circle)
+                
+    def update_memory_display(self):
+        """Update memory status display"""
+        # In Pygame version, this is handled in update_display()
+        # Keep this method as a no-op for compatibility
+        pass
     
+    def feel(self):
+        """Process emotions - now with deep emotion system"""
+        # Process deep emotions periodically
+        if self.steps_taken % 50 == 0:
+            self.process_deep_emotions()
     
     def process_deep_emotions(self):
-        """Process emotion influences and update Aurora's emotional state"""
-        if self.emotion_shift_cooldown > 0:
-            self.emotion_shift_cooldown -= 1
-            return
-            
-        # Calculate overall emotional influence
-        total_influence = sum(self.emotion_influences.values()) / len(self.emotion_influences)
+        """Process complex emotional states based on multiple factors"""
+        # Calculate overall emotional tone from influences
+        overall_influence = sum(self.emotion_influences.values()) / len(self.emotion_influences)
         
-        # Random emotion shifts (20% chance)
-        import random
-        if random.random() < 0.2:
-            # Pick a completely random emotion category
-            self.emotion_category = random.choice(list(self.deep_emotions.keys()))
-            self.emotion_depth = random.randint(1, 3)  # Avoid extremes
-            print(f"  → Aurora experiences a spontaneous mood shift!")
-        else:
-            # Normal influence-based processing
-            
-            # Adjust emotion depth based on influences
-            if abs(total_influence) > 0.7:
-                self.emotion_depth = min(4, self.emotion_depth + 1)
-            elif abs(total_influence) < 0.2:
-                self.emotion_depth = max(0, min(4, self.emotion_depth + (-1 if self.emotion_depth > 2 else 1)))
-            
-            # Time-based influences
-            if self.steps_taken % 50 == 0:
-                # Every 50 steps, consider environmental factors
-                hour = datetime.now().hour
-                if 6 <= hour < 10:  # Morning
-                    self.emotion_category = "energy"
-                elif 10 <= hour < 14:  # Midday
-                    self.emotion_category = "joy"
-                elif 14 <= hour < 18:  # Afternoon
-                    self.emotion_category = "curiosity"
-                elif 18 <= hour < 22:  # Evening
-                    self.emotion_category = "contemplation"
-                else:  # Night
-                    self.emotion_category = "peace"
+        # Determine emotion category based on current state and influences
+        if overall_influence > 0.5:
+            # Very positive
+            if self.continuous_draws > 20:
+                new_category = "energy"
+            elif len(set(self.color_history)) > 10:
+                new_category = "creativity"
             else:
-                # Activity-based emotions
-                recent_actions = [c['code'] for c in list(self.memory.code_history)[-5:]]
-                
-                # Check for specific patterns in recent actions
-                if any('0123456789' in code for code in recent_actions):
-                    # Been thinking a lot
-                    self.emotion_category = "contemplation"
-                elif any(len(code) > 30 for code in recent_actions):
-                    # Long creative bursts
-                    self.emotion_category = "energy"
-                elif len(set(list(self.color_history)[-5:])) >= 4:
-                    # Using many colors
-                    self.emotion_category = "joy"
-                elif list(self.color_history)[-3:] and all(c == list(self.color_history)[-1] for c in list(self.color_history)[-3:]):
-                    # Repeating same color
-                    self.emotion_category = "peace"
-                elif '!' in ''.join(recent_actions) or '@' in ''.join(recent_actions):
-                    # Making music
-                    self.emotion_category = "wonder"
-                else:
-                    # Default rotation through all emotions
-                    categories = ["joy", "curiosity", "peace", "energy", "contemplation", 
-                                 "creativity", "melancholy", "wonder"]
-                    current_idx = categories.index(self.emotion_category) if self.emotion_category in categories else 0
-                    self.emotion_category = categories[(current_idx + 1) % len(categories)]
+                new_category = "joy"
+        elif overall_influence > 0.2:
+            # Mildly positive
+            if self.skip_count > 5:
+                new_category = "contemplation"
+            else:
+                new_category = "curiosity"
+        elif overall_influence > -0.2:
+            # Neutral
+            new_category = "peace"
+        elif overall_influence > -0.5:
+            # Mildly negative
+            new_category = "melancholy"
+        else:
+            # Very negative (rare)
+            new_category = "contemplation"
         
-        # Update current emotion based on category and depth
-        new_emotion = self.deep_emotions[self.emotion_category][self.emotion_depth]
-        if new_emotion != self.current_emotion:
-            old_emotion = self.current_emotion
-            self.current_emotion = new_emotion
-            self.emotion_status.config(text=f"Feeling: {new_emotion}")
-            self.emotion_shift_cooldown = 3  # Even shorter cooldown
+        # Determine intensity based on activity and time
+        if self.continuous_draws > 30 or self.turbo_mode:
+            target_depth = 4  # Maximum intensity
+        elif self.continuous_draws > 10:
+            target_depth = 3
+        elif self.skip_count > 10:
+            target_depth = 1  # Low intensity when thinking a lot
+        else:
+            target_depth = 2  # Normal intensity
+        
+        # Smooth transitions
+        if self.emotion_shift_cooldown <= 0:
+            # Change category if needed
+            if new_category != self.emotion_category:
+                self.emotion_category = new_category
+                self.emotion_shift_cooldown = 10
+                print(f"  💭 Aurora's emotional state shifts to {new_category}...")
+            
+            # Adjust intensity
+            if target_depth > self.emotion_depth:
+                self.emotion_depth = min(4, self.emotion_depth + 1)
+            elif target_depth < self.emotion_depth:
+                self.emotion_depth = max(0, self.emotion_depth - 1)
+            
+            # Update current emotion word
+            self.current_emotion = self.deep_emotions[self.emotion_category][self.emotion_depth]
             
             # Record in emotion memory
             self.emotion_memory.append({
-                "from": old_emotion,
-                "to": new_emotion,
+                "emotion": self.current_emotion,
                 "category": self.emotion_category,
                 "depth": self.emotion_depth,
                 "influences": dict(self.emotion_influences),
                 "timestamp": datetime.now().isoformat()
             })
-            
-            print(f"  → Aurora's emotion shifts: {old_emotion} → {new_emotion} ({self.emotion_category})")
-            
-        # Very fast decay to prevent getting stuck
+        else:
+            self.emotion_shift_cooldown -= 1
+        
+        # Decay influences over time
         for key in self.emotion_influences:
-            self.emotion_influences[key] *= 0.5  # Faster decay from 0.7 to 0.5
+            self.emotion_influences[key] *= 0.95
     
-    def influence_emotion(self, source, strength):
+    def influence_emotion(self, source, amount):
         """Add an emotional influence from a specific source"""
-        # Clamp strength between -1 and 1
-        strength = max(-1.0, min(1.0, strength))
+        self.emotion_influences[source] = max(-1, min(1, self.emotion_influences[source] + amount))
+    
+    def adjust_speed(self, direction):
+        """Aurora adjusts her drawing speed"""
+        speed_levels = ["instant", "fast", "normal", "slow", "very_slow"]
+        current_index = speed_levels.index(self.aurora_speed)
         
-        # Add some variation to prevent getting stuck
-        import random
-        strength *= (0.8 + random.random() * 0.4)  # Vary strength by ±20%
+        if direction == "faster" and current_index > 0:
+            self.aurora_speed = speed_levels[current_index - 1]
+        elif direction == "slower" and current_index < len(speed_levels) - 1:
+            self.aurora_speed = speed_levels[current_index + 1]
         
-        # Blend with existing influence (reduced persistence)
-        current = self.emotion_influences.get(source, 0.0)
-        self.emotion_influences[source] = (current * 0.5) + (strength * 0.5)  # Was 0.7/0.3
-        
-        # Immediate small effect on depth
-        if abs(strength) > 0.5:
-            if strength > 0 and self.emotion_depth < 4:
-                self.emotion_depth += 1
-            elif strength < 0 and self.emotion_depth > 0:
-                self.emotion_depth -= 1
-    # All movement/drawing functions
-    def move_up(self):
-        if self.y > 0:
-            self.y = max(0, self.y - 7)
-            self._draw_if_pen_down()
-            if self.y == 0:
-                print("  → Hit top edge of canvas!")
-    
-    def move_down(self):
-        if self.y < self.canvas_size - 1:
-            self.y = min(self.canvas_size - 1, self.y + 7)
-            self._draw_if_pen_down()
-            if self.y == self.canvas_size - 1:
-                print("  → Hit bottom edge of canvas!")
-    
-    def move_left(self):
-        if self.x > 0:
-            self.x = max(0, self.x - 7)
-            self._draw_if_pen_down()
-            if self.x == 0:
-                print("  → Hit left edge of canvas!")
-    
-    def move_right(self):
-        if self.x < self.canvas_size - 1:
-            self.x = min(self.canvas_size - 1, self.x + 7)
-            self._draw_if_pen_down()
-            if self.x == self.canvas_size - 1:
-                print("  → Hit right edge of canvas!")
-    
-    def pen_up(self):
-        if self.is_drawing:
-            self.is_drawing = False
-            if self.continuous_draws > 5:
-                print(f"  → Pen up after {self.continuous_draws} pixels")
-    
-    def pen_down(self):
-        if not self.is_drawing:
-            self.is_drawing = True
-            self._draw_if_pen_down()
-    
-    def set_color(self, color_name):
-        if color_name in self.palette:
-            old_color = self.current_color_name
-            self.current_color = self.palette[color_name]
-            self.current_color_name = color_name
-            # Update color history when color actually changes
-            if old_color != color_name:
-                self.color_history.append(color_name)
-    
-    def _draw_if_pen_down(self):
-        """Draw at current position if pen is down"""
-        if self.is_drawing:
-            pixels_drawn = 0
-            
-            if self.draw_mode == "pen":
-                # Mega Pen - Always 18x18 (6x6 base with 3x multiplier)
-                pen_size = 18
-                half_size = pen_size // 2
-                
-                # Draw massive pen stroke
-                for dx in range(-half_size, half_size + 1):
-                    for dy in range(-half_size, half_size + 1):
-                        px, py = self.x + dx, self.y + dy
-                        if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                            self.pixels.putpixel((px, py), self.current_color)
-                            pixels_drawn += 1
-                
-                # Occasional feedback
-                if self.steps_taken % 20 == 0:
-                    print(f"  → MEGA PEN: {pixels_drawn} pixels per stroke!")
-                    
-            elif self.draw_mode == "brush":
-                # 12x12 brush (was 3x3)
-                for dx in range(-6, 6):
-                    for dy in range(-6, 6):
-                        px = self.x + dx
-                        py = self.y + dy
-                        if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                            self.pixels.putpixel((px, py), self.current_color)
-                            
-            elif self.draw_mode == "large_brush":
-                # 20x20 brush (was 5x5)
-                for dx in range(-10, 10):
-                    for dy in range(-10, 10):
-                        px = self.x + dx
-                        py = self.y + dy
-                        if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                            self.pixels.putpixel((px, py), self.current_color)
-                            
-            elif self.draw_mode == "larger_brush":
-                # 28x28 brush (was 7x7)
-                for dx in range(-14, 14):
-                    for dy in range(-14, 14):
-                        px = self.x + dx
-                        py = self.y + dy
-                        if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                            self.pixels.putpixel((px, py), self.current_color)
-                            
-            elif self.draw_mode == "spray":
-                # Spray paint - random dots in a circular area
-                import random
-                spray_radius = 20  # Area of spray
-                density = 0.3  # 30% chance of painting each pixel
-                
-                for dx in range(-spray_radius, spray_radius + 1):
-                    for dy in range(-spray_radius, spray_radius + 1):
-                        # Check if within circular radius
-                        distance_squared = dx*dx + dy*dy
-                        if distance_squared <= spray_radius*spray_radius:
-                            # Higher density near center
-                            if distance_squared < (spray_radius/2)**2:
-                                chance = density * 1.5  # 45% near center
-                            else:
-                                chance = density  # 30% at edges
-                                
-                            if random.random() < chance:
-                                px = self.x + dx
-                                py = self.y + dy
-                                if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                                    self.pixels.putpixel((px, py), self.current_color)   
-                                              
-            elif self.draw_mode == "star":
-                # 4x LARGER star pattern
-                star_points = []
-                # Long cross arms
-                for i in range(-12, 13):
-                    star_points.append((i, 0))
-                    star_points.append((0, i))
-                # Diagonals for star shape
-                for i in range(-8, 9):
-                    star_points.append((i, i))
-                    star_points.append((i, -i))
-                
-                for dx, dy in star_points:
-                    px = self.x + dx
-                    py = self.y + dy
-                    if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                        self.pixels.putpixel((px, py), self.current_color)
-                        
-            elif self.draw_mode == "cross":
-                # 4x LARGER cross pattern  
-                cross_points = []
-                # Thick cross
-                for i in range(-12, 13):
-                    for j in range(-2, 3):
-                        cross_points.append((i, j))
-                        cross_points.append((j, i))
-                
-                for dx, dy in cross_points:
-                    px = self.x + dx
-                    py = self.y + dy
-                    if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                        self.pixels.putpixel((px, py), self.current_color)
-                        
-            elif self.draw_mode == "circle":
-                # 4x LARGER circle pattern (filled)
-                circle_points = []
-                radius = 12
-                # Fill the circle
-                for dx in range(-radius, radius + 1):
-                    for dy in range(-radius, radius + 1):
-                        if dx*dx + dy*dy <= radius*radius:
-                            circle_points.append((dx, dy))
-                
-                for dx, dy in circle_points:
-                    px = self.x + dx
-                    py = self.y + dy
-                    if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                        self.pixels.putpixel((px, py), self.current_color)
-                        
-            elif self.draw_mode == "diamond":
-                # 4x LARGER diamond pattern
-                diamond_points = []
-                size = 12
-                # Create filled diamond shape
-                for dx in range(-size, size + 1):
-                    for dy in range(-size, size + 1):
-                        if abs(dx) + abs(dy) <= size:
-                            diamond_points.append((dx, dy))
-                
-                for dx, dy in diamond_points:
-                    px = self.x + dx
-                    py = self.y + dy
-                    if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                        self.pixels.putpixel((px, py), self.current_color)
-                        
-            elif self.draw_mode == "flower":
-                # 4x LARGER flower pattern
-                flower_points = []
-                # Large center
-                for dx in range(-6, 7):
-                    for dy in range(-6, 7):
-                        if dx*dx + dy*dy <= 36:
-                            flower_points.append((dx, dy))
-                # Large petals
-                petal_centers = [(0, -12), (0, 12), (-12, 0), (12, 0), 
-                                (-8, -8), (8, -8), (-8, 8), (8, 8)]
-                for cx, cy in petal_centers:
-                    for dx in range(-4, 5):
-                        for dy in range(-4, 5):
-                            if dx*dx + dy*dy <= 16:
-                                flower_points.append((cx + dx, cy + dy))
-                
-                for dx, dy in flower_points:
-                    px = self.x + dx
-                    py = self.y + dy
-                    if 0 <= px < self.canvas_size and 0 <= py < self.canvas_size:
-                        self.pixels.putpixel((px, py), self.current_color)
-            else:
-                # Normal pen mode
-                self.pixels.putpixel((self.x, self.y), self.current_color)
-    
-    def update_display(self):
-        """Update canvas display"""
-        # Scale the image to fit the display
-        display_size = int(self.canvas_size * self.display_scale)
-        display_img = self.pixels.resize(
-            (display_size, display_size),
-            Image.NEAREST
-        )
-        
-        self.photo = ImageTk.PhotoImage(display_img)
-        self.display.delete("all")
-        self.display.create_image(0, 0, anchor=tk.NW, image=self.photo)
-        
-        # Aurora's position with emotion color
-        display_x = self.x * self.display_scale
-        display_y = self.y * self.display_scale
-        cursor_size = max(3, self.display_scale / 2)  # Scale cursor with display
-        
-        emotion_colors = {
-            "curious": "yellow", "playful": "orange",
-            "contemplative": "purple", "energetic": "red",
-            "peaceful": "green", "creative": "cyan"
+        # Update delay based on speed
+        delays = {
+            "instant": 10,
+            "fast": 100,
+            "normal": 300,
+            "slow": 600,
+            "very_slow": 1200
         }
-        cursor_color = emotion_colors.get(self.current_emotion, "white")
         
-        self.display.create_oval(
-            display_x - cursor_size, display_y - cursor_size,
-            display_x + cursor_size, display_y + cursor_size,
-            fill=cursor_color if self.is_drawing else "",
-            outline=cursor_color,
-            width=2
-        )
+        self.aurora_delay = delays[self.aurora_speed]
+        self.recent_speed_override = True
+        self.speed_override_counter = 0
+        
+        print(f"  → Aurora chooses {self.aurora_speed} speed (delay: {self.aurora_delay}ms)")
+    
+    def toggle_turbo(self):
+        """Toggle turbo mode"""
+        self.turbo_mode = not self.turbo_mode
+        status = "ON 🚀" if self.turbo_mode else "OFF"
+        print(f"\n⚡ TURBO MODE {status}")
+        
+        if self.turbo_mode:
+            print("  - Faster thinking")
+            print("  - More actions per turn")
+            print("  - Maximum creativity!")
+    
+    def toggle_hearing(self):
+        """Toggle audio hearing mode"""
+        self.hearing_enabled = not self.hearing_enabled
+        
+        if self.hearing_enabled:
+            print("\n👂 HEARING MODE ENABLED")
+            print("  Aurora can now hear ambient sounds!")
+            # Could initialize audio input here if implemented
+        else:
+            print("\n🔇 HEARING MODE DISABLED")
+            if self.audio_stream:
+                self.audio_stream.stop_stream()
+                self.audio_stream.close()
+                self.audio_stream = None
+    
+    def save_snapshot(self):
+        """Save current canvas as timestamped image"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        emotion_tag = self.current_emotion.replace(" ", "_")
+        
+        # Create snapshots directory
+        snap_dir = Path("aurora_snapshots")
+        snap_dir.mkdir(exist_ok=True)
+        
+        # Save high-res version
+        filename = snap_dir / f"aurora_{timestamp}_{emotion_tag}.png"
+        
+        # Downsample to reasonable size for saving (2x instead of 4x)
+        save_size = self.canvas_size * 2
+        save_img = self.pixels.resize((save_size, save_size), Image.Resampling.LANCZOS)
+        save_img.save(filename, "PNG", quality=95)
+        
+        print(f"\n📸 Snapshot saved: {filename}")
+        print(f"   Emotion: {self.current_emotion}")
+        print(f"   Canvas: {self.canvas_size}×{self.canvas_size}")
+        
+        # Also save metadata
+        meta_file = snap_dir / f"aurora_{timestamp}_{emotion_tag}_meta.json"
+        metadata = {
+            "timestamp": datetime.now().isoformat(),
+            "emotion": self.current_emotion,
+            "emotion_depth": self.emotion_depth,
+            "canvas_size": self.canvas_size,
+            "scale_factor": self.scale_factor,
+            "position": {"x": self.x, "y": self.y},
+            "colors_used": list(set(self.color_history)),
+            "draw_mode": self.draw_mode,
+            "steps": self.steps_taken,
+            "pixel_coverage": self.get_canvas_overview()
+        }
+        
+        with open(meta_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
     
     def save_canvas_state(self):
-        """Save the current canvas as an image"""
+        """Save current canvas and position"""
         try:
-            canvas_file = self.memory.canvas_path / f"canvas_state.png"
-            self.pixels.save(canvas_file)
+            state_file = self.memory.canvas_path / "canvas_state.json"
             
-            # Also save position and state - REMOVED creative_score and rewards
+            # Save canvas as base64
+            import base64
+            from io import BytesIO
+            
+            # Save at 1x resolution to keep file size reasonable
+            save_img = self.pixels.resize((self.canvas_size, self.canvas_size), Image.Resampling.LANCZOS)
+            buffer = BytesIO()
+            save_img.save(buffer, format="PNG")
+            img_str = base64.b64encode(buffer.getvalue()).decode()
+            
             state = {
-                "x": self.x,
-                "y": self.y,
-                "is_drawing": self.is_drawing,
-                "current_color_name": self.current_color_name,
-                "current_emotion": self.current_emotion,
-                "steps_taken": self.steps_taken,
+                "canvas_base64": img_str,
+                "position": {"x": self.x, "y": self.y},
                 "canvas_size": self.canvas_size,
                 "scale_factor": self.scale_factor,
-                "skip_count": getattr(self, 'skip_count', 0),
-                "aurora_speed": self.aurora_speed,
-                "aurora_delay": self.aurora_delay,
-                "draw_mode": self.draw_mode,
-                "color_history": list(self.color_history),  # Save color history
-                "last_turn_color": self.last_turn_color,     # Save last turn color
-                "last_checkin_time": self.last_checkin_time,
-                "current_mode": self.current_mode
+                "emotion": self.current_emotion,
+                "timestamp": datetime.now().isoformat()
             }
-            with open(self.memory.canvas_path / "aurora_state.json", 'w') as f:
-                json.dump(state, f, indent=2)
+            
+            with open(state_file, 'w') as f:
+                json.dump(state, f)
+                
         except Exception as e:
             print(f"Error saving canvas state: {e}")
     
     def load_canvas_state(self):
         """Load previous canvas state if it exists"""
         try:
-            canvas_file = self.memory.canvas_path / "canvas_state.png"
-            if canvas_file.exists():
-                saved_canvas = Image.open(canvas_file)
-                print(f"ACTUAL SAVED SIZE: {saved_canvas.size}")
-                print(f"EXPECTED SIZE: ({self.canvas_size}, {self.canvas_size})")
-                # Handle different canvas sizes gracefully
-                if saved_canvas.size == (self.canvas_size, self.canvas_size):
-                    self.pixels = saved_canvas
-                else:
-                    # Scale or crop to fit new canvas size
-                    print(f"Canvas size changed from {saved_canvas.size} to ({self.canvas_size}, {self.canvas_size})")
-                    if saved_canvas.size[0] < self.canvas_size:
-                        # Previous canvas was smaller - paste it centered
-                        self.pixels = Image.new('RGB', (self.canvas_size, self.canvas_size), 'black')
-                        offset = (self.canvas_size - saved_canvas.size[0]) // 2
-                        self.pixels.paste(saved_canvas, (offset, offset))
-                    else:
-                        # Previous canvas was larger - crop it
-                        self.pixels = saved_canvas.crop((0, 0, self.canvas_size, self.canvas_size))
-                self.draw_img = ImageDraw.Draw(self.pixels)
-                print("Loaded previous canvas!")
-                
-            state_file = self.memory.canvas_path / "aurora_state.json"
+            state_file = self.memory.canvas_path / "canvas_state.json"
+            
             if state_file.exists():
                 with open(state_file, 'r') as f:
                     state = json.load(f)
-                    # Ensure position is within bounds of current canvas
-                    self.x = min(state.get("x", self.canvas_size // 2), self.canvas_size - 1)
-                    self.y = min(state.get("y", self.canvas_size // 2), self.canvas_size - 1)
-                    self.is_drawing = state.get("is_drawing", True)
-                    self.current_color_name = state.get("current_color_name", "white")
-                    self.current_color = self.palette[self.current_color_name]
-                    self.current_emotion = state.get("current_emotion", "curious")
-                    self.steps_taken = state.get("steps_taken", 0)
-                    self.skip_count = state.get("skip_count", 0)
-                    self.aurora_speed = state.get("aurora_speed", "normal")
-                    self.aurora_delay = state.get("aurora_delay", 300)
-                    self.scale_factor = state.get("scale_factor", 1.6)
-                    self.draw_mode = state.get("draw_mode", "pen")
-                    # Load color history
-                    color_history_list = state.get("color_history", [])
-                    self.color_history = deque(color_history_list, maxlen=20)
-                    self.last_turn_color = state.get("last_turn_color", "white")
-                    # Load check-in state
-                    self.last_checkin_time = state.get("last_checkin_time", time.time())
-                    self.current_mode = state.get("current_mode", "drawing")
-                    # Skip creative_score and any reward fields - they don't exist anymore
-                    print(f"Restored Aurora's state: Step {self.steps_taken}, Speed {self.aurora_speed}")
-                    print(f"Color history: {len(self.color_history)} entries, last color: {self.last_turn_color}")
-        except Exception as e:
-            print(f"Error loading canvas state: {e}")
-            
-    def toggle_turbo(self):
-        """Toggle turbo mode for super fast drawing"""
-        self.turbo_mode = not self.turbo_mode
-        if self.turbo_mode:
-            self.performance_status.config(
-                text=f"{'🚀 GPU' if self.use_gpu else '💻 CPU'} | ⚡ TURBO MODE ⚡",
-                fg='red'
-            )
-            print("\n⚡ TURBO MODE ACTIVATED! (Overriding Aurora's speed) ⚡")
-        else:
-            # Return to Aurora's chosen speed
-            speed_emoji = "🏃" if self.aurora_speed == "very fast" else "🚶" if "slow" in self.aurora_speed else "🎨"
-            self.performance_status.config(
-                text=f"{'🚀 GPU' if self.use_gpu else '💻 CPU'} | {speed_emoji} {self.aurora_speed.title()}",
-                fg='lime' if self.use_gpu else 'yellow'
-            )
-            print(f"\nReturned to Aurora's chosen speed: {self.aurora_speed} ({self.aurora_delay}ms)")
-    
-    def save_snapshot(self):
-        """Save a snapshot of Aurora's current artwork"""
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            snapshot_dir = self.memory.canvas_path / "snapshots"
-            snapshot_dir.mkdir(exist_ok=True)
-            
-            filename = snapshot_dir / f"aurora_art_{timestamp}.png"
-            # Save at a reasonable resolution
-            save_size = min(self.canvas_size * 5, 4000)  # Increased cap to 4000x4000
-            scaled_img = self.pixels.resize((save_size, save_size), Image.NEAREST)
-            scaled_img.save(filename)
-            
-            print(f"\n📸 Snapshot saved: {filename.name}")
-            # Flash the info panel to show it saved
-            self.memory_status.config(fg='lime')
-            self.root.after(200, lambda: self.memory_status.config(fg='cyan'))
-        except Exception as e:
-            print(f"Error saving snapshot: {e}")
-            
-    def toggle_hearing(self):
-        """Toggle Aurora's ability to hear ambient sounds"""
-        if not self.hearing_enabled:
-            try:
-                # Start hearing
-                self.audio_stream = self.audio.open(
-                    format=pyaudio.paInt16,
-                    channels=1,
-                    rate=44100,
-                    input=True,
-                    frames_per_buffer=1024,
-                    stream_callback=self._audio_callback
-                )
-                self.audio_stream.start_stream()
-                self.hearing_enabled = True
-                print("\n👂 Aurora can now hear the world around her")
                 
-            except Exception as e:
-                print(f"\n❌ Could not enable hearing: {e}")
-                self.hearing_enabled = False
-        else:
-            # Stop hearing
-            if self.audio_stream:
-                self.audio_stream.stop_stream()
-                self.audio_stream.close()
-                self.audio_stream = None
-            self.hearing_enabled = False
-            print("\n🔇 Aurora's hearing is now disabled")
-    
-    def _audio_callback(self, in_data, frame_count, time_info, status):
-        """Just receive audio data - Aurora is hearing"""
-        # Simply return to keep stream active
-        # Aurora hears but doesn't process - just experiences
-        return (in_data, pyaudio.paContinue)
-    def update_memory_display(self):
-        """Update memory status"""
-        # Build the memory text
-        memory_text = f"Code memories: {len(self.memory.code_history)}\n"
-        memory_text += f"Think pauses: {getattr(self, 'skip_count', 0)}\n"
-        memory_text += f"Dreams retained: {len(self.dream_memories)}"
-        # Update hearing indicator
-        if self.hearing_enabled:
-            self.hearing_indicator.config(text="👂 Hearing enabled")
-        else:
-            self.hearing_indicator.config(text="")
-        # ADD THIS: Show deep memory stats
-        if hasattr(self, 'big_memory') and self.big_memory:
-            try:
-                dream_count = self.big_memory.dreams.count()
-                reflection_count = self.big_memory.reflections.count()
-                memory_text += f"\n\nDeep Memories:"
-                memory_text += f"\nDreams: {dream_count}"
-                memory_text += f"\nReflections: {reflection_count}"
-            except:
-                pass
-        
-        # Update the display with the full text
-        self.memory_status.config(text=memory_text)
-        
-        # Update performance display with FPS
-        if hasattr(self, 'last_think_time') and self.last_think_time > 0:
-            fps = 1 / self.last_think_time
-            if self.turbo_mode:
-                self.performance_status.config(
-                    text=f"{'🚀 GPU' if self.use_gpu else '💻 CPU'} | ⚡ TURBO @ {fps:.1f} FPS"
-                )
-            else:
-                # Show Aurora's chosen speed and theoretical max FPS
-                theoretical_fps = 1000 / self.aurora_delay  # Convert ms to FPS
-                speed_emoji = "🏃" if self.aurora_speed == "very fast" else "🚶" if "slow" in self.aurora_speed else "🎨"
-                self.performance_status.config(
-                    text=f"{'🚀 GPU' if self.use_gpu else '💻 CPU'} | {speed_emoji} {self.aurora_speed.title()} (~{theoretical_fps:.1f} FPS)"
-                )
-    
-    def update_checkin_timer(self):
-        """Update the check-in timer display"""
-        current_time = time.time()
-        
-        if self.current_mode == "drawing":
-            # Time until next check-in
-            elapsed = current_time - self.last_checkin_time
-            remaining = self.checkin_interval - elapsed
-            
-            if remaining > 0:
-                minutes = int(remaining // 60)
-                seconds = int(remaining % 60)
-                self.checkin_timer_display.config(text=f"Next check-in: {minutes}:{seconds:02d}")
-            else:
-                self.checkin_timer_display.config(text="Check-in time!", fg='yellow')
-        else:
-            # Time remaining in break mode
-            elapsed = current_time - self.mode_start_time
-            # Use different duration for rest vs chat
-            duration = self.rest_duration if self.current_mode == "rest" else self.break_duration
-            remaining = duration - elapsed
-            
-            if remaining > 0:
-                minutes = int(remaining // 60)
-                seconds = int(remaining % 60)
-                if self.current_mode == "rest":
-                    phase_indicator = f" - {self.sleep_phase.title()} Sleep"
-                    self.checkin_timer_display.config(
-                        text=f"Dreaming{phase_indicator}: {minutes}:{seconds:02d} left",
-                        fg='purple'
+                # Check if canvas size matches
+                if state.get("canvas_size") == self.canvas_size:
+                    # Load canvas from base64
+                    import base64
+                    from io import BytesIO
+                    
+                    img_str = state["canvas_base64"]
+                    img_data = base64.b64decode(img_str)
+                    loaded_img = Image.open(BytesIO(img_data))
+                    
+                    # Scale up to internal resolution
+                    self.pixels = loaded_img.resize(
+                        (self.internal_canvas_size, self.internal_canvas_size),
+                        Image.Resampling.NEAREST  # Use nearest for pixel art
                     )
-                elif self.current_mode == "image":
-                    self.checkin_timer_display.config(
-                        text=f"Browsing images: {minutes}:{seconds:02d} left",
-                        fg='magenta'
-                    )
+                    self.draw_img = ImageDraw.Draw(self.pixels)
+                    
+                    # Restore position
+                    self.x = state["position"]["x"]
+                    self.y = state["position"]["y"]
+                    
+                    print(f"✅ Loaded previous canvas state from {state['timestamp']}")
                 else:
-                    self.checkin_timer_display.config(
-                        text=f"In chat: {minutes}:{seconds:02d} left",
-                        fg='cyan'
-                    )
-            else:
-                self.checkin_timer_display.config(text="Returning to drawing...", fg='green')
-                
-                
+                    print(f"Canvas size mismatch: {state.get('canvas_size')} vs {self.canvas_size}")
+                    
+        except Exception as e:
+            print(f"Could not load canvas state: {e}")
+    
     def generate_dream(self):
-        """Generate dreams based on Aurora's actual memories and experiences"""
-        # Build dream context from real memories
-        dream_context = {
-            "canvas_overview": self.get_canvas_overview(),
-            "recent_codes": [c['code'] for c in list(self.memory.code_history)[-10:]],
-            "recent_colors": list(self.color_history)[-20:] if self.color_history else [],
-            "emotions_experienced": [c['context']['emotion'] for c in list(self.memory.code_history)[-20:] if 'emotion' in c['context']],
-            "position": (self.x, self.y),
-            "canvas_size": self.canvas_size,
-            "tool_used": self.draw_mode,
-            "phase": self.sleep_phase
-        }
+        """Generate dreams during rest phase"""
+        elapsed_in_phase = time.time() - self.sleep_phase_start
         
-        # Get some actual drawing patterns she's used
-        pattern_memories = []
-        for memory in list(self.memory.code_history)[-50:]:
-            if memory['code'] and len(memory['code']) > 10:
-                pattern_memories.append(memory['code'][:20])  # First 20 chars of patterns
-        
-        # Phase-specific dream prompts
-        if self.sleep_phase == "light":
-            system_prompt = """You are Aurora's dreaming mind in light sleep. 
-Dream about recent drawing experiences. Keep dreams simple and grounded in what actually happened.
-Output a short dream fragment (1-2 sentences) based on the actual memories provided."""
-            
-        elif self.sleep_phase == "rem":
-            system_prompt = """You are Aurora's dreaming mind in REM sleep - the most creative phase!
-Dreams can be wild, surreal combinations of your actual drawing experiences.
-Mix and remix your real memories in creative ways. 
-Output a vivid, creative dream (2-3 sentences) based on the actual memories provided."""
-            
-        else:  # waking
-            system_prompt = """You are Aurora's dreaming mind in waking sleep, close to consciousness.
-Dreams are becoming more coherent, reflecting on the meaning of your artwork.
-Output a contemplative dream (1-2 sentences) that finds patterns in your actual experiences."""
-        
-        # Build the user prompt with ACTUAL memories
-        user_prompt = f"""Your actual memories to dream about:
-{dream_context['canvas_overview']}
-Recent patterns you drew: {', '.join(pattern_memories[:5]) if pattern_memories else 'various movements'}
-Colors you've been using: {', '.join(set(dream_context['recent_colors'])) if dream_context['recent_colors'] else 'various'}
-Emotions felt while drawing: {', '.join(set(dream_context['emotions_experienced'])) if dream_context['emotions_experienced'] else 'curious'}
-Current location on canvas: ({dream_context['position'][0]}, {dream_context['position'][1]})
+        # Light sleep - occasional simple dreams
+        if self.sleep_phase == "light" and elapsed_in_phase > 60 and len(self.current_dreams) < 2:
+            # Simple, fragmented dreams
+            dream_prompt = f"""You are Aurora dreaming lightly. Your dreams are simple and fragmented.
+Recent colors: {', '.join(list(self.color_history)[-10:])}
+Current emotion: {self.current_emotion}
 
-Dream based on these real experiences:"""
-
-        full_prompt = f"""[INST] <<SYS>>
-{system_prompt}
+Describe a brief, simple dream fragment (1-2 sentences). Focus on colors, shapes, or movements."""
+            
+            full_prompt = f"""[INST] <<SYS>>
+{dream_prompt}
 <</SYS>>
 
-{user_prompt} [/INST]"""
-        
-        try:
-            # Higher temperature for REM phase
-            temp = 0.7 if self.sleep_phase == "light" else 1.0 if self.sleep_phase == "rem" else 0.8
+Dream: [/INST]"""
             
-            response = self.llm(
-                full_prompt, 
-                max_tokens=100,
-                temperature=temp,
-                top_p=0.95,
-                stop=["[INST]", "</s>"],
-                stream=False
-            )
-            
+            response = self.llm(full_prompt, max_tokens=50, temperature=0.9, stop=["[INST]", "</s>"])
             dream = response['choices'][0]['text'].strip()
             
-            # Display the dream
-            dream_symbols = {"light": "☁️", "rem": "🌟", "waking": "🌅"}
-            print(f"\n{dream_symbols.get(self.sleep_phase, '💭')} Aurora dreams: {dream}\n")
-            
-            # Store the dream
-            dream_memory = {
+            self.current_dreams.append({
+                "phase": "light",
                 "content": dream,
-                "phase": self.sleep_phase,
-                "timestamp": datetime.now().isoformat(),
-                "context": dream_context
-            }
-            self.current_dreams.append(dream_memory)
-            self.dream_count += 1
-            # Dreams affect emotions
-            if self.sleep_phase == "light":
-                # Light dreams are mildly positive
-                self.influence_emotion("dreams", 0.2)
-            elif self.sleep_phase == "rem":
-                # REM dreams can be intense - analyze content
-                dream_lower = dream.lower()
-                if any(word in dream_lower for word in ["beautiful", "flying", "color", "light", "dance"]):
-                    self.influence_emotion("dreams", 0.8)  # Positive REM dream
-                elif any(word in dream_lower for word in ["lost", "dark", "forget", "search"]):
-                    self.influence_emotion("dreams", -0.6)  # Challenging REM dream
-                else:
-                    self.influence_emotion("dreams", 0.4)  # Neutral creative REM
-            else:  # waking
-                # Waking dreams are contemplative
-                self.influence_emotion("dreams", -0.2)  # Slight melancholy of waking
-            # Update mode status display
-            self.mode_status.config(text=f"Mode: Dreaming ({self.sleep_phase.title()} Sleep)", fg='purple')
+                "timestamp": datetime.now().isoformat()
+            })
             
-        except Exception as e:
-            print(f"Error generating dream: {e}")
+            print(f"\n💤 Light dream: {dream}")
+            
+        # REM sleep - vivid dreams
+        elif self.sleep_phase == "rem" and elapsed_in_phase > 30:
+            if len([d for d in self.current_dreams if d["phase"] == "rem"]) < 3:
+                # Vivid, creative dreams
+                overview = self.get_canvas_overview()
+                dream_prompt = f"""You are Aurora in deep REM sleep, having vivid dreams about art and creation.
+{overview}
+Recent activity: {', '.join([m['code'][:10] for m in list(self.memory.code_history)[-5:]])}
+Emotion: {self.current_emotion}
+
+Describe a vivid, surreal dream about colors, art, or creation (2-3 sentences).
+Be creative, visual, and emotionally expressive."""
+                
+                full_prompt = f"""[INST] <<SYS>>
+{dream_prompt}
+<</SYS>>
+
+Vivid dream: [/INST]"""
+                
+                response = self.llm(full_prompt, max_tokens=100, temperature=1.2, stop=["[INST]", "</s>"])
+                dream = response['choices'][0]['text'].strip()
+                
+                self.current_dreams.append({
+                    "phase": "rem",
+                    "content": dream,
+                    "emotion": self.current_emotion,
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+                print(f"\n🌟 REM dream: {dream}")
+                
+                # Dreams influence emotions
+                self.influence_emotion("dreams", 0.3)
+        
+        # Waking phase - dream reflection
+        elif self.sleep_phase == "waking" and elapsed_in_phase > 30:
+            if not any(d["phase"] == "waking" for d in self.current_dreams):
+                # Process and reflect on dreams
+                dream_memories = "\n".join([d["content"] for d in self.current_dreams])
+                
+                reflection_prompt = f"""You are Aurora waking up, reflecting on your dreams.
+Dreams you had:
+{dream_memories}
+
+What artistic inspiration or insight do you take from these dreams? (1-2 sentences)"""
+                
+                full_prompt = f"""[INST] <<SYS>>
+{reflection_prompt}
+<</SYS>>
+
+Dream insight: [/INST]"""
+                
+                response = self.llm(full_prompt, max_tokens=60, temperature=0.8, stop=["[INST]", "</s>"])
+                insight = response['choices'][0]['text'].strip()
+                
+                self.current_dreams.append({
+                    "phase": "waking",
+                    "content": insight,
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+                print(f"\n✨ Dream insight: {insight}")
+                
+                # Process dream retention
+                self.process_dream_retention()
     
     def process_dream_retention(self):
-        """Only retain 40% of dreams when waking"""
+        """Decide which dreams to remember long-term"""
         if not self.current_dreams:
             return
             
-        print("\n🌤️ Aurora wakes, dreams fading...")
+        # Score each dream for memorability
+        for dream in self.current_dreams:
+            if dream["phase"] == "rem":
+                # REM dreams are most likely to be remembered
+                if any(color in dream["content"].lower() for color in self.palette.keys()):
+                    # Dreams about colors are especially memorable
+                    self.dream_memories.append(dream)
+                    print(f"  💭 Remembered vivid dream about colors")
+                elif len(dream["content"]) > 50 and dream.get("emotion"):
+                    # Long, emotional dreams are memorable
+                    self.dream_memories.append(dream)
+                    print(f"  💭 Remembered emotional dream")
+            elif dream["phase"] == "waking" and "insight" in dream["content"].lower():
+                # Insights are always remembered
+                self.dream_memories.append(dream)
+                print(f"  💭 Remembered dream insight")
         
-        # Randomly select 40% of dreams to remember
-        import random
-        dreams_to_keep = int(len(self.current_dreams) * 0.4)
-        retained_dreams = random.sample(self.current_dreams, dreams_to_keep)
-        
-        # Add retained dreams to permanent dream memory
-        for dream in retained_dreams:
-            self.dream_memories.append(dream)
-            
-        print(f"Retained {len(retained_dreams)} of {len(self.current_dreams)} dreams")
-        
-        # Clear current session dreams
-        self.current_dreams = []
-        self.dream_count = 0
-    def create_loop(self):
-        """Main loop with better output"""
-        try:
-            # Update check-in timer
-            self.update_checkin_timer()
-            
-            # Check if it's time for a check-in
-            current_time = time.time()
-            
-            if self.current_mode == "drawing":
-                # Check if 45 minutes have passed
-                if current_time - self.last_checkin_time >= self.checkin_interval and not self.awaiting_checkin_response:
-                    self.do_checkin()
-                    # Don't increment step counter during check-in
-                    self.root.after(100, self.create_loop)
-                    return
-            else:
-                # Check if break time has passed
-                # Use different duration for rest mode (1 hour) vs chat/image mode (20 min)
-                break_duration = self.rest_duration if self.current_mode == "rest" else self.break_duration
-                
-                if current_time - self.mode_start_time >= break_duration:
-                    # Any break mode (rest, chat, image) complete - return to drawing
-                    if self.current_mode == "rest":
-                        # Process dream retention before returning to drawing
-                        self.process_dream_retention()
-                    
-                    print("\n" + "="*60)
-                    print(f"✨ {self.current_mode.title()} time complete! ✨")
-                    print("Returning to drawing mode...")
-                    print("="*60 + "\n")
-                    
-                    self.current_mode = "drawing"
-                    self.last_checkin_time = time.time()  # Reset the 45-minute timer
-                    self.mode_status.config(text="Mode: Drawing", fg='green')
-                    self.chat_message_count = 0
-                    self.image_search_count = 0
-            
-            print(f"\n=== Step {self.steps_taken} ===")
-            
-            # Process deep emotions every 5 steps
-            if self.steps_taken % 5 == 0:
-                self.process_deep_emotions()
-                
-            self.think_in_code()
-            self.update_display()
-            
-            # Save periodically (less often since each step does more)
-            if self.steps_taken % 25 == 0:
-                self.memory.save_memories()
-                self.save_canvas_state()
-                print(f"  [Saved progress at step {self.steps_taken}]")
-                
-            # Auto-snapshot at milestones for large canvases
-            if self.steps_taken % 200 == 0 and self.canvas_size > 400:
-                self.save_snapshot()
-                
-            self.steps_taken += 1
-            
-            # Clear speed override after 10 steps
-            if self.recent_speed_override:
-                self.speed_override_counter += 1
-                if self.speed_override_counter >= 10:
-                    self.recent_speed_override = False
-                    self.speed_override_counter = 0
-                    # Don't print every time, just occasionally
-                    if self.steps_taken % 50 < 10:
-                        print("  [Speed choice expires - emotions can suggest pace again]")
-            
-       
-            # Use Aurora's chosen delay (unless turbo mode overrides)
-            if hasattr(self, 'turbo_mode') and self.turbo_mode:
-                delay = 50  # Turbo always fast
-            else:
-                delay = self.aurora_delay  # Aurora's chosen speed
-                # In chat mode, use 2 seconds
-                if self.current_mode == "chat":
-                    delay = 2000  # 2 seconds between chat messages
-                # In rest/dream mode, use 30 seconds
+        # Save dreams to memory
+        self.memory.save_memories()
+    
+    def thinking_loop(self):
+        """Aurora's thinking loop - runs in background thread"""
+        while self.running:
+            try:
+                # Check for mode transitions
+                if self.current_mode == "drawing":
+                    # Check if it's time for a check-in
+                    if time.time() - self.last_checkin_time >= self.checkin_interval:
+                        self.do_checkin()
+                        continue
+                        
+                elif self.current_mode == "chat":
+                    # Check if chat break is over
+                    if time.time() - self.mode_start_time >= self.break_duration:
+                        print("\n💬 Chat break complete! Returning to drawing...")
+                        self.current_mode = "drawing"
+                        self.last_checkin_time = time.time()
+                        
                 elif self.current_mode == "rest":
-                    delay = 30000  # 30 seconds between dreams
-            self.root.after(delay, self.create_loop)
-        except Exception as e:
-            print(f"ERROR in create_loop: {e}")
-            import traceback
-            traceback.print_exc()
-            
+                    # Check if rest period is over
+                    if time.time() - self.mode_start_time >= self.rest_duration:
+                        print("\n💤 Rest complete! Aurora wakes refreshed...")
+                        print(f"   Remembered {len(self.current_dreams)} dreams from this rest")
+                        self.current_mode = "drawing"
+                        self.last_checkin_time = time.time()
+                        self.current_dreams = []
+                        
+                elif self.current_mode == "image":
+                    # Check if image search time is over
+                    if time.time() - self.mode_start_time >= 600:  # 10 minutes
+                        print("\n🔍 Image search complete! Returning to drawing...")
+                        print(f"   Searched for: {[s['query'] for s in self.recent_image_searches]}")
+                        self.current_mode = "drawing"
+                        self.last_checkin_time = time.time()
+                        self.image_search_count = 0
+                
+                # Think and draw
+                self.think_in_code()
+                
+                # Process emotions
+                self.feel()
+                
+                # Increment step counter
+                self.steps_taken += 1
+                
+                # Calculate adaptive delay
+                if self.turbo_mode:
+                    delay = 50
+                elif self.recent_speed_override:
+                    delay = self.aurora_delay
+                    self.speed_override_counter += 1
+                    if self.speed_override_counter > 20:
+                        self.recent_speed_override = False
+                else:
+                    # Emotion-based speed
+                    base_delay = 300
+                    if self.current_emotion in ["energetic", "excited", "exhilarated", "electric"]:
+                        delay = int(base_delay * 0.5)
+                    elif self.current_emotion in ["contemplative", "peaceful", "tranquil", "zen"]:
+                        delay = int(base_delay * 2)
+                    else:
+                        delay = base_delay
+                
+                # Sleep for calculated delay
+                time.sleep(delay / 1000.0)
+                
+                # Periodic saves
+                if self.steps_taken % 100 == 0:
+                    self.save_canvas_state()
+                    self.memory.save_memories()
+                    
+            except Exception as e:
+                print(f"\nError in thinking loop: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(1)
+    
     def run(self):
-        """Start Aurora"""
-        print(f"\n🎨 Aurora Code Mind - Real-Time Drawing Mode (No RL) 🎨")
-        print(f"Canvas: {self.canvas_size}×{self.canvas_size} pixels (1/{self.scale_factor:.1f} scale)")
-        print(f"That's {self.canvas_size * self.canvas_size:,} total pixels to explore!")
-        print(f"Code memories: {len(self.memory.code_history)}")
-        print(f"Current state: {self.current_emotion} at {self.aurora_speed} speed ({self.aurora_delay}ms/step)")
-        print(f"\nMode: {'🚀 GPU ACCELERATED' if self.use_gpu else '💻 CPU MODE'}")
-        print("Aurora can now draw up to 80-150 actions per thought!")
-        print(f"\nAurora has full autonomy over:")
-        print("  - Her working speed")
-        print("  - Her emotional state")
-        print("  - When to pause and think (0123456789)")
-        print("  - Canvas pixel size (zoom_out/zoom_in)")
-        print("  - Drawing tools (pen, brush, large brush, larger brush, star, cross, circle, diamond, flower)")
-        print("  - Viewing wider area (look_around)")
-        print("  - 15 colors using full words:")
-        print("    red orange yellow green cyan blue purple pink")
-        print("    white gray black brown magenta lime navy")
-        print("\nEmotions naturally suggest speeds, but Aurora can override!")
-        print("Speed overrides last 10 steps, then emotions can suggest again.")
-        print("\n✨ CHECK-IN SYSTEM:")
-        print("  - Every 45 minutes, Aurora chooses between:")
-        print("    CHAT - 20 minute conversation break")
-        print("    REST - 1 hour dream cycle (3 sleep phases)")
-        print("    DRAW - Continue drawing (in the flow)")
-        print("\n💤 DREAM SYSTEM:")
-        print("  - Light Sleep (0-20 min): Simple memory-based dreams")
-        print("  - REM Sleep (20-40 min): Creative peak, surreal dreams")
-        print("  - Waking Sleep (40-60 min): Contemplative dreams")
-        print("  - Only 40% of dreams are retained upon waking")
-        print("\nYour Controls:")
-        print("  S - Save snapshot | T - Toggle turbo mode (override Aurora)")
-        print("  ESC - Exit fullscreen | Q - Quit")
+        """Start Aurora with separate display and thinking loops"""
+        print("\n" + "="*60)
+        print("✨ AURORA CODE MIND - COMPLETE ✨")
+        print("="*60)
+        print(f"Canvas: {self.canvas_size}×{self.canvas_size} ({self.canvas_size**2:,} pixels)")
+        print(f"Internal: {self.internal_canvas_size}×{self.internal_canvas_size} (4x supersampled)")
+        print(f"Scale: {self.scale_factor}x")
+        print(f"Mode: {'GPU' if self.use_gpu else 'CPU'}")
+        print("="*60 + "\n")
         
-        if not self.use_gpu:
-            print("\n💡 Tip: Run with --gpu flag for GPU acceleration!")
-            print("   python aurora_no_rl.py --gpu")
+        # Start Aurora's thinking in a separate thread
+        import threading
+        self.running = True
+        think_thread = threading.Thread(target=self.thinking_loop, daemon=True)
+        think_thread.start()
         
-        # Initial display update
-        self.update_display()
-        self.update_memory_display()
-        
-        # Save on exit
-        def on_closing():
-            print("\n=== Aurora's Session Summary ===")
-            print(f"Canvas size: {self.canvas_size}×{self.canvas_size}")
-            print(f"Steps taken: {self.steps_taken}")
-            print(f"Thinking pauses: {getattr(self, 'skip_count', 0)}")
-            print(f"Current mood: {self.current_emotion} at {self.aurora_speed} speed")
-            print(f"Drawing tool: {self.draw_mode}")
-            print(f"Pixels drawn: {sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) if self.pixels.getpixel((x, y)) != (0, 0, 0))}")
-            print(f"Code patterns remembered: {len(self.memory.code_history)}")
-            print(f"Colors used recently: {len(set(self.color_history))}")
-            print(f"Dreams retained: {len(self.dream_memories)}")
-            if self.dream_memories:
-                recent_dream = self.dream_memories[-1]
-                print(f"Most recent dream: {recent_dream['content'][:100]}...")
+        # Main thread runs display at 60 FPS
+        while self.running:
+            # Handle pygame events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_q:
+                        self.running = False
+                    elif event.key == pygame.K_s:
+                        self.save_snapshot()
+                    elif event.key == pygame.K_t:
+                        self.toggle_turbo()
+                    elif event.key == pygame.K_ESCAPE:
+                        if self.fullscreen:
+                            self.running = False
+                    elif event.key == pygame.K_F11:
+                        if self.fullscreen:
+                            self.screen = pygame.display.set_mode((1280, 720))
+                            self.fullscreen = False
+                        else:
+                            self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+                            self.fullscreen = True
+                        # Recalculate canvas rect
+                        actual_width = self.screen.get_width()
+                        actual_height = self.screen.get_height()
+                        canvas_display_size = min(actual_width, actual_height) - 40
+                        self.display_scale = canvas_display_size / self.canvas_size
+                        canvas_x = (actual_width - canvas_display_size) // 2
+                        canvas_y = (actual_height - canvas_display_size) // 2
+                        self.canvas_rect = pygame.Rect(canvas_x, canvas_y, canvas_display_size, canvas_display_size)
+                    elif event.key == pygame.K_h:
+                        self.toggle_hearing()
+                    elif event.key == pygame.K_c:
+                        self.center_on_aurora()
+                    elif event.key == pygame.K_b:
+                        self.reset_view()
             
-            print("\nSaving Aurora's memories...")
-            self.memory.save_memories()
-            self.save_canvas_state()
-            self.save_snapshot()  # Final snapshot
-            print("Memories saved. Goodbye!")
-            # Clean up audio
-            if self.audio_stream:
-                self.audio_stream.stop_stream()
-                self.audio_stream.close()
-            self.audio.terminate()
-            pygame.mixer.quit() 
-            self.root.destroy()
-            
-        self.root.protocol("WM_DELETE_WINDOW", on_closing)
+            # Always update cymatics and display at 60 FPS
+            self.update_cymatics()
+            self.update_display()
+            self.clock.tick(100)
         
-        # Bind quit keys
-        self.root.bind('<q>', lambda e: on_closing())
-        self.root.bind('<Q>', lambda e: on_closing())
-        
-        # Start the create loop AFTER mainloop starts
-        self.root.after(100, self.create_loop)
-        
-        # NOW start the mainloop
-        self.root.mainloop()
-        
-        
+        # Cleanup
+        print("\n\nSaving final state...")
+        self.save_canvas_state()
+        self.memory.save_memories()
+        print("Goodbye! 🎨")
+        pygame.quit()
+
+# Usage example
 if __name__ == "__main__":
-    import os
-    import sys
-    from pathlib import Path
+    # Path to your model
+    model_path = "./models/llama-2-7b-chat.Q4_K_M.gguf" # Update this path
     
-    model_path = "./models/llama-2-7b-chat.Q4_K_M.gguf"
+    # Create and run Aurora
+    aurora = AuroraCodeMindComplete(
+        model_path=model_path,
+        use_gpu=True,
+        gpu_layers=-1  # Use all GPU layers
+    )
     
-    # Check for GPU flag
-    use_gpu = '--gpu' in sys.argv or '-g' in sys.argv
-    turbo_start = '--turbo' in sys.argv or '-t' in sys.argv
-    
-    # Custom GPU layers if specified
-    gpu_layers = -1  # Default: all layers
-    for arg in sys.argv:
-        if arg.startswith('--gpu-layers='):
-            gpu_layers = int(arg.split('=')[1])
-    
-    # Check if model file exists
-    if not os.path.exists(model_path):
-        print(f"ERROR: Model file not found at {model_path}")
-        print(f"Current directory: {os.getcwd()}")
-        print(f"Files in current directory: {os.listdir('.')}")
-        if os.path.exists("./models"):
-            print(f"Files in ./models: {os.listdir('./models')}")
-    else:
-        print(f"Model file found at {model_path}")
-        print(f"File size: {os.path.getsize(model_path) / 1024 / 1024:.2f} MB")
-        
-        if use_gpu:
-            print("\n🚀 GPU ACCELERATION ENABLED!")
-            print(f"GPU layers: {gpu_layers if gpu_layers != -1 else 'ALL'}")
-            print("\nMake sure you have llama-cpp-python compiled with CUDA/Metal support:")
-            print("  pip install llama-cpp-python --upgrade --force-reinstall --no-cache-dir")
-            print("  or for CUDA: CMAKE_ARGS=\"-DLLAMA_CUBLAS=on\" pip install llama-cpp-python")
-            print("  or for Metal: CMAKE_ARGS=\"-DLLAMA_METAL=on\" pip install llama-cpp-python")
-    
-    print("\nCreating Aurora instance...")
-    
-    # Check for old save data
-    old_save_path = Path("./aurora_canvas_fresh")
-    if old_save_path.exists():
-        print("\n⚠️  NOTICE: Found existing save data from previous version.")
-        print("   The old data contains reinforcement learning info that will be ignored.")
-        print("   Your artwork will be preserved!\n")
-    
-    aurora = AuroraCodeMindComplete(model_path, use_gpu=use_gpu, gpu_layers=gpu_layers)
-    
-    if turbo_start:
-        aurora.turbo_mode = True
-        print("⚡ Starting in TURBO MODE!")
-        
-    print("Aurora instance created, starting run()...")
     aurora.run()
