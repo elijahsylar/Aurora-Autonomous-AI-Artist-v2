@@ -430,7 +430,7 @@ class AuroraCodeMindComplete:
         self.view_mode = "normal"  # normal, density, shape
         # Drawing modes
         self.draw_mode = "brush"  # pen, brush, star, eraser
-        
+        self.pen_momentum = 0 
         # Color variety tracking
         self.color_history = deque(maxlen=20)  # Track last 20 color uses
         self.turn_colors_used = set()  # Track colors used in current turn
@@ -520,12 +520,12 @@ class AuroraCodeMindComplete:
         print("7. Code tracking initialized")
         
         # Canvas - now at higher resolution internally
-        self.pixels = Image.new('RGB', (self.internal_canvas_size, self.internal_canvas_size), 'black')
+        self.pixels = Image.new('RGBA', (self.internal_canvas_size, self.internal_canvas_size), 'black')
         self.draw_img = ImageDraw.Draw(self.pixels)
         print(f"8. Image buffer created at {self.internal_canvas_size}x{self.internal_canvas_size} (4x supersampled)")
         
         # Try to load previous canvas state (this may adjust position)
-        self.load_canvas_state()
+        # self.load_canvas_state()
         
         # Ensure position is valid for current canvas
         self.x = max(0, min(self.x, self.canvas_size - 1))
@@ -567,9 +567,13 @@ class AuroraCodeMindComplete:
         try:
             import numpy as np  # Import here if not already imported
         
-            # Generate 16 different beeps at 3 pitches each (doubled!)
-            for i, char in enumerate('!@#$%^&*()[]<>=+~'):
-                base_freq = 200 + (i * 80)  # 200Hz to 1450Hz (smaller steps for more sounds)
+            # EXPANDED SOUND PALETTE - 24 base frequencies (no number conflicts!)
+            sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
+            
+            # Generate frequencies across wider spectrum (100Hz to 2000Hz)
+            for i, char in enumerate(sound_chars):
+                # Exponential frequency distribution for more musical range
+                base_freq = 100 * (2 ** (i / 6.0))  # Doubles every 6 notes for wider range
                 
                 # Normal pitch
                 freq = base_freq
@@ -579,23 +583,23 @@ class AuroraCodeMindComplete:
                 self.sounds[f"{char}_normal"] = pygame.sndarray.make_sound(sound_data)
                 self.sounds[f"{char}_normal"].set_volume(0.3)
                 
-                # Low pitch (++)
-                freq = base_freq * 0.5  # Half frequency
+                # Low pitch (++) - one octave down
+                freq = base_freq * 0.5
                 samples = np.sin(2 * np.pi * freq * np.arange(0, 0.05 * 22050) / 22050) * 0.3
                 sound_data = (samples * 32767).astype(np.int16)
                 sound_data = np.repeat(sound_data.reshape(-1, 1), 2, axis=1)
                 self.sounds[f"{char}_low"] = pygame.sndarray.make_sound(sound_data)
                 self.sounds[f"{char}_low"].set_volume(0.3)
                 
-                # High pitch (--)
-                freq = base_freq * 2  # Double frequency
+                # High pitch (--) - one octave up
+                freq = base_freq * 2
                 samples = np.sin(2 * np.pi * freq * np.arange(0, 0.05 * 22050) / 22050) * 0.3
                 sound_data = (samples * 32767).astype(np.int16)
                 sound_data = np.repeat(sound_data.reshape(-1, 1), 2, axis=1)
                 self.sounds[f"{char}_high"] = pygame.sndarray.make_sound(sound_data)
                 self.sounds[f"{char}_high"].set_volume(0.3)
                 
-            print("✅ Sound system ready with pitch control!")
+            print(f"✅ Sound system ready with {len(sound_chars)} tones × 3 octaves = {len(sound_chars)*3} total sounds!")
         except:
             print("❌ Sound system failed - continuing without audio")
             self.sounds = {}
@@ -637,39 +641,37 @@ class AuroraCodeMindComplete:
         mask_width, mask_height = alpha_mask.size
         half_w, half_h = mask_width // 2, mask_height // 2
         
-        # Create a temporary image for the brush stroke
-        temp = Image.new('RGBA', (mask_width, mask_height), (*color, 0))
+        # Get the numpy array of the alpha mask
+        import numpy as np
+        mask_array = np.array(alpha_mask)
         
-        # Apply the alpha mask
-        temp.putalpha(alpha_mask)
-        
-        # Calculate position to paste
-        paste_x = x - half_w
-        paste_y = y - half_h
-        
-        # Create a crop of the existing canvas
-        x1 = max(0, paste_x)
-        y1 = max(0, paste_y)
-        x2 = min(self.canvas_size, paste_x + mask_width)
-        y2 = min(self.canvas_size, paste_y + mask_height)
-        
-        if x2 > x1 and y2 > y1:
-            # Get the region we're drawing to
-            region = self.pixels.crop((x1, y1, x2, y2)).convert('RGBA')
-            
-            # Crop the brush to match if needed
-            brush_x1 = max(0, -paste_x)
-            brush_y1 = max(0, -paste_y)
-            brush_x2 = brush_x1 + (x2 - x1)
-            brush_y2 = brush_y1 + (y2 - y1)
-            
-            brush_region = temp.crop((brush_x1, brush_y1, brush_x2, brush_y2))
-            
-            # Composite the brush onto the region
-            region = Image.alpha_composite(region, brush_region)
-            
-            # Paste back to canvas
-            self.pixels.paste(region.convert('RGB'), (x1, y1))
+        # Draw each pixel of the brush
+        for dy in range(mask_height):
+            for dx in range(mask_width):
+                # Get alpha value from mask
+                alpha = mask_array[dy, dx]
+                if alpha > 0:
+                    px = x - half_w + dx
+                    py = y - half_h + dy
+                    
+                    # Check bounds
+                    if 0 <= px < self.internal_canvas_size and 0 <= py < self.internal_canvas_size:
+                        # Get existing pixel
+                        existing = self.pixels.getpixel((px, py))
+                        
+                        # Blend colors based on alpha
+                        alpha_float = alpha / 255.0
+                        if len(existing) == 4:  # RGBA
+                            r = int(existing[0] * (1 - alpha_float) + color[0] * alpha_float)
+                            g = int(existing[1] * (1 - alpha_float) + color[1] * alpha_float)
+                            b = int(existing[2] * (1 - alpha_float) + color[2] * alpha_float)
+                            a = max(existing[3], alpha)
+                            self.pixels.putpixel((px, py), (r, g, b, a))
+                        else:  # RGB
+                            r = int(existing[0] * (1 - alpha_float) + color[0] * alpha_float)
+                            g = int(existing[1] * (1 - alpha_float) + color[1] * alpha_float)
+                            b = int(existing[2] * (1 - alpha_float) + color[2] * alpha_float)
+                            self.pixels.putpixel((px, py), (r, g, b))
     
     def _draw_smooth_line(self, x1, y1, x2, y2, brush_func):
         """Draw a smooth line between two points using the brush function"""
@@ -1354,7 +1356,7 @@ Dots of each color (. means move without drawing)!"""
             # Create new canvas at new internal resolution
             self.canvas_size = new_canvas_size
             self.internal_canvas_size = self.canvas_size * self.supersample_factor
-            self.pixels = Image.new('RGB', (self.internal_canvas_size, self.internal_canvas_size), 'black')
+            self.pixels = Image.new('RGBA', (self.internal_canvas_size, self.internal_canvas_size), 'black')
             self.draw_img = ImageDraw.Draw(self.pixels)
             
             # Transfer old drawing (centered)
@@ -1490,7 +1492,7 @@ What would you like to do?"""
                     print("Entering 20-minute conversation mode...")
                     self.current_mode = "chat"
                     self.mode_start_time = time.time()
-                    self.mode_status.config(text="Mode: Chatting", fg='cyan')
+  
                     self.awaiting_checkin_response = False
                     return
                     
@@ -1502,7 +1504,7 @@ What would you like to do?"""
                     self.sleep_phase = "light"  # Start in light sleep
                     self.sleep_phase_start = time.time()
                     self.current_dreams = []  # Clear dreams for new session
-                    self.mode_status.config(text="Mode: Dreaming (Light Sleep)", fg='purple')
+                
                     # Show her the full canvas before sleeping
                     wide_view = self.get_compressed_canvas_view()
                     print("\nFull canvas view before dreaming:")
@@ -1518,7 +1520,7 @@ What would you like to do?"""
                     print("Entering visual inspiration mode...")
                     self.current_mode = "image"
                     self.mode_start_time = time.time()
-                    self.mode_status.config(text="Mode: Seeking Images", fg='magenta')
+        
                     self.awaiting_checkin_response = False
                     return
                 else:
@@ -2011,17 +2013,24 @@ slower (slow down for contemplation)
 DRAWING TOOLS (full words):
 pen brush spray large_brush larger_brush star cross circle diamond flower
 
+🚧 TEMPORARY CREATIVE CHALLENGE 🚧
+zoom_in and stamp tools (star, cross, circle, diamond, flower) are disabled!
+This limitation will push you to explore new creative territories:
+- Focus on brush strokes and continuous movements
+- Try a template to master imagery
+- Create texture through repetition and layering
+- Expand your skills in sequence creating
+Your constraints will make you more creative, not less!
 
-SOUNDS (instant beeps - 16 tones!):
-! = 200Hz  @ = 280Hz  # = 360Hz  $ = 440Hz
-% = 520Hz  ^ = 600Hz  & = 680Hz  * = 760Hz
-( = 840Hz  ) = 920Hz  [ = 1000Hz ] = 1080Hz
-< = 1160Hz > = 1240Hz = = 1320Hz + = 1400Hz
-~ = 1480Hz
-++ = next sound lower pitch (half frequency) 
--- = next sound higher pitch (double frequency)
-Mix freely: red5333!@#blue5222++***<<<~~~
-Musical scales: !#%&*  or  []<>=+~
+SOUNDS (instant beeps - 24 unique tones!):
+! @ # $ % ^ & * ( ) [ ] < > = + ~ ` - _ , . | ; : ? /\
+(frequencies from deep bass 100Hz to high 2000Hz)
+++ = next sound lower pitch (one octave down) 
+-- = next sound higher pitch (one octave up)
+Mix freely: red5333!@#$%^|blue5222?/\
+Create melodies: !#%&*<>~  or  `_,.|;:
+Bass lines: ++!++@++#++$  
+High notes: --~------|
 
 PAUSE:
 0123456789 = think
@@ -2163,9 +2172,10 @@ Create art! Output numbers:"""
                 print("  → Aurora makes pixels smaller!")
             
             if "zoom_in" in raw_output:
-                self.adjust_pixel_size("larger") 
+                # DISABLED FOR NOW
+                # self.adjust_pixel_size("larger") 
                 raw_output = raw_output.replace("zoom_in", "", 1)
-                print("  → Aurora makes pixels larger!")
+                print("  → Aurora tried to zoom in (disabled)")
 
             # Check for wide view command
             if "look_around" in raw_output:
@@ -2260,7 +2270,7 @@ Create art! Output numbers:"""
                     self.save_snapshot()
                     print("    (Auto-saved current work)")
                     # Clear to black
-                    self.pixels = Image.new('RGB', (self.internal_canvas_size, self.internal_canvas_size), 'black')
+                    self.pixels = Image.new('RGBA', (self.internal_canvas_size, self.internal_canvas_size), 'black')
                     self.draw_img = ImageDraw.Draw(self.pixels)
                     # Reset to center
                     self.x = self.canvas_size // 2
@@ -2333,10 +2343,8 @@ Create art! Output numbers:"""
           
             if "pen" in raw_output:
                 self.draw_mode = "pen"
-                print("  → Aurora switches to MEGA PEN mode! (18x18 pixels)")
-                print("    The most powerful drawing tool - massive coverage!")
+                print("  → Aurora switches to DYNAMIC PEN mode! (builds thickness with flow)")
                 raw_output = raw_output.replace("pen", "", 1)
-                print(f"    Switching to {self.draw_mode} instead")
                     
             if "spray" in raw_output:
                 self.draw_mode = "spray"
@@ -2358,30 +2366,30 @@ Create art! Output numbers:"""
                 print("  → Aurora switches to larger brush mode! (28x28)")
                 raw_output = raw_output.replace("larger_brush", "", 1)
             
-            if "star" in raw_output:
-                self.draw_mode = "star"
-                print("  → Aurora switches to star stamp mode!")
-                raw_output = raw_output.replace("star", "", 1)
-                
-            if "cross" in raw_output:
-                self.draw_mode = "cross"
-                print("  → Aurora switches to cross stamp mode!")
-                raw_output = raw_output.replace("cross", "", 1)
-            
-            if "circle" in raw_output:
-                self.draw_mode = "circle"
-                print("  → Aurora switches to circle stamp mode!")
-                raw_output = raw_output.replace("circle", "", 1)
-            
-            if "diamond" in raw_output:
-                self.draw_mode = "diamond"
-                print("  → Aurora switches to diamond stamp mode!")
-                raw_output = raw_output.replace("diamond", "", 1)
-            
-            if "flower" in raw_output:
-                self.draw_mode = "flower"
-                print("  → Aurora switches to flower stamp mode!")
-                raw_output = raw_output.replace("flower", "", 1)
+            # if "star" in raw_output:
+            #     self.draw_mode = "star"
+            #     print("  → Aurora switches to star stamp mode!")
+            #     raw_output = raw_output.replace("star", "", 1)
+            #     
+            # if "cross" in raw_output:
+            #     self.draw_mode = "cross"
+            #     print("  → Aurora switches to cross stamp mode!")
+            #     raw_output = raw_output.replace("cross", "", 1)
+            # 
+            # if "circle" in raw_output:
+            #     self.draw_mode = "circle"
+            #     print("  → Aurora switches to circle stamp mode!")
+            #     raw_output = raw_output.replace("circle", "", 1)
+            # 
+            # if "diamond" in raw_output:
+            #     self.draw_mode = "diamond"
+            #     print("  → Aurora switches to diamond stamp mode!")
+            #     raw_output = raw_output.replace("diamond", "", 1)
+            # 
+            # if "flower" in raw_output:
+            #     self.draw_mode = "flower"
+            #     print("  → Aurora switches to flower stamp mode!")
+            #     raw_output = raw_output.replace("flower", "", 1)
             # ===== NOW DO SEQUENCE PARSING ON REMAINING TEXT =====
             # Check if it's the thinking pattern FIRST (before any cleaning)
             if "0123456789" in raw_output or "123456789" in raw_output or "9876543210" in raw_output:
@@ -2394,7 +2402,7 @@ Create art! Output numbers:"""
                 return
             
             # Clean the remaining output - find longest continuous sequence of valid commands
-            valid_chars = '0123456789!@#$%^&*()[]<>=+~+-'  # Extended sound palette!
+            valid_chars = '0123456789!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\+-'  # Movement + sounds
             color_words = list(self.palette.keys())  # All valid color names
             
             # Convert to list of tokens (numbers + color words)
@@ -2483,17 +2491,19 @@ Create art! Output numbers:"""
                 continue
             
             # Check for sound characters - PYGAME VERSION  # UPDATED SOUND CHECK
-            if char in '!@#$%^&*()[]<>=+~':  # Extended sound palette!
+            if char in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\':  # 24 sound characters
                 sound_key = f"{char}_{self.current_pitch}"
                 if sound_key in self.sounds:
                     pygame.mixer.stop()  # Stop any playing sounds first
                     self.sounds[sound_key].play()
                     
-                    # Add cymatic circle
-                    freq_map = {'!': 200, '@': 280, '#': 360, '$': 440, '%': 520, '^': 600,
-                               '&': 680, '*': 760, '(': 840, ')': 920, '[': 1000, ']': 1080,
-                               '<': 1160, '>': 1240, '=': 1320, '+': 1400, '~': 1480}
-                    frequency = freq_map.get(char, 440)
+                    # Add cymatic circle - calculate frequency from character index
+                    sound_palette = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
+                    if char in sound_palette:
+                        char_index = sound_palette.index(char)
+                        frequency = 100 * (2 ** (char_index / 6.0))  # Exponential scale
+                    else:
+                        frequency = 440  # Fallback frequency
                     
                     # Color based on frequency (low=red, mid=green, high=blue)
                     if frequency < 500:
@@ -2536,6 +2546,15 @@ Create art! Output numbers:"""
                 # Execute the operation
                 op_map[char]()
                 actions_taken.append(char)
+                
+                # Track pen momentum
+                if char in '0123' and self.is_drawing:
+                    self.pen_momentum += 1
+                elif char == '4':  # Pen up
+                    self.pen_momentum = 0
+                elif char == '5':  # Pen down
+                    self.pen_momentum = 0
+                
                 
                 # If pen is down and we moved, we drew!
                 if self.is_drawing and char in '0123' and (self.x, self.y) != (prev_x, prev_y):
@@ -2754,10 +2773,20 @@ Create art! Output numbers:"""
         internal_y2 = self._scale_to_internal(y2)
         
         if self.draw_mode == "pen":
-            # Mega pen - 18x18 at display scale
-            size = 18 * self.supersample_factor
+            # Dynamic pen - thickness builds with continuous movement
+            base_size = 3 * self.supersample_factor
+            max_size = 25 * self.supersample_factor
+            
+            # Calculate current thickness based on momentum
+            momentum_factor = min(1.0, self.pen_momentum / 10.0)  # Max thickness after 10 moves
+            current_size = int(base_size + (max_size - base_size) * momentum_factor)
+            
+            # Use circles for smooth, rounded strokes
             self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
-                                 lambda x, y: self._draw_rect(x, y, size))
+                                 lambda x, y: self.draw_img.ellipse(
+                                     [x - current_size//2, y - current_size//2, 
+                                      x + current_size//2, y + current_size//2],
+                                     fill=self.current_color))
         
         elif self.draw_mode == "brush":
             # Soft brush - 12x12 at display scale
@@ -2795,8 +2824,17 @@ Create art! Output numbers:"""
         internal_y = self._scale_to_internal(y)
         
         if self.draw_mode == "pen":
-            size = 18 * self.supersample_factor
-            self._draw_rect(internal_x, internal_y, size)
+            # Dynamic pen with momentum
+            base_size = 3 * self.supersample_factor
+            max_size = 25 * self.supersample_factor
+            momentum_factor = min(1.0, self.pen_momentum / 10.0)
+            current_size = int(base_size + (max_size - base_size) * momentum_factor)
+            
+            # Draw circle for rounded pen
+            self.draw_img.ellipse(
+                [internal_x - current_size//2, internal_y - current_size//2,
+                 internal_x + current_size//2, internal_y + current_size//2],
+                fill=self.current_color)
         elif self.draw_mode == "brush":
             size = 12 * self.supersample_factor
             brush = self._create_soft_brush(size // 2, hardness=0.3)
@@ -2988,12 +3026,12 @@ Create art! Output numbers:"""
                 display_img = display_img.resize((display_size, display_size), Image.Resampling.LANCZOS)
             
             # Convert PIL image to pygame surface
-            if display_img.mode != 'RGB':
-                display_img = display_img.convert('RGB')
+            if display_img.mode != 'RGBA':
+                display_img = display_img.convert('RGBA')
             
             # Get raw image data
-            raw_str = display_img.tobytes("raw", 'RGB')
-            canvas_surface = pygame.image.fromstring(raw_str, display_img.size, 'RGB')
+            raw_str = display_img.tobytes("raw", 'RGBA')
+            canvas_surface = pygame.image.fromstring(raw_str, display_img.size, 'RGBA')
             
             # Draw canvas
             self.screen.blit(canvas_surface, (self.canvas_rect.x, self.canvas_rect.y))
@@ -3003,8 +3041,8 @@ Create art! Output numbers:"""
                 self.screen.blit(self.cymatic_surface, (0, 0))
             
             # Draw canvas with black as transparent
-            raw_str = display_img.tobytes("raw", 'RGB')
-            canvas_surface = pygame.image.fromstring(raw_str, display_img.size, 'RGB')
+            raw_str = display_img.tobytes("raw", 'RGBA')
+            canvas_surface = pygame.image.fromstring(raw_str, display_img.size, 'RGBA')
             canvas_surface.set_colorkey((0, 0, 0))  # This makes black pixels transparent!
             
             # Draw canvas on top - black areas will show cymatics through
@@ -3142,7 +3180,7 @@ Create art! Output numbers:"""
                                 
                                 # Convert HSV to RGB
                                 import colorsys
-                                r, g, b = colorsys.hsv_to_rgb(hue, 0.8, 1.0)  # 80% saturation, full brightness
+                                r, g, b = colorsys.hsv_to_rgb(hue, 0.8, 1.6)  # 80% saturation, full brightness
                                 
                                 # Apply intensity
                                 r = int(r * alpha)
@@ -3264,13 +3302,12 @@ Create art! Output numbers:"""
         
         # Update delay based on speed
         delays = {
-            "instant": 10,
-            "fast": 100,
-            "normal": 300,
-            "slow": 600,
-            "very_slow": 1200
+            "instant": 5,     # Was 10
+            "fast": 30,       # Was 100
+            "normal": 80,     # Was 300
+            "slow": 200,      # Was 600
+            "very_slow": 400  # Was 1200
         }
-        
         self.aurora_delay = delays[self.aurora_speed]
         self.recent_speed_override = True
         self.speed_override_counter = 0
@@ -3537,7 +3574,7 @@ Dream insight: [/INST]"""
                 # Check for mode transitions
                 if self.current_mode == "drawing":
                     # Check if it's time for a check-in
-                    if time.time() - self.last_checkin_time >= self.checkin_interval:
+                    if time.time() - self.last_checkin_time >= self.checkin_interval and not self.awaiting_checkin_response:
                         self.do_checkin()
                         continue
                         
@@ -3585,7 +3622,7 @@ Dream insight: [/INST]"""
                         self.recent_speed_override = False
                 else:
                     # Emotion-based speed
-                    base_delay = 300
+                    base_delay = 100
                     if self.current_emotion in ["energetic", "excited", "exhilarated", "electric"]:
                         delay = int(base_delay * 0.5)
                     elif self.current_emotion in ["contemplative", "peaceful", "tranquil", "zen"]:
