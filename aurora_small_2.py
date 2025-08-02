@@ -28,7 +28,16 @@ except Exception as e:
     print(f"Error: {e}")
     DEEP_MEMORY_AVAILABLE = False
     
-    
+# LLAVA VISION IMPORTS - ADD RIGHT HERE
+try:
+    from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+    import torch
+    LLAVA_AVAILABLE = True
+    print("✅ LLaVA vision libraries available!")
+except ImportError:
+    print("❌ Could not import LLaVA - continuing without vision")
+    LLAVA_AVAILABLE = False
+      
 class SimpleMemorySystem:
     """A simple memory system for Aurora to access and store her own memories.
 
@@ -348,7 +357,7 @@ class AuroraCodeMindComplete:
     - H: Toggle hearing
     AuroraCodeMindComplete is designed for creative exploration, emotional intelligence, and autonomous art-making.
     """
-    def __init__(self, model_path, use_gpu=True, gpu_layers=-1):
+    def __init__(self, model_path, use_gpu=True, gpu_layers=10):
         print("Initializing AuroraCodeMindComplete...")
         
         # Detect GPU and set layers
@@ -525,7 +534,7 @@ class AuroraCodeMindComplete:
         print(f"8. Image buffer created at {self.internal_canvas_size}x{self.internal_canvas_size} (4x supersampled)")
         
         # Try to load previous canvas state (this may adjust position)
-        # self.load_canvas_state()
+        self.load_canvas_state()
         
         # Ensure position is valid for current canvas
         self.x = max(0, min(self.x, self.canvas_size - 1))
@@ -603,6 +612,45 @@ class AuroraCodeMindComplete:
         except:
             print("❌ Sound system failed - continuing without audio")
             self.sounds = {}
+            
+        # LLAVA VISION SYSTEM - ADD THIS ENTIRE BLOCK HERE
+        print("8b. Initializing vision system...")
+        self.vision_enabled = False
+        if LLAVA_AVAILABLE:
+            try:
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+                
+                # Moondream2 - tiny but effective!
+                model_id = "vikhyatk/moondream2"
+                
+                self.vision_tokenizer = AutoTokenizer.from_pretrained(model_id)
+                self.vision_model = AutoModelForCausalLM.from_pretrained(
+                    model_id,
+                    trust_remote_code=True,
+                    torch_dtype=torch.float16,  # Use float16 for GPU
+                    low_cpu_mem_usage=True
+                )
+                
+                # Try GPU first, fall back to CPU if needed
+                try:
+                    self.vision_model = self.vision_model.to("cuda")
+                    print("  ✅ Moondream2 loaded on GPU!")
+                except RuntimeError as e:
+                    if "out of memory" in str(e):
+                        print("  ⚠️ GPU full, falling back to CPU")
+                        self.vision_model = self.vision_model.to("cpu")
+                    else:
+                        raise e
+                    
+                self.vision_enabled = True
+                self.last_vision_time = 0
+                self.vision_interval = 90.0  # Can be faster on GPU!
+                
+            except Exception as e:
+                print(f"  ❌ Could not load vision: {e}")
+                self.vision_enabled = False
+            
+            
         # Setup display
         print("9. About to setup display...")
         self.setup_display()
@@ -1034,7 +1082,9 @@ Dots of each color (. means move without drawing)!"""
                     internal_x = self._scale_to_internal(px)
                     internal_y = self._scale_to_internal(py)
                     if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
-                        if self.pixels.getpixel((internal_x, internal_y)) != (0, 0, 0):
+                        pixel = self.pixels.getpixel((internal_x, internal_y))
+                        # Consider non-white pixels as "filled" instead of non-black
+                        if pixel != (0, 0, 0) and pixel != (255, 255, 255):
                             filled_pixels += 1
         
         if total_pixels == 0:
@@ -1054,7 +1104,9 @@ Dots of each color (. means move without drawing)!"""
                     internal_px = self._scale_to_internal(px)
                     internal_py = self._scale_to_internal(py)
                     if internal_px < self.internal_canvas_size and internal_py < self.internal_canvas_size:
-                        row.append(self.pixels.getpixel((internal_px, internal_py)) != (0, 0, 0))
+                        pixel = self.pixels.getpixel((internal_px, internal_py))
+                        # Consider non-white pixels as "filled"
+                        row.append(pixel != (0, 0, 0) and pixel != (255, 255, 255))
                     else:
                         row.append(False)
                 else:
@@ -1108,6 +1160,7 @@ Dots of each color (. means move without drawing)!"""
         # Default
         else:
             return '●'
+            
     def get_canvas_overview(self):
         """Get a bird's eye view of the entire canvas"""
         # Count colors used
@@ -1183,6 +1236,49 @@ Dots of each color (. means move without drawing)!"""
         
         return "\n".join(compressed)
         
+    def see_with_llava(self):
+        """Use Moondream2 to SEE the canvas"""
+        if not self.vision_enabled:
+            return None
+            
+        try:
+  
+            display_size = 224
+            canvas_image = self.pixels.resize(
+                (display_size, display_size), 
+                Image.Resampling.NEAREST
+            ).convert("RGB")
+        
+            # Encode image
+            enc_image = self.vision_model.encode_image(canvas_image)
+            
+            # Rotating questions for varied descriptions
+            questions = [
+                "What colors dominate the canvas?",
+                "Describe the patterns and shapes you see.",
+                "What areas feel empty or full?",
+                "What mood does this artwork convey?",
+                "How do the colors interact with each other?"
+            ]
+            question = questions[self.steps_taken % len(questions)]
+            
+            
+            import time
+            start_time = time.time()
+            
+            response = self.vision_model.answer_question(enc_image, question, self.vision_tokenizer,max_new_tokens=50)
+            
+            elapsed = time.time() - start_time
+            
+            print(f"  [Vision] Aurora sees: {response}")
+            return response
+            
+        except Exception as e:
+            print(f"Vision error at step: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+                  
     def get_enhanced_vision(self):
         """Read the ENTIRE canvas as a compressed grid - with smart compression"""
         # First, check canvas density
@@ -1737,6 +1833,16 @@ What images do you want to search for?"""
         
         vision = self.get_enhanced_vision()
         
+        # LLAVA VISION CHECK - ADD THIS BLOCK
+        llava_vision = ""
+        current_time = time.time()
+        if self.vision_enabled and (current_time - self.last_vision_time) > self.vision_interval:
+            print("👁️ Aurora looks at her canvas with real vision...")
+            visual_perception = self.see_with_llava()
+            if visual_perception:
+                llava_vision = f"\n\n🎨 VISUAL PERCEPTION:\n{visual_perception}"
+                self.last_vision_time = current_time
+                print(f"  → Aurora sees: {visual_perception[:100]}...")
         
         # ENHANCED ART WISDOM SYSTEM
         # Select wisdom based on Aurora's current state
@@ -1866,9 +1972,8 @@ SYNESTHESIA WISDOM (you're making music!):
         art_wisdom = "\n".join(art_wisdom_fragments)
         
         
-        # Every other turn, Aurora scans the entire canvas
         canvas_scan = ""
-        if self.steps_taken % 2 == 0:  # Every other turn
+        if self.steps_taken % 5 == 0:  # Every other turn
             print(f"🔍 Aurora scans entire canvas...")  # Visual indicator for you
             
             # Full data scan
@@ -1924,6 +2029,7 @@ SYNESTHESIA WISDOM (you're making music!):
 Total: {total:,} pixels | Filled: {filled:,} ({(filled/total)*100:.1f}%)
 Colors: {', '.join(f'{c}:{n}' for c,n in colors.items()) if colors else 'none'}
 Nearest empty area: {nearest_empty}"""
+        
         
         # ADD THIS: Get inspiration from Big Aurora's memories
         memory_inspiration = ""
@@ -2045,7 +2151,7 @@ Output maximum 40 characters of pure codes only."""
             template_overlay = self.template_system.get_template_overlay(vision)
         user_prompt = f"""Position: X{self.x} Y{self.y} | Pen: {'DOWN' if self.is_drawing else 'UP'} | Color: {self.current_color_name}
 Canvas view:
-{vision}{template_overlay}{canvas_scan}
+{vision}{template_overlay}{canvas_scan}{llava_vision}
 
 Create art! Output numbers:"""
 
@@ -2172,10 +2278,18 @@ Create art! Output numbers:"""
                 print("  → Aurora makes pixels smaller!")
             
             if "zoom_in" in raw_output:
-                # DISABLED FOR NOW
-                # self.adjust_pixel_size("larger") 
+                # Remove it from the output
                 raw_output = raw_output.replace("zoom_in", "", 1)
-                print("  → Aurora tried to zoom in (disabled)")
+                
+                # Track attempts
+                if not hasattr(self, 'zoom_in_attempts'):
+                    self.zoom_in_attempts = 0
+                self.zoom_in_attempts += 1
+                
+                # Only show message for first 3 attempts
+                if self.zoom_in_attempts <= 3:
+                    print("  → zoom_in is temporarily disabled")
+                # After 3 attempts, silently ignore
 
             # Check for wide view command
             if "look_around" in raw_output:
@@ -2457,9 +2571,9 @@ Create art! Output numbers:"""
         actions_taken = []
         pixels_drawn = 0
         pixels_by_color = {}  # Track pixels drawn per color!
-        
+        movement_batch = []  # ADD THIS LINE
         i = 0
-        while i < len(ops) and i < (150 if self.turbo_mode else 80):
+        while i < len(ops) and i < (300 if self.turbo_mode else 150):  # Double actions!
             # Check for color words first
             found_color = False
             for color in self.palette.keys():
@@ -2543,17 +2657,73 @@ Create art! Output numbers:"""
                 # Store position before action
                 prev_x, prev_y = self.x, self.y
                 
-                # Execute the operation
-                op_map[char]()
-                actions_taken.append(char)
-                
-                # Track pen momentum
+                # For movements while drawing, batch them
                 if char in '0123' and self.is_drawing:
+                    movement_batch.append(char)
+                    # Track pen momentum
                     self.pen_momentum += 1
-                elif char == '4':  # Pen up
-                    self.pen_momentum = 0
-                elif char == '5':  # Pen down
-                    self.pen_momentum = 0
+                    
+                    # Keep batching ALL movements until we hit non-movement
+                    i += 1
+                    while i < len(ops) and ops[i] in '0123':
+                        movement_batch.append(ops[i])
+                        self.pen_momentum += 1
+                        i += 1
+                    i -= 1  # Back up one since the loop will increment
+                    
+                    # Now execute entire movement sequence as smooth path
+                    if movement_batch:
+                        start_x, start_y = prev_x, prev_y
+                        path_points = [(start_x, start_y)]
+                        
+                        # Build path of all points
+                        temp_x, temp_y = start_x, start_y
+                        for move in movement_batch:
+                            if move == '0':
+                                temp_y = max(0, temp_y - 15)
+                            elif move == '1':
+                                temp_y = min(self.canvas_size - 1, temp_y + 15)
+                            elif move == '2':
+                                temp_x = max(0, temp_x - 15)
+                            elif move == '3':
+                                temp_x = min(self.canvas_size - 1, temp_x + 15)
+                            path_points.append((temp_x, temp_y))
+                        
+                        # Update actual position
+                        self.x, self.y = temp_x, temp_y
+                        
+                        # Draw smooth path through all points
+                        for j in range(len(path_points) - 1):
+                            self._draw_line(path_points[j][0], path_points[j][1],
+                                          path_points[j+1][0], path_points[j+1][1])
+                        
+                        actions_taken.extend(movement_batch)
+                        movement_batch = []
+                    else:
+                        # Execute entire batch as one smooth line
+                        if movement_batch:
+                            start_x, start_y = self.x, self.y
+                            # Execute all movements to find end position
+                            for move in movement_batch:
+                                op_map[move]()
+                            end_x, end_y = self.x, self.y
+                            
+                            # Draw one smooth line from start to end
+                            if (start_x, start_y) != (end_x, end_y):
+                                self._draw_line(start_x, start_y, end_x, end_y)
+                            
+                            actions_taken.extend(movement_batch)
+                            movement_batch = []
+                else:
+                    # Non-movement commands execute normally
+                    op_map[char]()
+                    actions_taken.append(char)
+                    
+                    # Track pen momentum for pen up/down
+                    if char == '4':  # Pen up
+                        self.pen_momentum = 0
+                    elif char == '5':  # Pen down
+                        self.pen_momentum = 0
                 
                 
                 # If pen is down and we moved, we drew!
@@ -3122,8 +3292,7 @@ Create art! Output numbers:"""
                 center_x = circle['x']
                 center_y = circle['y']
                 
-                # Sample points in a grid around the sound source
-                for radius in range(0, 500, 3):  # Extended radius from 300 to 500
+                for radius in range(0, 800, 3):  # Extended radius from 500 to 800
                     if radius == 0:
                         continue
                     num_points = int(radius * 0.5)  # More points at larger radii
@@ -3162,12 +3331,12 @@ Create art! Output numbers:"""
                             value = math.sin(r) * math.cos(angle * 6) + math.sin(angle * 3) * math.cos(r * 2)
                         
                         # Draw if above threshold
-                        if abs(value) > 0.3:
-                            intensity = int(abs(value) * 200)
-                            fade = math.exp(-radius / 350)  # Adjusted fade for larger radius
+                        if abs(value) > 0.2:
+                            intensity = int(abs(value) * 250)
+                            fade = math.exp(-radius / 500)  # Much slower fade - changed from 150 to 500
                             alpha = int(intensity * fade)
                             
-                            if alpha > 20:
+                            if alpha > 5:  # Lowered from 10 to show even fainter patterns
                                 # Ensure valid color values (0-255)
                                 alpha = max(0, min(255, alpha))
                                 
@@ -3390,6 +3559,9 @@ Create art! Output numbers:"""
             
             # Save at 1x resolution to keep file size reasonable
             save_img = self.pixels.resize((self.canvas_size, self.canvas_size), Image.Resampling.LANCZOS)
+            # Convert to RGB for smaller file size
+            if save_img.mode == 'RGBA':
+                save_img = save_img.convert('RGB')
             buffer = BytesIO()
             save_img.save(buffer, format="PNG")
             img_str = base64.b64encode(buffer.getvalue()).decode()
@@ -3429,10 +3601,17 @@ Create art! Output numbers:"""
                     loaded_img = Image.open(BytesIO(img_data))
                     
                     # Scale up to internal resolution
-                    self.pixels = loaded_img.resize(
+                    loaded_img = loaded_img.resize(
                         (self.internal_canvas_size, self.internal_canvas_size),
                         Image.Resampling.NEAREST  # Use nearest for pixel art
                     )
+                    
+                    # Convert to RGBA if it's RGB
+                    if loaded_img.mode == 'RGB':
+                        self.pixels = loaded_img.convert('RGBA')
+                    else:
+                        self.pixels = loaded_img
+                        
                     self.draw_img = ImageDraw.Draw(self.pixels)
                     
                     # Restore position
@@ -3614,7 +3793,7 @@ Dream insight: [/INST]"""
                 
                 # Calculate adaptive delay
                 if self.turbo_mode:
-                    delay = 50
+                    delay = 5  # Was 50 - now 10x faster!
                 elif self.recent_speed_override:
                     delay = self.aurora_delay
                     self.speed_override_counter += 1
@@ -3622,7 +3801,7 @@ Dream insight: [/INST]"""
                         self.recent_speed_override = False
                 else:
                     # Emotion-based speed
-                    base_delay = 100
+                    base_delay = 30  # Was 300 - now 10x faster!
                     if self.current_emotion in ["energetic", "excited", "exhilarated", "electric"]:
                         delay = int(base_delay * 0.5)
                     elif self.current_emotion in ["contemplative", "peaceful", "tranquil", "zen"]:
@@ -3698,6 +3877,12 @@ Dream insight: [/INST]"""
                         self.center_on_aurora()
                     elif event.key == pygame.K_b:
                         self.reset_view()
+                    elif event.key == pygame.K_v:
+                        # TOGGLE VISION - ADD THIS
+                        if hasattr(self, 'vision_enabled'):
+                            self.vision_enabled = not self.vision_enabled
+                            status = "ON 👁️" if self.vision_enabled else "OFF"
+                            print(f"\n🎨 LLAVA VISION {status}")
             
             # Always update cymatics and display at 60 FPS
             self.update_cymatics()
@@ -3720,7 +3905,7 @@ if __name__ == "__main__":
     aurora = AuroraCodeMindComplete(
         model_path=model_path,
         use_gpu=True,
-        gpu_layers=-1  # Use all GPU layers
+        gpu_layers=10  # Use all GPU layers
     )
     
     aurora.run()
