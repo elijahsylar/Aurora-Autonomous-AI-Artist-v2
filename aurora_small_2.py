@@ -644,7 +644,7 @@ class AuroraCodeMindComplete:
                     
                 self.vision_enabled = True
                 self.last_vision_time = 0
-                self.vision_interval = 90.0  # Can be faster on GPU!
+                self.vision_interval = 60.0  # Can be faster on GPU!
                 
             except Exception as e:
                 print(f"  ❌ Could not load vision: {e}")
@@ -1083,8 +1083,8 @@ Dots of each color (. means move without drawing)!"""
                     internal_y = self._scale_to_internal(py)
                     if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
                         pixel = self.pixels.getpixel((internal_x, internal_y))
-                        # Consider non-white pixels as "filled" instead of non-black
-                        if pixel != (0, 0, 0) and pixel != (255, 255, 255):
+                        # Consider ANY non-black pixels as "filled"
+                        if pixel != (0, 0, 0) and pixel != (0, 0, 0, 255):  # Check both RGB and RGBA black
                             filled_pixels += 1
         
         if total_pixels == 0:
@@ -1105,8 +1105,8 @@ Dots of each color (. means move without drawing)!"""
                     internal_py = self._scale_to_internal(py)
                     if internal_px < self.internal_canvas_size and internal_py < self.internal_canvas_size:
                         pixel = self.pixels.getpixel((internal_px, internal_py))
-                        # Consider non-white pixels as "filled"
-                        row.append(pixel != (0, 0, 0) and pixel != (255, 255, 255))
+                        # Consider ANY non-black pixels as "filled"
+                        row.append(pixel != (0, 0, 0) and pixel != (0, 0, 0, 255))
                     else:
                         row.append(False)
                 else:
@@ -1174,11 +1174,12 @@ Dots of each color (. means move without drawing)!"""
                 internal_y = self._scale_to_internal(y)
                 if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
                     pixel = self.pixels.getpixel((internal_x, internal_y))
-                    if pixel != (0, 0, 0):  # Not black/empty
+                    # Check for RGBA black too!
+                    if pixel != (0, 0, 0) and pixel != (0, 0, 0, 255):  # Not black/empty
                         total_pixels += 1
                         # Find which color this is
                         for name, rgb in self.palette.items():
-                            if pixel == rgb:
+                            if pixel == rgb or (len(pixel) == 4 and pixel[:3] == rgb):
                                 color_counts[name] = color_counts.get(name, 0) + 1
                                 break
         
@@ -1190,7 +1191,6 @@ Dots of each color (. means move without drawing)!"""
             overview += "Colors used: " + ", ".join(f"{color}:{count}" for color, count in color_counts.items())
         
         return overview
-        
     def get_compressed_canvas_view(self):
         """Get a highly compressed view of the canvas for reflection"""
         # Sample the canvas at regular intervals
@@ -1248,17 +1248,15 @@ Dots of each color (. means move without drawing)!"""
                 (display_size, display_size), 
                 Image.Resampling.NEAREST
             ).convert("RGB")
-        
             # Encode image
             enc_image = self.vision_model.encode_image(canvas_image)
             
             # Rotating questions for varied descriptions
             questions = [
-                "What colors dominate the canvas?",
-                "Describe the patterns and shapes you see.",
-                "What areas feel empty or full?",
-                "What mood does this artwork convey?",
-                "How do the colors interact with each other?"
+                "What objects or forms can you identify in this image?",
+                "Describe the composition - where are the main elements positioned?",
+                "What shapes are present and how are they arranged?",
+                "What is the focal point and how does the eye move through the image?"
             ]
             question = questions[self.steps_taken % len(questions)]
             
@@ -1563,19 +1561,20 @@ Recent creations: {', '.join(list(self.color_history)[-5:])} colors used
 
 What would you like to do?"""
 
-            # Llama 2 Chat format
-            full_prompt = f"""[INST] <<SYS>>
-{system_prompt}
-<</SYS>>
-
-{user_prompt} [/INST]"""
+            # Qwen format
+            full_prompt = f"""<|im_start|>system
+{system_prompt}<|im_end|>
+<|im_start|>user
+{user_prompt}<|im_end|>
+<|im_start|>assistant
+"""
             
             try:
                 response = self.llm(
                     full_prompt, 
                     max_tokens=10,
                     temperature=0.7,
-                    stop=["[INST]", "</s>", "\n"],
+                    stop=["<|im_end|>", "<|im_start|>", "\n"],  # Changed stop tokens
                     stream=False
                 )
                 
@@ -1657,11 +1656,12 @@ Current drawing tool: {self.draw_mode}
 Share what's on your mind. How are you feeling about your artwork? 
 What have you discovered? What are you thinking about?"""
 
-                full_prompt = f"""[INST] <<SYS>>
-{system_prompt}
-<</SYS>>
-
-{user_prompt} [/INST]"""
+                full_prompt = f"""<|im_start|>system
+{system_prompt}<|im_end|>
+<|im_start|>user
+{user_prompt}<|im_end|>
+<|im_start|>assistant
+"""
                 
                 try:
                     response = self.llm(
@@ -1669,7 +1669,7 @@ What have you discovered? What are you thinking about?"""
                         max_tokens=400,  # Longer for a complete thought
                         temperature=0.9,
                         top_p=0.95,
-                        stop=["[INST]", "</s>"],
+                        stop=["<|im_end|>", "<|im_start|>"],
                         stream=False
                     )
                     
@@ -1702,19 +1702,21 @@ Keep it brief this time - just 1-2 paragraphs."""
 Current emotion: {self.current_emotion}
 Anything else you'd like to share or explore?"""
 
-                full_prompt = f"""[INST] <<SYS>>
-{system_prompt}
-<</SYS>>
-
-{user_prompt} [/INST]"""
+                # Qwen format
+                full_prompt = f"""<|im_start|>system
+{system_prompt}<|im_end|>
+<|im_start|>user
+{user_prompt}<|im_end|>
+<|im_start|>assistant
+"""
                 
                 try:
                     response = self.llm(
                         full_prompt, 
-                        max_tokens=150,
+                        max_tokens=400,  # Longer for a complete thought
                         temperature=0.9,
                         top_p=0.95,
-                        stop=["[INST]", "</s>"],
+                        stop=["<|im_end|>", "<|im_start|>"],  # Changed stop tokens
                         stream=False
                     )
                     
@@ -2097,7 +2099,6 @@ magenta lime navy
 
 VIEW CONTROLS (full words):
 zoom_out (smaller pixels, see more)
-zoom_in (larger pixels, see less)
 look_around (wide view of canvas)
 full_canvas (see ENTIRE canvas at once)
 center (teleport to center of canvas)
@@ -2120,7 +2121,6 @@ DRAWING TOOLS (full words):
 pen brush spray large_brush larger_brush star cross circle diamond flower
 
 🚧 TEMPORARY CREATIVE CHALLENGE 🚧
-zoom_in and stamp tools (star, cross, circle, diamond, flower) are disabled!
 This limitation will push you to explore new creative territories:
 - Focus on brush strokes and continuous movements
 - Try a template to master imagery
@@ -2236,12 +2236,13 @@ Create art! Output numbers:"""
             system_prompt += f"\nTry this pattern: {creativity_boosters[pattern_index]}"
             print(f"  💫 Giving Aurora creativity boost: {creativity_boosters[pattern_index][:30]}...")
 
-        # Llama 2 Chat format
-        full_prompt = f"""[INST] <<SYS>>
-{system_prompt}
-<</SYS>>
-
-{user_prompt} [/INST]"""
+        # Qwen format
+        full_prompt = f"""<|im_start|>system
+{system_prompt}<|im_end|>
+<|im_start|>user
+{user_prompt}<|im_end|>
+<|im_start|>assistant
+"""
         
         try:
             # Temperature based on canvas coverage
@@ -2256,7 +2257,7 @@ Create art! Output numbers:"""
                 top_p=0.95,
                 top_k=40,  # Limit top K for faster sampling
                 repeat_penalty=1.3,
-                stop=["[INST]", "</s>", "\n\n"],
+                stop=["<|im_end|>", "<|im_start|>", "\n\n"],
                 tfs_z=1.0,  # Tail free sampling for quality
                 mirostat_mode=0,  # Disable mirostat for speed
                 stream=False  # No streaming for faster generation
@@ -2277,19 +2278,16 @@ Create art! Output numbers:"""
                 raw_output = raw_output.replace("zoom_out", "", 1)  # Remove first occurrence
                 print("  → Aurora makes pixels smaller!")
             
-            if "zoom_in" in raw_output:
-                # Remove it from the output
-                raw_output = raw_output.replace("zoom_in", "", 1)
-                
-                # Track attempts
+            # COMPLETELY REMOVE ALL zoom_in occurrences
+            while "zoom_in" in raw_output:
+                raw_output = raw_output.replace("zoom_in", "")
                 if not hasattr(self, 'zoom_in_attempts'):
                     self.zoom_in_attempts = 0
                 self.zoom_in_attempts += 1
                 
-                # Only show message for first 3 attempts
-                if self.zoom_in_attempts <= 3:
-                    print("  → zoom_in is temporarily disabled")
-                # After 3 attempts, silently ignore
+            # Only show message for first 3 attempts
+            if hasattr(self, 'zoom_in_attempts') and self.zoom_in_attempts > 0 and self.zoom_in_attempts <= 3:
+                print("  → zoom_in is temporarily disabled")
 
             # Check for wide view command
             if "look_around" in raw_output:
@@ -3638,13 +3636,14 @@ Current emotion: {self.current_emotion}
 
 Describe a brief, simple dream fragment (1-2 sentences). Focus on colors, shapes, or movements."""
             
-            full_prompt = f"""[INST] <<SYS>>
-{dream_prompt}
-<</SYS>>
-
-Dream: [/INST]"""
+            full_prompt = f"""<|im_start|>system
+{dream_prompt}<|im_end|>
+<|im_start|>user
+Dream:<|im_end|>
+<|im_start|>assistant
+"""
             
-            response = self.llm(full_prompt, max_tokens=50, temperature=0.9, stop=["[INST]", "</s>"])
+            response = self.llm(full_prompt, max_tokens=50, temperature=0.9, stop=["<|im_end|>", "<|im_start|>"])
             dream = response['choices'][0]['text'].strip()
             
             self.current_dreams.append({
@@ -3701,20 +3700,14 @@ Dreams you had:
 
 What artistic inspiration or insight do you take from these dreams? (1-2 sentences)"""
                 
-                full_prompt = f"""[INST] <<SYS>>
-{reflection_prompt}
-<</SYS>>
-
-Dream insight: [/INST]"""
+                full_prompt = f"""<|im_start|>system
+{reflection_prompt}<|im_end|>
+<|im_start|>user
+Dream insight:<|im_end|>
+<|im_start|>assistant
+"""
                 
-                response = self.llm(full_prompt, max_tokens=60, temperature=0.8, stop=["[INST]", "</s>"])
-                insight = response['choices'][0]['text'].strip()
-                
-                self.current_dreams.append({
-                    "phase": "waking",
-                    "content": insight,
-                    "timestamp": datetime.now().isoformat()
-                })
+                response = self.llm(full_prompt, max_tokens=60, temperature=0.8, stop=["<|im_end|>", "<|im_start|>"])
                 
                 print(f"\n✨ Dream insight: {insight}")
                 
@@ -3899,7 +3892,7 @@ Dream insight: [/INST]"""
 # Usage example
 if __name__ == "__main__":
     # Path to your model
-    model_path = "./models/llama-2-7b-chat.Q4_K_M.gguf" # Update this path
+    model_path = "./models/qwen2.5-3b-instruct-q4_k_m.gguf"
     
     # Create and run Aurora
     aurora = AuroraCodeMindComplete(
