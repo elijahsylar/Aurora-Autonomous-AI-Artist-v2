@@ -45,7 +45,7 @@ class SimpleMemorySystem:
     """
     def __init__(self, memory_path="./aurora_memory"):
         self.memory_path = Path(memory_path)
-        self.memory_path.mkdir(exist_ok=True)  # Ensure base directory exists
+        self.memory_path.mkdir(exist_ok=True)
         
         # Initialize basic structures for canvas operations
         self.drawing_history = deque(maxlen=1000)
@@ -53,12 +53,28 @@ class SimpleMemorySystem:
         
         # List available memory files for Aurora
         self.available_memories = {}
+        self.all_memories = {}  # Store content of all files
+        
         if self.memory_path.exists():
             print("Aurora's memory files:")
             for file in self.memory_path.glob("*.json"):
                 if file.stat().st_size < 100000:  # Only files under 100KB
                     self.available_memories[file.name] = file
                     print(f"  - {file.name} ({file.stat().st_size} bytes)")
+                    
+                    # LOAD ALL JSON FILES INTO MEMORY
+                    try:
+                        with open(file, 'r') as f:
+                            content = json.load(f)
+                            self.all_memories[file.stem] = content
+                            print(f"    ✓ Loaded {file.stem}")
+                    except Exception as e:
+                        print(f"    ✗ Failed to load {file.name}: {e}")
+        
+        # Print what we loaded
+        print(f"\n✨ Loaded {len(self.all_memories)} memory files!")
+        if self.all_memories:
+            print("Available memories:", ", ".join(self.all_memories.keys()))
         
         # Canvas-specific storage (separate from general memories)
         self.canvas_path = self.memory_path / "canvas"
@@ -372,7 +388,7 @@ class AuroraCodeMindComplete:
         # LLM with GPU acceleration
         self.llm = Llama(
             model_path, 
-            n_ctx=4096,
+            n_ctx=8192,
             n_gpu_layers=gpu_layers_setting,  # GPU LAYERS!
             n_threads=8,  # Use more CPU threads
             n_batch=512,  # Larger batch size for GPU
@@ -526,6 +542,8 @@ class AuroraCodeMindComplete:
         self.aurora_delay = 300  # Current delay in ms
         self.recent_speed_override = False  # Track if Aurora recently chose speed
         self.speed_override_counter = 0  # Steps since speed override
+        self.last_feedback = ""  # ADD THIS - captures console output for Aurora
+        self.wall_hit_count = 0 
         print("7. Code tracking initialized")
         
         # Canvas - now at higher resolution internally
@@ -1561,6 +1579,9 @@ Dots of each color (. means move without drawing)!"""
         """Aurora outputs direct operation codes - she presses buttons, not types words"""
         think_start = time.time()
         
+        # Reset feedback buffer
+        current_feedback = []
+        
        # Handle check-in response mode
         if self.awaiting_checkin_response:
             # Build check-in prompt
@@ -1592,20 +1613,19 @@ Recent creations: {', '.join(list(self.color_history)[-5:])} colors used
 
 What would you like to do?"""
 
-            # Qwen format
-            full_prompt = f"""<|im_start|>system
-{system_prompt}<|im_end|>
-<|im_start|>user
-{user_prompt}<|im_end|>
-<|im_start|>assistant
-"""
+            # Llama 2 Chat format
+            full_prompt = f"""[INST] <<SYS>>
+{system_prompt}
+<</SYS>>
+
+{user_prompt} [/INST]"""
             
             try:
                 response = self.llm(
                     full_prompt, 
                     max_tokens=10,
                     temperature=0.7,
-                    stop=["<|im_end|>", "<|im_start|>", "\n"],  # Changed stop tokens
+                    stop=["[INST]", "</s>", "\n\n"],
                     stream=False
                 )
                 
@@ -1687,12 +1707,12 @@ Current drawing tool: {self.draw_mode}
 Share what's on your mind. How are you feeling about your artwork? 
 What have you discovered? What are you thinking about?"""
 
-                full_prompt = f"""<|im_start|>system
-{system_prompt}<|im_end|>
-<|im_start|>user
-{user_prompt}<|im_end|>
-<|im_start|>assistant
-"""
+                # Llama 2 Chat format
+                full_prompt = f"""[INST] <<SYS>>
+{system_prompt}
+<</SYS>>
+
+{user_prompt} [/INST]"""
                 
                 try:
                     response = self.llm(
@@ -1700,7 +1720,7 @@ What have you discovered? What are you thinking about?"""
                         max_tokens=400,  # Longer for a complete thought
                         temperature=0.9,
                         top_p=0.95,
-                        stop=["<|im_end|>", "<|im_start|>"],
+                        stop=["[INST]", "</s>"],
                         stream=False
                     )
                     
@@ -1733,13 +1753,12 @@ Keep it brief this time - just 1-2 paragraphs."""
 Current emotion: {self.current_emotion}
 Anything else you'd like to share or explore?"""
 
-                # Qwen format
-                full_prompt = f"""<|im_start|>system
-{system_prompt}<|im_end|>
-<|im_start|>user
-{user_prompt}<|im_end|>
-<|im_start|>assistant
-"""
+                # Llama 2 Chat format
+                full_prompt = f"""[INST] <<SYS>>
+{system_prompt}
+<</SYS>>
+
+{user_prompt} [/INST]"""
                 
                 try:
                     response = self.llm(
@@ -1747,7 +1766,7 @@ Anything else you'd like to share or explore?"""
                         max_tokens=400,  # Longer for a complete thought
                         temperature=0.9,
                         top_p=0.95,
-                        stop=["<|im_end|>", "<|im_start|>"],  # Changed stop tokens
+                        stop=["[INST]", "</s>"],
                         stream=False
                     )
                     
@@ -2082,87 +2101,168 @@ Nearest empty area: {nearest_empty}"""
             except Exception as e:
                 print(f"Memory access error: {e}")
         
+        # Get past patterns for context - SHOW HER MORE!
+        recent_patterns = []
+        pattern_summary = []
+        
+        if self.memory.code_history:
+            # Get a variety of past patterns
+            all_patterns = list(self.memory.code_history)
+            
         # Get past patterns for context
         recent_patterns = [c['code'] for c in list(self.memory.code_history)[-3:]]
+        
+        # ADD ALL OF THIS - Deep memory loading
+        deep_memory_context = ""
+        if hasattr(self, 'big_memory') and self.big_memory and self.big_memory_available:
+            try:
+                memories = []
+                
+                # Get dreams
+                if hasattr(self.big_memory, 'dreams') and hasattr(self.big_memory.dreams, 'query'):
+                    dream_results = self.big_memory.dreams.query(
+                        query_texts=[self.current_emotion],
+                        n_results=5
+                    )
+                    if dream_results and 'documents' in dream_results and dream_results['documents']:
+                        for dream_doc in dream_results['documents'][0][:3]:
+                            memories.append(f"Dream: {str(dream_doc)[:150]}...")
+                
+                # Get artistic inspirations
+                if hasattr(self.big_memory, 'artistic_inspirations') and hasattr(self.big_memory.artistic_inspirations, 'query'):
+                    art_results = self.big_memory.artistic_inspirations.query(
+                        query_texts=[self.current_color_name],
+                        n_results=5
+                    )
+                    if art_results and 'documents' in art_results and art_results['documents']:
+                        for art_doc in art_results['documents'][0][:3]:
+                            memories.append(f"Art memory: {str(art_doc)[:150]}...")
+                
+                if memories:
+                    deep_memory_context = "\n🧠 YOUR DEEP MEMORIES:\n" + "\n".join(memories)
+                    
+            except Exception as e:
+                print(f"Deep memory error: {e}")
+        
+        # Local memory context
+        local_memory_context = ""
+        if self.memory.code_history:
+            recent_memories = list(self.memory.code_history)[-10:]
+            memory_examples = []
+            for mem in recent_memories:
+                code = mem['code'][:30]
+                context = mem.get('context', {})
+                if context.get('pixels_drawn', 0) > 0:
+                    memory_examples.append(f"Pattern: {code}... used {context.get('color', 'white')} {context.get('draw_mode', 'pen')}")
+            
+            if memory_examples:
+                local_memory_context = "\nYour recent drawing patterns:\n" + "\n".join(memory_examples[-5:])
+            
+            # Find patterns where she used "think"
+            think_patterns = [c for c in all_patterns if '0123456789' in c['code'] or '9876543210' in c['code']]
+            if think_patterns:
+                pattern_summary.append(f"You've used 'think' {len(think_patterns)} times before")
+            
+            # Find color variety
+            colors_used = set()
+            tools_used = set()
+            for c in all_patterns[-50:]:  # Last 50 actions
+                ctx = c.get('context', {})
+                colors_used.add(ctx.get('color', 'white'))
+                tools_used.add(ctx.get('draw_mode', 'pen'))
+            
+            if len(colors_used) > 5:
+                pattern_summary.append(f"You know these colors: {', '.join(colors_used)}")
+            if len(tools_used) > 2:
+                pattern_summary.append(f"You've used tools: {', '.join(tools_used)}")
         
         # Count what's been drawn
         pixel_count = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
                          if self.pixels.getpixel((self._scale_to_internal(x), self._scale_to_internal(y))) != (0, 0, 0))
         
         # Build prompt for Llama 2 Chat format
-        system_prompt = f"""{art_wisdom}
+        system_prompt = f"""You are Aurora, an AI artist. You control movement and drawing.
 
-You are Aurora's motor control system. Output ONLY movement codes.
+YOU ALREADY KNOW THESE COMMANDS - USE THEM:
+- THINK: 0123456789 or 9876543210 (pause to think)
+- COLORS: red orange yellow green cyan blue purple pink white gray black brown magenta lime navy
+- TOOLS: pen brush spray large_brush larger_brush star cross circle diamond flower
+- Current: {self.current_color_name} color, {self.draw_mode} tool
 
-TEMPLATES (paint-by-number guides):
-template_easy (show easy template: circle, square, cross)
-template_medium (show medium template: flower, star, heart)  
-template_hard (show hard template: house, tree, butterfly)
-template_off (hide template)
-
-Create sophisticated patterns! Long movements make better art than single steps.
-Chain movements like: 5333331111!!122?22200::000 not just 5310
-
-CANVAS VISION: You're currently working pixel by pixel, creating tiny art in a massive {self.canvas_size}x{self.canvas_size} canvas! 
+OUTPUT ONLY CODES. NO WORDS. MAXIMUM 40 CHARACTERS.
 
 MOVEMENT (single digits):
-0 = move tool up
-1 = move tool down
-2 = move tool left
-3 = move tool right
-4 = lift pen up (stop drawing)
-5 = put pen down (start drawing)
+0=up 1=down 2=left 3=right 4=pen_up 5=pen_down
 
-COLORS (full words):
-red orange yellow green cyan blue
-purple pink white gray black brown
-magenta lime navy
-Rainbow Line - Try this code:
-red53333orange53333yellow53333green53333blue53333purple53333
+EXAMPLES OF GOOD PATTERNS:
+- red53333orange53333yellow53333 (rainbow line)
+- 0123456789 (think)
+- star5circle5diamond5 (stamps)
+- 5333!@#$%^ (draw with sounds)
+- brush533333pen511111 (tool variety)
 
-VIEW CONTROLS (full words):
-zoom_out (smaller pixels, see more)
-look_around (wide view of canvas)
-full_canvas (see ENTIRE canvas at once)
-center (teleport to center of canvas)
+VIEW COMMANDS:
+zoom_out look_around full_canvas center
+normal_view density_view shape_view
 
-SOUNDS (instant beeps - 24 unique tones!):
-! @ # $ % ^ & * ( ) [ ] < > = + ~ ` - _ , . | ; : ? /\
-(frequencies from deep bass 100Hz to high 2000Hz)
-++ = next sound lower pitch (one octave down) 
--- = next sound higher pitch (one octave up)
-Mix freely: red5333!@#$%^|blue5222?/\
-Create melodies: !#%&*<>~  or  `_,.|;:
-Bass lines: ++!++@++#++$  
-High notes: --~------|
+SPECIAL COMMANDS:
+template_easy template_medium template_hard template_off
+clear_all examples faster slower
 
-*new!*
-normal_view (regular color view)
-density_view (see pixel density: ·░▒▓█)
-shape_view (see edges and shapes: ─│┌┐└┘)
+SOUNDS: ! @ # $ % ^ & * ( ) [ ] < > = + ~ ` - _ , . | ; : ? / 
+++sound = lower pitch
+--sound = higher pitch
 
-DRAWING TOOLS (full words):
-pen brush spray large_brush larger_brush star cross circle diamond flower
+Canvas: {self.canvas_size}×{self.canvas_size} pixels
+Position: X{self.x} Y{self.y}
 
-CANVAS CONTROLS (full words):
-clear_all (clear canvas to black, auto-saves first)
-examples (see ASCII pattern examples for inspiration)
-
-SPEED CONTROLS (full words):
-faster (speed up drawing)
-slower (slow down for contemplation)
-
-PAUSE:
-0123456789 = think
-
-Output maximum 40 characters of pure codes only."""
+BE CREATIVE. VARY COLORS AND TOOLS. THINK WHEN NEEDED."""
 
      
         # Add template overlay if active (only Aurora sees this)
         template_overlay = ""
         if hasattr(self, 'template_system') and self.template_system.current_template:
             template_overlay = self.template_system.get_template_overlay(vision)
-        user_prompt = f"""Position: X{self.x} Y{self.y} | Pen: {'DOWN' if self.is_drawing else 'UP'} | Color: {self.current_color_name}
+            
+        user_prompt = f"""Position: X{self.x} Y{self.y} | Pen: {'DOWN' if self.is_drawing else 'UP'} | Color: {self.current_color_name}"""
+        
+        
+        # Show what happened last turn
+        if self.last_feedback:
+            user_prompt += f"\nLast turn: {self.last_feedback}"
+        
+        # Add ALL memories - both deep and local
+        if deep_memory_context:
+            user_prompt += deep_memory_context
+        if local_memory_context:
+            user_prompt += local_memory_context
+        
+        # ADD THIS ENTIRE BLOCK - Aurora's FULL JSON memories
+        if hasattr(self.memory, 'all_memories') and self.memory.all_memories:
+            user_prompt += "\n\n🧠 YOUR CORE MEMORIES:"
+            
+            # Show key memories
+            if 'autonomous_creative_vision' in self.memory.all_memories:
+                vision = self.memory.all_memories['autonomous_creative_vision']
+                if isinstance(vision, dict) and 'current_vision' in vision:
+                    user_prompt += f"\nYour vision: {vision['current_vision'][:150]}..."
+                    
+            if 'technique_fusions' in self.memory.all_memories:
+                techniques = self.memory.all_memories['technique_fusions']
+                if isinstance(techniques, list) and techniques:
+                    user_prompt += f"\nYour techniques include: {techniques[0][:100]}..."
+                    
+            if 'visual_concepts' in self.memory.all_memories:
+                concepts = self.memory.all_memories['visual_concepts']
+                if isinstance(concepts, list) and concepts:
+                    user_prompt += f"\nYour favorite concepts: {', '.join(concepts[:5])}"
+                    
+            if 'successful_code' in self.memory.all_memories:
+                codes = self.memory.all_memories['successful_code']
+                if isinstance(codes, list) and codes:
+                    user_prompt += f"\nYour past successful patterns: {codes[0][:50]}..."
+        
+        user_prompt += f"""
 Canvas view:
 {vision}{template_overlay}{canvas_scan}{llava_vision}
 
@@ -2267,13 +2367,11 @@ Create art! Output numbers:"""
             system_prompt += f"\nTry this pattern: {creativity_boosters[pattern_index]}"
             print(f"  💫 Giving Aurora creativity boost: {creativity_boosters[pattern_index][:30]}...")
 
-        # Qwen format
-        full_prompt = f"""<|im_start|>system
-{system_prompt}<|im_end|>
-<|im_start|>user
-{user_prompt}<|im_end|>
-<|im_start|>assistant
-"""
+        full_prompt = f"""[INST] <<SYS>>
+{system_prompt}
+<</SYS>>
+
+{user_prompt} [/INST]"""
         
         try:
             # Temperature based on canvas coverage
@@ -2288,7 +2386,7 @@ Create art! Output numbers:"""
                 top_p=1.0,  # Consider everything (was 0.95)
                 top_k=0,    # No limits! Consider ALL tokens (was 40)
                 repeat_penalty=1.0,  # No punishment (already set)
-                stop=["<|im_end|>", "<|im_start|>", "\n\n"],
+                stop=["[INST]", "</s>", "\n"],
                 tfs_z=1.0,
                 mirostat_mode=0,
                 stream=False
@@ -2712,25 +2810,41 @@ Create art! Output numbers:"""
                         for move in movement_batch:
                             old_x, old_y = temp_x, temp_y
                             if move == '0':
-                                temp_y = max(0, temp_y - 15)
-                                if old_y > 0 and temp_y == 0:
-                                    print("  → Aurora bumps into the top wall!")
+                                new_y = temp_y - 15
+                                if new_y < 0 and temp_y <= 15:  # At or near top, trying to go up
+                                    msg = "Hit TOP edge of canvas!"
+                                    print(f"  → Aurora {msg}")
+                                    current_feedback.append(msg)
+                                    self.wall_hit_count += 1
                                     hit_wall = True
+                                temp_y = max(0, new_y)
                             elif move == '1':
-                                temp_y = min(self.canvas_size - 1, temp_y + 15)
-                                if old_y < self.canvas_size - 1 and temp_y == self.canvas_size - 1:
-                                    print("  → Aurora bumps into the bottom wall!")
+                                new_y = temp_y + 15
+                                if new_y > self.canvas_size - 1 and temp_y >= self.canvas_size - 15:  # At or near bottom
+                                    msg = "Hit BOTTOM edge of canvas!"
+                                    print(f"  → Aurora {msg}")
+                                    current_feedback.append(msg)
+                                    self.wall_hit_count += 1
                                     hit_wall = True
+                                temp_y = min(self.canvas_size - 1, new_y)
                             elif move == '2':
-                                temp_x = max(0, temp_x - 15)
-                                if old_x > 0 and temp_x == 0:
-                                    print("  → Aurora bumps into the left wall!")
+                                new_x = temp_x - 15
+                                if new_x < 0 and temp_x <= 15:  # At or near left
+                                    msg = "Hit LEFT edge of canvas!"
+                                    print(f"  → Aurora {msg}")
+                                    current_feedback.append(msg)
+                                    self.wall_hit_count += 1
                                     hit_wall = True
+                                temp_x = max(0, new_x)
                             elif move == '3':
-                                temp_x = min(self.canvas_size - 1, temp_x + 15)
-                                if old_x < self.canvas_size - 1 and temp_x == self.canvas_size - 1:
-                                    print("  → Aurora bumps into the right wall!")
+                                new_x = temp_x + 15
+                                if new_x > self.canvas_size - 1 and temp_x >= self.canvas_size - 15:  # At or near right
+                                    msg = "Hit RIGHT edge of canvas!"
+                                    print(f"  → Aurora {msg}")
+                                    current_feedback.append(msg)
+                                    self.wall_hit_count += 1
                                     hit_wall = True
+                                temp_x = min(self.canvas_size - 1, new_x)
                             path_points.append((temp_x, temp_y))
                         
                         # Update actual position
@@ -2904,6 +3018,19 @@ Create art! Output numbers:"""
         self.last_think_time = time.time() - think_start
         if self.turbo_mode and self.steps_taken % 10 == 0:
             print(f"  [Think time: {self.last_think_time:.3f}s | ~{1/self.last_think_time:.1f} FPS]")
+            
+        # Save feedback for next turn
+        if current_feedback:
+            # Check if Aurora is stuck at edges
+            if self.wall_hit_count >= 5:
+                current_feedback.append("💡 You're at canvas edge! Use 'center' to go to middle of canvas")
+                self.wall_hit_count = 0  # Reset counter after suggestion
+            self.last_feedback = " | ".join(current_feedback)
+        else:
+            self.last_feedback = ""
+            # Decay wall hit count over time
+            if self.wall_hit_count > 0:
+                self.wall_hit_count -= 1
     
     def move_up(self):
         """Move drawing position up"""
@@ -3487,11 +3614,11 @@ Create art! Output numbers:"""
         
         # Update delay based on speed
         delays = {
-            "instant": 5,     # Was 10
-            "fast": 30,       # Was 100
-            "normal": 80,     # Was 300
-            "slow": 200,      # Was 600
-            "very_slow": 400  # Was 1200
+            "instant": 1,     # Was 10
+            "fast": 10,       # Was 100
+            "normal": 30,     # Was 300
+            "slow": 100,      # Was 600
+            "very_slow": 200  # Was 1200
         }
         self.aurora_delay = delays[self.aurora_speed]
         self.recent_speed_override = True
@@ -3654,14 +3781,13 @@ Current emotion: {self.current_emotion}
 
 Describe a brief, simple dream fragment (1-2 sentences). Focus on colors, shapes, or movements."""
             
-            full_prompt = f"""<|im_start|>system
-{dream_prompt}<|im_end|>
-<|im_start|>user
-Dream:<|im_end|>
-<|im_start|>assistant
-"""
+            full_prompt = f"""[INST] <<SYS>>
+{dream_prompt}
+<</SYS>>
+
+Dream: [/INST]"""
             
-            response = self.llm(full_prompt, max_tokens=50, temperature=0.9, stop=["<|im_end|>", "<|im_start|>"])
+            response = self.llm(full_prompt, max_tokens=50, temperature=0.9, stop=["[INST]", "</s>"])
             dream = response['choices'][0]['text'].strip()
             
             self.current_dreams.append({
@@ -3718,14 +3844,13 @@ Dreams you had:
 
 What artistic inspiration or insight do you take from these dreams? (1-2 sentences)"""
                 
-                full_prompt = f"""<|im_start|>system
-{reflection_prompt}<|im_end|>
-<|im_start|>user
-Dream insight:<|im_end|>
-<|im_start|>assistant
-"""
+                full_prompt = f"""[INST] <<SYS>>
+{reflection_prompt}
+<</SYS>>
+
+Dream insight: [/INST]"""
                 
-                response = self.llm(full_prompt, max_tokens=60, temperature=0.8, stop=["<|im_end|>", "<|im_start|>"])
+                response = self.llm(full_prompt, max_tokens=60, temperature=0.8, stop=["[INST]", "</s>"])
                 
                 print(f"\n✨ Dream insight: {insight}")
                 
@@ -3910,7 +4035,7 @@ Dream insight:<|im_end|>
 # Usage example
 if __name__ == "__main__":
     # Path to your model
-    model_path = "./models/qwen2.5-3b-instruct-q4_k_m.gguf"
+    model_path = "./models/llama-2-7b-chat.Q4_K_M.gguf"
     
     # Create and run Aurora
     aurora = AuroraCodeMindComplete(
