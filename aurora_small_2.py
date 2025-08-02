@@ -644,7 +644,7 @@ class AuroraCodeMindComplete:
                     
                 self.vision_enabled = True
                 self.last_vision_time = 0
-                self.vision_interval = 60.0  # Can be faster on GPU!
+                self.vision_interval = 30.0  # Can be faster on GPU!
                 
             except Exception as e:
                 print(f"  ❌ Could not load vision: {e}")
@@ -732,7 +732,7 @@ class AuroraCodeMindComplete:
             return
             
         # More steps for longer lines to ensure smoothness
-        steps = max(int(distance * 2), 1)
+        steps = max(int(distance * 0.15), 1)
         
         for i in range(steps + 1):
             t = i / steps
@@ -973,6 +973,13 @@ Dots of each color (. means move without drawing)!"""
                         else:
                             # Normal color view
                             pixel = self.pixels.getpixel((scaled_px, scaled_py))
+                            # Handle RGBA format
+                            if len(pixel) == 4:  # RGBA
+                                if pixel[3] == 0 or (pixel[0] == 0 and pixel[1] == 0 and pixel[2] == 0):
+                                    row += "·"  # Empty/transparent/black
+                                else:
+                                    pixel = pixel[:3]  # Convert to RGB for color matching
+                                    
                             if pixel == (0, 0, 0):
                                 row += "·"  # Empty/Black
                             elif pixel == (255, 255, 255):
@@ -1083,9 +1090,14 @@ Dots of each color (. means move without drawing)!"""
                     internal_y = self._scale_to_internal(py)
                     if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
                         pixel = self.pixels.getpixel((internal_x, internal_y))
-                        # Consider ANY non-black pixels as "filled"
-                        if pixel != (0, 0, 0) and pixel != (0, 0, 0, 255):  # Check both RGB and RGBA black
-                            filled_pixels += 1
+                        # Check for non-black pixels - handle both RGB and RGBA
+                        if len(pixel) == 4:  # RGBA
+                            # Not black if RGB values are non-zero OR alpha is not fully opaque
+                            if (pixel[0] != 0 or pixel[1] != 0 or pixel[2] != 0) and pixel[3] > 0:
+                                filled_pixels += 1
+                        else:  # RGB
+                            if pixel != (0, 0, 0):
+                                filled_pixels += 1
         
         if total_pixels == 0:
             return 0
@@ -1105,8 +1117,12 @@ Dots of each color (. means move without drawing)!"""
                     internal_py = self._scale_to_internal(py)
                     if internal_px < self.internal_canvas_size and internal_py < self.internal_canvas_size:
                         pixel = self.pixels.getpixel((internal_px, internal_py))
-                        # Consider ANY non-black pixels as "filled"
-                        row.append(pixel != (0, 0, 0) and pixel != (0, 0, 0, 255))
+                        # Check for non-black pixels - handle both RGB and RGBA
+                        if len(pixel) == 4:  # RGBA
+                            # Not black if RGB values are non-zero AND alpha is visible
+                            row.append((pixel[0] != 0 or pixel[1] != 0 or pixel[2] != 0) and pixel[3] > 0)
+                        else:  # RGB
+                            row.append(pixel != (0, 0, 0))
                     else:
                         row.append(False)
                 else:
@@ -1242,24 +1258,39 @@ Dots of each color (. means move without drawing)!"""
             return None
             
         try:
-  
             display_size = 224
             canvas_image = self.pixels.resize(
                 (display_size, display_size), 
                 Image.Resampling.NEAREST
             ).convert("RGB")
-            # Encode image
-            enc_image = self.vision_model.encode_image(canvas_image)
             
-            # Rotating questions for varied descriptions
+            # ADD THIS BLOCK - Draw Aurora's position on the image for Moondream
+            from PIL import ImageDraw
+            temp_image = canvas_image.copy()
+            temp_draw = ImageDraw.Draw(temp_image)
+            # Scale Aurora's position to the display size
+            aurora_x = int(self.x * display_size / self.canvas_size)
+            aurora_y = int(self.y * display_size / self.canvas_size)
+            # Draw a gray/white indicator
+            indicator_color = (200, 200, 200) if self.is_drawing else (128, 128, 128)
+            temp_draw.ellipse([aurora_x-3, aurora_y-3, aurora_x+3, aurora_y+3], 
+                            fill=indicator_color, outline=(255, 255, 255))
+            
+            # Encode the modified image (not the original!)
+            enc_image = self.vision_model.encode_image(temp_image)
+            
+            # Aurora-aware questions - embed all context in the question
+            pen_status = "with pen down" if self.is_drawing else "with pen up"
+            color_info = f"using {self.current_color_name}"
+            mode_info = f"in {self.draw_mode} mode"
+            
             questions = [
-                "What objects or forms can you identify in this image?",
-                "Describe the composition - where are the main elements positioned?",
-                "What shapes are present and how are they arranged?",
-                "What is the focal point and how does the eye move through the image?"
+                f"I'm Aurora, an AI artist (the gray dot {pen_status} {color_info}). What am I creating here?",
+                f"As an AI artist at the gray dot {mode_info}, what patterns am I forming? Be technical.",
+                f"I'm Aurora (gray dot, {color_info}). Analyze my position relative to nearby patterns.",
+                f"Aurora here (gray dot {pen_status}). What's the geometric relationship between my position and surrounding elements?"
             ]
             question = questions[self.steps_taken % len(questions)]
-            
             
             import time
             start_time = time.time()
@@ -2063,9 +2094,6 @@ Nearest empty area: {nearest_empty}"""
 
 You are Aurora's motor control system. Output ONLY movement codes.
 
-CRITICAL: NO ENGLISH WORDS. NO EXPLANATIONS. CODES ONLY.
-
-
 TEMPLATES (paint-by-number guides):
 template_easy (show easy template: circle, square, cross)
 template_medium (show medium template: flower, star, heart)  
@@ -2073,16 +2101,9 @@ template_hard (show hard template: house, tree, butterfly)
 template_off (hide template)
 
 Create sophisticated patterns! Long movements make better art than single steps.
-Chain movements like: 533333111112222200000 not just 5310
+Chain movements like: 5333331111!!122?22200::000 not just 5310
 
 CANVAS VISION: You're currently working pixel by pixel, creating tiny art in a massive {self.canvas_size}x{self.canvas_size} canvas! 
-Think BIGGER! You have powerful tools:
-- larger_brush (7x7) can paint broad strokes
-- large_brush (5x5) for medium strokes  
-- brush (3x3) for small strokes
-- pen for tiny details
-- stamps (star, cross, circle, diamond, flower) for patterns
-- zoom_out to see your whole canvas
 
 MOVEMENT (single digits):
 0 = move tool up
@@ -2096,37 +2117,14 @@ COLORS (full words):
 red orange yellow green cyan blue
 purple pink white gray black brown
 magenta lime navy
+Rainbow Line - Try this code:
+red53333orange53333yellow53333green53333blue53333purple53333
 
 VIEW CONTROLS (full words):
 zoom_out (smaller pixels, see more)
 look_around (wide view of canvas)
 full_canvas (see ENTIRE canvas at once)
 center (teleport to center of canvas)
-
-*new!*
-normal_view (regular color view)
-density_view (see pixel density: ·░▒▓█)
-shape_view (see edges and shapes: ─│┌┐└┘)
-
-CANVAS CONTROLS (full words):
-clear_all (clear canvas to black, auto-saves first)
-examples (see ASCII pattern examples for inspiration)
-
-
-SPEED CONTROLS (full words):
-faster (speed up drawing)
-slower (slow down for contemplation)
-
-DRAWING TOOLS (full words):
-pen brush spray large_brush larger_brush star cross circle diamond flower
-
-🚧 TEMPORARY CREATIVE CHALLENGE 🚧
-This limitation will push you to explore new creative territories:
-- Focus on brush strokes and continuous movements
-- Try a template to master imagery
-- Create texture through repetition and layering
-- Expand your skills in sequence creating
-Your constraints will make you more creative, not less!
 
 SOUNDS (instant beeps - 24 unique tones!):
 ! @ # $ % ^ & * ( ) [ ] < > = + ~ ` - _ , . | ; : ? /\
@@ -2138,9 +2136,24 @@ Create melodies: !#%&*<>~  or  `_,.|;:
 Bass lines: ++!++@++#++$  
 High notes: --~------|
 
+*new!*
+normal_view (regular color view)
+density_view (see pixel density: ·░▒▓█)
+shape_view (see edges and shapes: ─│┌┐└┘)
+
+DRAWING TOOLS (full words):
+pen brush spray large_brush larger_brush star cross circle diamond flower
+
+CANVAS CONTROLS (full words):
+clear_all (clear canvas to black, auto-saves first)
+examples (see ASCII pattern examples for inspiration)
+
+SPEED CONTROLS (full words):
+faster (speed up drawing)
+slower (slow down for contemplation)
+
 PAUSE:
 0123456789 = think
-
 
 Output maximum 40 characters of pure codes only."""
 
@@ -2160,6 +2173,24 @@ Create art! Output numbers:"""
             overview = self.get_canvas_overview()  # Define overview FIRST
             wide_vision = self.see(zoom_out=True)   # Then get wide vision
             vision = f"{overview}\n\n=== WIDE VIEW ===\n{wide_vision}\n\n=== NORMAL VIEW ===\n{vision}"
+        
+        # Tool variety check - simple version
+        if not hasattr(self, 'tool_use_count'):
+            self.tool_use_count = 0
+            self.last_tool_logged = self.draw_mode
+            
+        if self.draw_mode == self.last_tool_logged:
+            self.tool_use_count += 1
+        else:
+            self.tool_use_count = 0
+            self.last_tool_logged = self.draw_mode
+            
+        if self.tool_use_count >= 15:  # Changed from 50 to 15
+            tool_suggestions = ["Try spray for dots!", "Try star stamps!", 
+                              "Try larger_brush for big strokes!", "Try pen for fine details!",
+                              "Try flower stamps!", "Try circle stamps!"]
+            import random
+            system_prompt += f"\n💡 You've used {self.draw_mode} for {self.tool_use_count} turns! {random.choice(tool_suggestions)}"
         
         # Creativity prompts to vary patterns
         creativity_boosters = [
@@ -2253,14 +2284,14 @@ Create art! Output numbers:"""
             response = self.llm(
                 full_prompt, 
                 max_tokens=100 if not self.turbo_mode else 180,
-                temperature=temp,  # Dynamic temperature
-                top_p=0.95,
-                top_k=40,  # Limit top K for faster sampling
-                repeat_penalty=1.3,
+                temperature=temp,  # Keep dynamic (0.7-1.5 based on canvas)
+                top_p=1.0,  # Consider everything (was 0.95)
+                top_k=0,    # No limits! Consider ALL tokens (was 40)
+                repeat_penalty=1.0,  # No punishment (already set)
                 stop=["<|im_end|>", "<|im_start|>", "\n\n"],
-                tfs_z=1.0,  # Tail free sampling for quality
-                mirostat_mode=0,  # Disable mirostat for speed
-                stream=False  # No streaming for faster generation
+                tfs_z=1.0,
+                mirostat_mode=0,
+                stream=False
             )
             
             # Extract the generated text
@@ -2478,30 +2509,30 @@ Create art! Output numbers:"""
                 print("  → Aurora switches to larger brush mode! (28x28)")
                 raw_output = raw_output.replace("larger_brush", "", 1)
             
-            # if "star" in raw_output:
-            #     self.draw_mode = "star"
-            #     print("  → Aurora switches to star stamp mode!")
-            #     raw_output = raw_output.replace("star", "", 1)
-            #     
-            # if "cross" in raw_output:
-            #     self.draw_mode = "cross"
-            #     print("  → Aurora switches to cross stamp mode!")
-            #     raw_output = raw_output.replace("cross", "", 1)
-            # 
-            # if "circle" in raw_output:
-            #     self.draw_mode = "circle"
-            #     print("  → Aurora switches to circle stamp mode!")
-            #     raw_output = raw_output.replace("circle", "", 1)
-            # 
-            # if "diamond" in raw_output:
-            #     self.draw_mode = "diamond"
-            #     print("  → Aurora switches to diamond stamp mode!")
-            #     raw_output = raw_output.replace("diamond", "", 1)
-            # 
-            # if "flower" in raw_output:
-            #     self.draw_mode = "flower"
-            #     print("  → Aurora switches to flower stamp mode!")
-            #     raw_output = raw_output.replace("flower", "", 1)
+            if "star" in raw_output:
+                self.draw_mode = "star"
+                print("  → Aurora switches to star stamp mode!")
+                raw_output = raw_output.replace("star", "", 1)
+               
+            if "cross" in raw_output:
+                self.draw_mode = "cross"
+                print("  → Aurora switches to cross stamp mode!")
+                raw_output = raw_output.replace("cross", "", 1)
+            
+            if "circle" in raw_output:
+                self.draw_mode = "circle"
+                print("  → Aurora switches to circle stamp mode!")
+                raw_output = raw_output.replace("circle", "", 1)
+            
+            if "diamond" in raw_output:
+               self.draw_mode = "diamond"
+               print("  → Aurora switches to diamond stamp mode!")
+               raw_output = raw_output.replace("diamond", "", 1)
+           
+            if "flower" in raw_output:
+                self.draw_mode = "flower"
+                print("  → Aurora switches to flower stamp mode!")
+                raw_output = raw_output.replace("flower", "", 1)
             # ===== NOW DO SEQUENCE PARSING ON REMAINING TEXT =====
             # Check if it's the thinking pattern FIRST (before any cleaning)
             if "0123456789" in raw_output or "123456789" in raw_output or "9876543210" in raw_output:
@@ -2636,7 +2667,7 @@ Create art! Output numbers:"""
                         'birth_time': time.time()  # Add this
                     })
     
-                    pygame.time.wait(50)
+                    pygame.time.wait(10)
                     actions_taken.append(f"♪{char}")
                     
                     # Music affects emotions
@@ -2670,21 +2701,36 @@ Create art! Output numbers:"""
                     i -= 1  # Back up one since the loop will increment
                     
                     # Now execute entire movement sequence as smooth path
+                    # Now execute entire movement sequence as smooth path
                     if movement_batch:
                         start_x, start_y = prev_x, prev_y
                         path_points = [(start_x, start_y)]
                         
-                        # Build path of all points
+                        # Build path of all points and check for walls
                         temp_x, temp_y = start_x, start_y
+                        hit_wall = False
                         for move in movement_batch:
+                            old_x, old_y = temp_x, temp_y
                             if move == '0':
                                 temp_y = max(0, temp_y - 15)
+                                if old_y > 0 and temp_y == 0:
+                                    print("  → Aurora bumps into the top wall!")
+                                    hit_wall = True
                             elif move == '1':
                                 temp_y = min(self.canvas_size - 1, temp_y + 15)
+                                if old_y < self.canvas_size - 1 and temp_y == self.canvas_size - 1:
+                                    print("  → Aurora bumps into the bottom wall!")
+                                    hit_wall = True
                             elif move == '2':
                                 temp_x = max(0, temp_x - 15)
+                                if old_x > 0 and temp_x == 0:
+                                    print("  → Aurora bumps into the left wall!")
+                                    hit_wall = True
                             elif move == '3':
                                 temp_x = min(self.canvas_size - 1, temp_x + 15)
+                                if old_x < self.canvas_size - 1 and temp_x == self.canvas_size - 1:
+                                    print("  → Aurora bumps into the right wall!")
+                                    hit_wall = True
                             path_points.append((temp_x, temp_y))
                         
                         # Update actual position
@@ -2697,31 +2743,6 @@ Create art! Output numbers:"""
                         
                         actions_taken.extend(movement_batch)
                         movement_batch = []
-                    else:
-                        # Execute entire batch as one smooth line
-                        if movement_batch:
-                            start_x, start_y = self.x, self.y
-                            # Execute all movements to find end position
-                            for move in movement_batch:
-                                op_map[move]()
-                            end_x, end_y = self.x, self.y
-                            
-                            # Draw one smooth line from start to end
-                            if (start_x, start_y) != (end_x, end_y):
-                                self._draw_line(start_x, start_y, end_x, end_y)
-                            
-                            actions_taken.extend(movement_batch)
-                            movement_batch = []
-                else:
-                    # Non-movement commands execute normally
-                    op_map[char]()
-                    actions_taken.append(char)
-                    
-                    # Track pen momentum for pen up/down
-                    if char == '4':  # Pen up
-                        self.pen_momentum = 0
-                    elif char == '5':  # Pen down
-                        self.pen_momentum = 0
                 
                 
                 # If pen is down and we moved, we drew!
@@ -2886,35 +2907,32 @@ Create art! Output numbers:"""
     
     def move_up(self):
         """Move drawing position up"""
-        if self.y > 0:
-            old_y = self.y
-            self.y = max(0, self.y - 15)  # Move 15 pixels
-            if self.is_drawing:
-                self._draw_line(self.x, old_y, self.x, self.y)
+        old_y = self.y
+        self.y = max(0, self.y - 15)
+        if self.is_drawing and old_y != self.y:
+            self._draw_line(self.x, old_y, self.x, self.y)
 
     def move_down(self):
         """Move drawing position down"""
-        if self.y < self.canvas_size - 1:
-            old_y = self.y
-            self.y = min(self.canvas_size - 1, self.y + 15)  # Move 15 pixels
-            if self.is_drawing:
-                self._draw_line(self.x, old_y, self.x, self.y)
-
+        old_y = self.y
+        self.y = min(self.canvas_size - 1, self.y + 15)
+        if self.is_drawing and old_y != self.y:
+            self._draw_line(self.x, old_y, self.x, self.y)
+            
     def move_left(self):
         """Move drawing position left"""
-        if self.x > 0:
-            old_x = self.x
-            self.x = max(0, self.x - 15)  # Move 15 pixels
-            if self.is_drawing:
-                self._draw_line(old_x, self.y, self.x, self.y)
+        old_x = self.x
+        self.x = max(0, self.x - 15)
+        if self.is_drawing and old_x != self.x:
+            self._draw_line(old_x, self.y, self.x, self.y)
 
     def move_right(self):
         """Move drawing position right"""
-        if self.x < self.canvas_size - 1:
-            old_x = self.x
-            self.x = min(self.canvas_size - 1, self.x + 15)  # Move 15 pixels
-            if self.is_drawing:
-                self._draw_line(old_x, self.y, self.x, self.y)
+        old_x = self.x
+        self.x = min(self.canvas_size - 1, self.x + 15)
+        if self.is_drawing and old_x != self.x:
+            self._draw_line(old_x, self.y, self.x, self.y)
+            
     def pen_up(self):
         """Lift the pen (stop drawing)"""
         self.is_drawing = False
@@ -3274,7 +3292,7 @@ Create art! Output numbers:"""
         
         # Fade existing pattern
         fade_surface = pygame.Surface((self.screen.get_width(), self.screen.get_height()), pygame.SRCALPHA)
-        fade_surface.fill((0, 0, 0, 8))
+        fade_surface.fill((0, 0, 0, 20))
         self.cymatic_surface.blit(fade_surface, (0, 0))
         
         # Process new sounds - each creates a standing wave pattern
@@ -3880,7 +3898,7 @@ Dream insight:<|im_end|>
             # Always update cymatics and display at 60 FPS
             self.update_cymatics()
             self.update_display()
-            self.clock.tick(100)
+            self.clock.tick(200)
         
         # Cleanup
         print("\n\nSaving final state...")
