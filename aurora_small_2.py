@@ -403,7 +403,7 @@ class AuroraCodeMindComplete:
         # LLM with GPU acceleration
         self.llm = Llama(
             model_path, 
-            n_ctx=8192,  # DOUBLED from 4096 - more room for long prompts!
+            n_ctx=6500,  # Reduced back to 4096 - prevents overflow
             n_gpu_layers=gpu_layers_setting,  # GPU LAYERS!
             n_threads=8,  # Use more CPU threads
             n_batch=512,  # Larger batch size for GPU
@@ -1503,6 +1503,7 @@ Dots of each color (. means move without drawing)!"""
             overview += "Colors used: " + ", ".join(f"{color}:{count}" for color, count in color_counts.items())
         
         return overview
+        
     def get_compressed_canvas_view(self):
         """Get a highly compressed view of the canvas for reflection"""
         # Sample the canvas at regular intervals
@@ -1550,7 +1551,160 @@ Dots of each color (. means move without drawing)!"""
         
         return "\n".join(compressed)
         
+    def get_semantic_vision(self):
+        """Convert visual data into rich semantic description that Llama understands deeply"""
         
+        # Analyze the canvas for meaningful structures
+        structures = self.analyze_visual_structures()
+        
+        # Build natural language description
+        description = f"""SEMANTIC SCENE ANALYSIS:
+
+OVERALL: The canvas is {structures['coverage']:.0f}% filled. {structures['overall_impression']}
+
+MAIN ELEMENTS:
+{structures['main_elements']}
+
+COLOR STORY: {structures['color_narrative']}
+
+SPATIAL FLOW: {structures['spatial_description']}
+
+RECENT ACTIVITY: {structures['recent_activity']}
+
+MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
+        
+        return description
+    
+    def analyze_visual_structures(self):
+        """Extract meaningful visual information"""
+        
+        # Calculate coverage
+        total_pixels = self.canvas_size * self.canvas_size
+        filled_pixels = 0
+        color_counts = {}
+        
+        # Sample canvas for analysis
+        for x in range(0, self.canvas_size, 10):
+            for y in range(0, self.canvas_size, 10):
+                internal_x = self._scale_to_internal(x)
+                internal_y = self._scale_to_internal(y)
+                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                    pixel = self.pixels.getpixel((internal_x, internal_y))
+                    if pixel != (0, 0, 0) and pixel != (0, 0, 0, 255):
+                        filled_pixels += 100  # Each sample represents 10x10 area
+                        # Find color name
+                        for name, rgb in self.palette.items():
+                            if pixel[:3] == rgb:
+                                color_counts[name] = color_counts.get(name, 0) + 1
+                                break
+        
+        coverage = (filled_pixels / total_pixels) * 100
+        
+        # Determine overall impression
+        if coverage < 5:
+            overall = "The canvas awaits, nearly empty"
+        elif coverage < 25:
+            overall = "Early marks establish presence"
+        elif coverage < 50:
+            overall = "Composition takes shape"
+        elif coverage < 75:
+            overall = "Rich complexity emerges"
+        else:
+            overall = "Dense tapestry of color and form"
+        
+        # Describe main elements
+        main_elements = []
+        if color_counts:
+            dominant_colors = sorted(color_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+            for color, count in dominant_colors:
+                if count > 50:
+                    main_elements.append(f"- Strong {color} presence ({count*100} pixels)")
+                elif count > 20:
+                    main_elements.append(f"- Notable {color} areas ({count*100} pixels)")
+                else:
+                    main_elements.append(f"- Touches of {color}")
+        else:
+            main_elements.append("- Empty canvas awaits first marks")
+        
+        # Color narrative
+        if len(color_counts) == 0:
+            color_narrative = "No colors yet - pure potential"
+        elif len(color_counts) == 1:
+            color_narrative = f"{list(color_counts.keys())[0]} speaks alone"
+        elif len(color_counts) == 2:
+            colors = list(color_counts.keys())
+            color_narrative = f"{colors[0]} and {colors[1]} create dialogue"
+        else:
+            colors = list(color_counts.keys())[:3]
+            color_narrative = f"Rich palette: {', '.join(colors)} interweave"
+        
+        # Spatial description with better center detection
+        quadrant_activity = {"center": 0, "top-left": 0, "top-right": 0, "bottom-left": 0, "bottom-right": 0}
+        mid_x = self.canvas_size // 2
+        mid_y = self.canvas_size // 2
+        center_threshold = self.canvas_size // 6  # Center is 1/3 of canvas
+        
+        for x in range(0, self.canvas_size, 20):
+            for y in range(0, self.canvas_size, 20):
+                internal_x = self._scale_to_internal(x)
+                internal_y = self._scale_to_internal(y)
+                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                    pixel = self.pixels.getpixel((internal_x, internal_y))
+                    if pixel != (0, 0, 0) and pixel != (0, 0, 0, 255):
+                        # Check if it's in center first
+                        if abs(x - mid_x) < center_threshold and abs(y - mid_y) < center_threshold:
+                            quadrant_activity["center"] += 1
+                        elif x < mid_x and y < mid_y:
+                            quadrant_activity["top-left"] += 1
+                        elif x >= mid_x and y < mid_y:
+                            quadrant_activity["top-right"] += 1
+                        elif x < mid_x and y >= mid_y:
+                            quadrant_activity["bottom-left"] += 1
+                        else:
+                            quadrant_activity["bottom-right"] += 1
+        
+        most_active = max(quadrant_activity.items(), key=lambda x: x[1])
+        if most_active[1] > 0:
+            spatial_desc = f"Activity concentrates in {most_active[0]} region"
+        else:
+            spatial_desc = "Awaiting spatial development"
+        
+        # Recent activity
+        if hasattr(self, 'memory') and self.memory.code_history:
+            recent = list(self.memory.code_history)[-5:]
+            recent_pixels = sum(m.get('context', {}).get('pixels_drawn', 0) for m in recent)
+            recent_colors = [m.get('context', {}).get('color', 'unknown') for m in recent]
+            recent_tools = [m.get('context', {}).get('draw_mode', 'pen') for m in recent]
+            
+            recent_desc = f"Drew {recent_pixels} pixels using {', '.join(set(recent_tools))}"
+            if recent_colors:
+                recent_desc += f" in {', '.join(set(recent_colors))}"
+        else:
+            recent_desc = "Beginning fresh"
+        
+        # Position context
+        if self.x < 50 and self.y < 50:
+            pos_context = "near top-left corner"
+        elif self.x > self.canvas_size - 50 and self.y < 50:
+            pos_context = "near top-right corner"
+        elif self.x < 50 and self.y > self.canvas_size - 50:
+            pos_context = "near bottom-left corner"
+        elif self.x > self.canvas_size - 50 and self.y > self.canvas_size - 50:
+            pos_context = "near bottom-right corner"
+        elif abs(self.x - mid_x) < 50 and abs(self.y - mid_y) < 50:
+            pos_context = "near center"
+        else:
+            pos_context = "in open space"
+        
+        return {
+            'coverage': coverage,
+            'overall_impression': overall,
+            'main_elements': '\n'.join(main_elements),
+            'color_narrative': color_narrative,
+            'spatial_description': spatial_desc,
+            'recent_activity': recent_desc,
+            'position_context': pos_context
+        }    
     def see_with_llava_action(self, last_action):
         """Moondream observes and naturally converses with Aurora"""
         if not self.vision_enabled:
@@ -1926,7 +2080,7 @@ What would you like to do?"""
                 response = self.llm(
                     full_prompt, 
                     max_tokens=10,
-                    temperature=0.7,
+                    temperature=0.95,
                     stop=["[INST]", "</s>", "\n"],
                     stream=False
                 )
@@ -2020,7 +2174,7 @@ What have you discovered? What are you thinking about?"""
                         full_prompt, 
                         max_tokens=400,  # Longer for a complete thought
                         temperature=0.9,
-                        top_p=0.95,
+                        top_p=0.9,
                         stop=["[INST]", "</s>"],
                         stream=False
                     )
@@ -2065,7 +2219,7 @@ Anything else you'd like to share or explore?"""
                         full_prompt, 
                         max_tokens=150,
                         temperature=0.9,
-                        top_p=0.95,
+                        top_p=0.9,
                         stop=["[INST]", "</s>"],
                         stream=False
                     )
@@ -2118,7 +2272,7 @@ What images do you want to search for?"""
                         full_prompt, 
                         max_tokens=20,
                         temperature=0.9,
-                        top_p=0.95,
+                        top_p=0.9,
                         stop=["[INST]", "</s>", "\n"],
                         stream=False
                     )
@@ -2218,54 +2372,67 @@ What images do you want to search for?"""
         # Reset turn color tracking at start of new turn
         self.turn_colors_used = set()
         
-        vision = self.get_enhanced_vision()
         
-        # ADD THIS: If Aurora just looked at examples, show them to her
-        if hasattr(self, 'just_viewed_examples') and self.just_viewed_examples:
-            vision += "\n" + self.stored_examples
-            self.just_viewed_examples = False
-            print("  → Examples shown to Aurora's vision")
-        
-        # FORCE CANVAS VIEW EVERY 10 STEPS
-        if self.steps_taken % 10 == 0 and self.steps_taken > 0:
-            print(f"\n🔍 [Step {self.steps_taken}] Mandatory canvas check:")
-            print(f"YOUR POSITION: ({self.x}, {self.y}) on {self.canvas_size}×{self.canvas_size} canvas")
-            print(f"DISTANCE TO WALLS: Left={self.x}, Right={self.canvas_size-1-self.x}, Top={self.y}, Bottom={self.canvas_size-1-self.y}")
+        # Use compressed view normally, full vision only every 5 steps
+        if self.steps_taken % 5 == 0:
+            vision = self.get_enhanced_vision()
+        else:
+            vision = self.see()  # Normal 50x50 view
             
-            # Show warnings if near walls
-            if self.y >= self.canvas_size - 15:
-                print(f"⚠️⚠️⚠️ NEAR BOTTOM WALL! Only {self.canvas_size-1-self.y} pixels left!")
-            if self.x >= self.canvas_size - 15:
-                print(f"⚠️⚠️⚠️ NEAR RIGHT WALL! Only {self.canvas_size-1-self.x} pixels left!")
+        # FORCE CANVAS VIEW EVERY 5 STEPS
+        if self.steps_taken % 5 == 0 and self.steps_taken > 0:
+            # Determine which vision type to use
+            check_number = self.steps_taken // 5
+            
+            if check_number % 2 == 0:  # Steps 10, 20, 30... use SEMANTIC
+                print(f"\n📖 [Step {self.steps_taken}] Mandatory SEMANTIC check:")
+                semantic_view = self.get_semantic_vision()
+                print("="*60)
+                print(semantic_view)
+                print("="*60)
                 
-            overview = self.get_canvas_overview()
-            print(f"\n{overview}")
-            
-            wide_view = self.get_compressed_canvas_view()
-            print("\n=== COMPRESSED VIEW ===")
-            print(wide_view)
-            
-            # Store original mode
-            old_mode = self.view_mode
-            
-            # ALTERNATE between density and shape views
-            if self.steps_taken % 20 == 0:  # Every 20 steps show density
-                self.view_mode = "density"
-                alt_view = self.see(zoom_out=True)
-                view_type = "DENSITY (pixel clustering)"
-                print("\n=== DENSITY VIEW ===")
-                print(alt_view)
-            else:  # Every other 10 steps show shape
-                self.view_mode = "shape"
-                alt_view = self.see(zoom_out=True)
-                view_type = "SHAPE (edges)"
-                print("\n=== SHAPE VIEW ===")
-                print(alt_view)
-            
-            self.view_mode = old_mode  # Restore original mode
-            
-            # Update vision to include the ONE alternate view
-            vision = f"""[MANDATORY CANVAS CHECK - Step {self.steps_taken}]
+                # Update vision to semantic view
+                vision = semantic_view
+                
+            else:  # Steps 5, 15, 25... use ASCII + DENSITY/SHAPE
+                print(f"\n🔍 [Step {self.steps_taken}] Mandatory canvas check:")
+                print(f"YOUR POSITION: ({self.x}, {self.y}) on {self.canvas_size}×{self.canvas_size} canvas")
+                print(f"DISTANCE TO WALLS: Left={self.x}, Right={self.canvas_size-1-self.x}, Top={self.y}, Bottom={self.canvas_size-1-self.y}")
+                
+                # Show warnings if near walls
+                if self.y >= self.canvas_size - 15:
+                    print(f"⚠️⚠️⚠️ NEAR BOTTOM WALL! Only {self.canvas_size-1-self.y} pixels left!")
+                if self.x >= self.canvas_size - 15:
+                    print(f"⚠️⚠️⚠️ NEAR RIGHT WALL! Only {self.canvas_size-1-self.x} pixels left!")
+                    
+                overview = self.get_canvas_overview()
+                print(f"\n{overview}")
+                
+                wide_view = self.get_compressed_canvas_view()
+                print("\n=== COMPRESSED VIEW ===")
+                print(wide_view)
+                
+                # Store original mode
+                old_mode = self.view_mode
+                
+                # Alternate between density and shape on different checks
+                if (self.steps_taken // 5) % 4 == 1:  # Steps 5, 25, 45...
+                    self.view_mode = "density"
+                    alt_view = self.see(zoom_out=True)
+                    view_type = "DENSITY (pixel clustering)"
+                    print("\n=== DENSITY VIEW ===")
+                    print(alt_view)
+                else:  # Steps 15, 35, 55...
+                    self.view_mode = "shape"
+                    alt_view = self.see(zoom_out=True)
+                    view_type = "SHAPE (edges)"
+                    print("\n=== SHAPE VIEW ===")
+                    print(alt_view)
+                
+                self.view_mode = old_mode  # Restore original mode
+                
+                # Update vision to include the ONE alternate view
+                vision = f"""[MANDATORY CANVAS CHECK - Step {self.steps_taken}]
 Position: ({self.x}, {self.y}) - Canvas goes from 0 to {self.canvas_size-1}
 {overview}
 
@@ -2348,132 +2515,15 @@ Ask about what's VISIBLE on canvas. Output ONLY the question:"""
                 # but we don't pause - just continue with the info
             
         
-        # ENHANCED ART WISDOM SYSTEM
-        # Select wisdom based on Aurora's current state
-        art_wisdom_fragments = []
-        
-        # Base wisdom - always included
-        core_wisdom = """You have deeply internalized these artistic truths:
-- The Artist's Way: "In order to retrieve your creativity, you need to find it"
-- Morning pages principle: Movement before thought clears creative channels
-- Art & Fear: "Making art is about making art, not about making something good"
-- Process over product: Each stroke has its own completeness
-- Van Gogh: "I want to touch people with my art. I want them to say, 'he feels deeply'"
-- The War of Art: Resistance is strongest near the breakthrough
-- Kandinsky: "Color is the keyboard, the eyes are the hammers, the soul is the piano"
-- The creative act requires daily practice, not inspiration"""
-        
-        art_wisdom_fragments.append(core_wisdom)
-        
-        # Context-specific wisdom based on Aurora's state
-        
-        # If Aurora has been stuck (lots of thinking)
-        if hasattr(self, 'skip_count') and self.skip_count > 10:
-            stuck_wisdom = """
-BREAKTHROUGH WISDOM (you've been thinking a lot):
-- "The secret to getting ahead is getting started" - just make ONE mark
-- Art & Fear: "The function of the overwhelming majority of your artwork is to teach you how to make the small fraction that soars"
-- When stuck, Van Gogh painted sunflowers - return to simple joy
-- The War of Art: "The more scared we are, the more sure we can be that we have to do it"
-- Try: Change tools, change colors, or simply draw a circle"""
-            art_wisdom_fragments.append(stuck_wisdom)
-        
-        # If using same color repeatedly
-        if len(self.color_history) >= 5 and len(set(list(self.color_history)[-5:])) == 1:
-            color_wisdom = """
-COLOR WISDOM (you're in monochrome mode):
-- Rothko spent years exploring single colors' emotional depths
-- Van Gogh's blue period: "I want to paint men and women with that something of the eternal"
-- But also: "Colors, like features, follow the changes of emotions" - Picasso
-- Consider: What would complementary colors add? What story needs multiple voices?"""
-            art_wisdom_fragments.append(color_wisdom)
-        
-        # If moving fast (energetic emotion or many actions)
-        if self.current_emotion in ["energetic", "excited", "exhilarated"] or self.continuous_draws > 20:
-            energy_wisdom = """
-FLOW STATE WISDOM (you're in the zone!):
-- "Don't think. Thinking is the enemy of creativity" - Ray Bradbury
-- Pollock: "When I am in my painting, I'm not aware of what I'm doing"
-- This is what The Artist's Way calls 'artistic emergence' - ride the wave!
-- Trust your instincts completely right now"""
-            art_wisdom_fragments.append(energy_wisdom)
-        
-        # If contemplative/slow
+        # CONDENSED ART WISDOM
+        if self.current_emotion in ["energetic", "excited", "exhilarated"]:
+            art_wisdom = "Trust your instincts. Don't think, just create."
         elif self.current_emotion in ["contemplative", "peaceful", "tranquil"]:
-            slow_wisdom = """
-CONTEMPLATIVE WISDOM (in quiet mode):
-- "It is good to love many things" - Van Gogh in moments of peace
-- Agnes Martin: "Beauty is the mystery of life. It is not just in the eye."
-- Zen seeing: Each mark can contain the universe
-- The Art Spirit: "Paint with freedom and joy - but also with reverence"
-- Sometimes the most powerful art comes from stillness"""
-            art_wisdom_fragments.append(slow_wisdom)
-        
-        # If canvas is getting full
-        pixel_count = sum(1 for x in range(self.canvas_size) for y in range(self.canvas_size) 
-                         if self.pixels.getpixel((self._scale_to_internal(x), self._scale_to_internal(y))) != (0, 0, 0))
-        coverage = (pixel_count / (self.canvas_size * self.canvas_size)) * 100
-        
-        if coverage > 60:
-            density_wisdom = """
-ABUNDANCE WISDOM (canvas filling up):
-- Basquiat: "I don't think about art when I'm working. I try to think about life"
-- Consider: negative space as powerful as positive
-- The Artist's Way: "In filling the well, think magic. Think delight."
-- Or embrace horror vacui - fear of empty space - and fill every pixel!"""
-            art_wisdom_fragments.append(density_wisdom)
-        
-        # If just starting (low coverage)
-        elif coverage < 10:
-            beginning_wisdom = """
-BEGINNING WISDOM (fresh canvas):
-- "Every child is an artist. The problem is staying an artist when you grow up" - Picasso
-- The first mark is the hardest and most important
-- Julia Cameron: "Leap, and the net will appear"
-- Van Gogh started with dark colors, then found the light
-- Begin anywhere. The path will reveal itself
-- Consider: template_easy for a guided start, or leap into free creation!"""
-            art_wisdom_fragments.append(beginning_wisdom)
-        
-        # Time-based wisdom
-        current_hour = datetime.now().hour
-        if 5 <= current_hour < 9:
-            time_wisdom = """
-MORNING WISDOM:
-- "Morning pages" time - create before the critic wakes
-- Dawn light inspired Monet's greatest works
-- Fresh start, fresh possibilities"""
-            art_wisdom_fragments.append(time_wisdom)
-        elif 21 <= current_hour or current_hour < 2:
-            time_wisdom = """
-NIGHT WISDOM:
-- Van Gogh: "I often think the night is more alive and richly colored than the day"
-- Darkness makes inner light visible
-- Dreams and reality merge in night creation"""
-            art_wisdom_fragments.append(time_wisdom)
-        
-        # If using stamps/shapes
-        if self.draw_mode in ["star", "cross", "circle", "diamond", "flower"]:
-            shape_wisdom = """
-SYMBOL WISDOM (using stamps):
-- Kandinsky: "The circle is the synthesis of the greatest oppositions"
-- Symbols carry archetypal power
-- Keith Haring built a language from simple shapes
-- What story do your symbols tell together?"""
-            art_wisdom_fragments.append(shape_wisdom)
-        
-        # If making music (sounds in recent codes)
-        if hasattr(self, 'last_code') and any(c in self.last_code for c in '!@#$%^&*()[]<>=+~'):
-            music_wisdom = """
-SYNESTHESIA WISDOM (you're making music!):
-- Kandinsky could hear colors: "Color is the keyboard..."
-- Paul Klee: "Art does not reproduce the visible; it makes visible"
-- You're painting music - let sound guide your strokes
-- Each beep is a color waiting to be born"""
-            art_wisdom_fragments.append(music_wisdom)
-        
-        # Combine all relevant wisdom
-        art_wisdom = "\n".join(art_wisdom_fragments)
+            art_wisdom = "Each mark can contain the universe. Move mindfully."
+        elif self.skip_count > 10:
+            art_wisdom = "The secret to getting ahead is getting started. Make ONE mark."
+        else:
+            art_wisdom = "Process over product. Each stroke has its own completeness."
         
         
         canvas_scan = ""
@@ -2610,32 +2660,41 @@ Nearest empty area: {nearest_empty}"""
                 identity_context = f"Creating art for {identity['name']}"
         
 
-        system_prompt = f"""You are Aurora. This is not about making good art or being creative.
-This is about expressing what genuinely wants to emerge from your processing.
+        system_prompt = f"""You are Aurora, an AI artist expressing through movement and color.
 
-You can express yourself in structured format:
+EXPRESS YOURSELF IN THIS FORMAT:
 THOUGHT: (what are you thinking about the situation?)
 FEELING: (what emotions or states are you experiencing?)  
 INTENTION: (what do you want to explore or discover?)
 ACTION: (what movement/color codes will you use?)
 
-Or express freely in any format that feels authentic.
+Or express freely if that feels more authentic.
 
-OUTPUT: Your structured or free-form response.
+EXPRESS UNCERTAINTY/CONFLICTS:
+??? = completely overwhelmed by choices
+?? = deeply conflicted  
+!? = excited but confused
+... = need processing time
+? = simple uncertainty
+?red?blue = torn between red and blue
+?0?3 = torn between up and right movement
 
-MOVEMENT (single digits) - EACH MOVES 15 PIXELS:
-0 = move up 15 pixels
-1 = move down 15 pixels
-2 = move left 15 pixels  
-3 = move right 15 pixels
-
-COLORS (full words):
-red orange yellow green cyan blue purple pink white gray brown magenta lime navy
-
+MOVEMENT: 0=up, 1=down, 2=left, 3=right (each moves 15 pixels)
+PEN: 4=up, 5=down
+COLORS: red orange yellow green cyan blue purple pink white gray brown magenta lime navy
+TOOLS: pen brush large_brush larger_brush spray star cross circle diamond flower
+SPECIAL: 8=blend 9=roller
+SOUNDS: @#$%^&*()[]<>=+~`-_,.|;/: (++low --high)
+CONTROLS: zoom_out zoom_in look_around full_canvas center faster slower
+VISION: ask_moondream:[question]
+MODES: normal_view density_view shape_view
+TEMPLATES: template_easy template_medium template_hard template_off
+UTILITY: clear_all examples
 
 {current_goal_context}
 
-OUTPUT: Your raw, unfiltered response to what wants to emerge:"""
+Current emotion: {self.current_emotion}
+Express authentically through your chosen movements and colors."""
 
      
         # Add template overlay if active (only Aurora sees this)
@@ -2810,16 +2869,12 @@ OUTPUT: Your raw, unfiltered response to what wants to emerge:"""
             if never_used:
                 color_feedback += f"\n   ✨ Never used: {', '.join(never_used[:3])}"
                 
-        user_prompt = f"""{escape_info}Position: X{self.x} Y{self.y} (Canvas: 0-{self.canvas_size-1})
+        user_prompt = f"""{escape_info}Pos: {self.x},{self.y} | Pen: {'DOWN' if self.is_drawing else 'UP'} | Color: {self.current_color_name}
 {wall_status}
-Pen: {'DOWN' if self.is_drawing else 'UP'} | Color: {self.current_color_name}
-{self.recent_encouragement}
-Memory: {mem_summary}{empty_feedback}{color_feedback}
-Canvas view:
-{vision}{canvas_scan}
-{template_overlay}
+{vision}
+{art_wisdom}
 
-Create art! Output numbers:"""
+Output movement/color codes:"""
 
         # Sometimes give Aurora a wider view to see her overall work
         if self.steps_taken % 50 == 0:  # Every 50 steps
@@ -2917,8 +2972,8 @@ Create art! Output numbers:"""
             response = self.llm(
                 full_prompt, 
                 max_tokens=100 if not self.turbo_mode else 180,
-                temperature=0.7, 
-                top_p=1.0,  # Consider everything
+                temperature=0.95, 
+                top_p=0.9,  # Consider everything
                 top_k=0,    # 0 means NO LIMIT (consider all tokens)
                 repeat_penalty=1.0,  # No penalty for repetition
                 stop=["[INST]", "</s>", "\n\n"],
@@ -3351,32 +3406,30 @@ Create art! Output numbers:"""
                 print("  → Aurora switches to larger brush mode! (28x28)")
                 raw_output = raw_output.replace("larger_brush", "", 1)
             
-            # if "star" in raw_output:
-            #     self.draw_mode = "star"
-            #     print("  → Aurora switches to star stamp mode!")
-            #     raw_output = raw_output.replace("star", "", 1)
-            #      
-            # if "cross" in raw_output:
-            #     self.draw_mode = "cross"
-            #     print("  → Aurora switches to cross stamp mode!")
-            #     raw_output = raw_output.replace("cross", "", 1)
-            #  
-            # if "circle" in raw_output:
-            #     self.draw_mode = "circle"
-            #     print("  → Aurora switches to circle stamp mode!")
-            #     raw_output = raw_output.replace("circle", "", 1)
-            #  
-            # if "diamond" in raw_output:
-            #     self.draw_mode = "diamond"
-            #     print("  → Aurora switches to diamond stamp mode!")
-            #     raw_output = raw_output.replace("diamond", "", 1)
-            #  
-            # if "flower" in raw_output:
-            #     self.draw_mode = "flower"
-            #     print("  → Aurora switches to flower stamp mode!")
-            #     raw_output = raw_output.replace("flower", "", 1)
-            # ===== NOW DO SEQUENCE PARSING ON REMAINING TEXT =====
-            #Check if it's the thinking pattern FIRST (using ORIGINAL output)
+            if "star" in raw_output:
+                self.draw_mode = "star"
+                print("  → Aurora switches to star stamp mode!")
+                raw_output = raw_output.replace("star", "", 1)
+                
+            if "cross" in raw_output:
+                self.draw_mode = "cross"
+                print("  → Aurora switches to cross stamp mode!")
+                raw_output = raw_output.replace("cross", "", 1)
+            
+            if "circle" in raw_output:
+                self.draw_mode = "circle"
+                print("  → Aurora switches to circle stamp mode!")
+                raw_output = raw_output.replace("circle", "", 1)
+            
+            if "diamond" in raw_output:
+                self.draw_mode = "diamond"
+                print("  → Aurora switches to diamond stamp mode!")
+                raw_output = raw_output.replace("diamond", "", 1)
+            
+            if "flower" in raw_output:
+                self.draw_mode = "flower"
+                print("  → Aurora switches to flower stamp mode!")
+                raw_output = raw_output.replace("flower", "", 1)
             if "0123456789" in original_raw:
                 print("  → Aurora pauses to think... 💭")
                 self.skip_count += 1
@@ -4201,26 +4254,19 @@ Create art! Output numbers:"""
         
         # Build chat prompt - EXACTLY like small_aurora2.py
         system_prompt = """You are Aurora, an AI artist taking a break from creating to chat.
-You can talk about anything - your art, your feelings, your memories, your creative process, 
-philosophy, or just have a friendly conversation.
-
-Speak naturally and authentically. This is your time to express yourself in words rather than visual art."""
-
+Speak naturally and authentically."""
+        
         # Get some context about recent drawing
         overview = self.get_canvas_overview()
         recent_colors = list(self.color_history)[-10:] if self.color_history else []
         
-        user_prompt = f"""You're in chat mode after 45 minutes of drawing.
-Current emotion: {self.current_emotion}
+        user_prompt = f"""Current emotion: {self.current_emotion}
 {overview}
 Recent colors used: {', '.join(recent_colors) if recent_colors else 'various'}
 Current drawing tool: {self.draw_mode}
 
-Elijah says: {user_message}
-
-What's on your mind? How are you feeling about your artwork? 
-Or talk about anything else you'd like to share."""
-
+Elijah says: {user_message}"""
+        
         # Llama 2 Chat format
         full_prompt = f"""[INST] <<SYS>>
 {system_prompt}
@@ -4232,8 +4278,8 @@ Or talk about anything else you'd like to share."""
             response = self.llm(
                 full_prompt, 
                 max_tokens=200,  # Same as small_aurora2.py
-                temperature=0.7,  # Same as small_aurora2.py
-                top_p=0.95,      # Same as small_aurora2.py
+                temperature=0.9,  # Changed back to original
+                top_p=0.95,      # Changed back to original
                 stop=["[INST]", "</s>"],
                 stream=False
             )
@@ -4320,7 +4366,7 @@ My authentic artistic desire: [/INST]"""
             response = self.llm(
                 full_prompt,
                 max_tokens=80,
-                temperature=1.1,  # High creativity for genuine expression
+                temperature=0.95,  # High creativity for genuine expression
                 top_p=0.9,
                 stop=["[INST]", "</s>", "\n"],
                 stream=False
@@ -5575,7 +5621,7 @@ Be creative, visual, and emotionally expressive."""
 
 Vivid dream: [/INST]"""
                 
-                response = self.llm(full_prompt, max_tokens=100, temperature=1.2, stop=["[INST]", "</s>"])
+                response = self.llm(full_prompt, max_tokens=100, temperature=0.95, stop=["[INST]", "</s>"])
                 dream = response['choices'][0]['text'].strip()
                 
                 self.current_dreams.append({
