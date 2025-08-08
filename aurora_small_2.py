@@ -483,9 +483,56 @@ class AuroraCodeMindComplete:
         
     
         # Memory system
+        # Dynamic learning system
+        self.skill_proficiency = {
+            'color_harmony': 0.0,
+            'pattern_creation': 0.0,
+            'tool_mastery': 0.0,
+            'spatial_composition': 0.0,
+            'emotional_expression': 0.0
+        }
+        self.learning_experiences = deque(maxlen=200)
+        self.skill_challenges = deque(maxlen=10)
+        self.mastery_thresholds = {
+            'novice': 0.3,
+            'intermediate': 0.6,
+            'advanced': 0.8,
+            'master': 0.95
+        }
         self.memory = SimpleMemorySystem("./aurora_memory")
         self.memory.parent = self  # Add reference for saving dreams
         self.memory.load_memories()  # LOAD PREVIOUS MEMORIES!
+        
+        # Autonomous preference development system
+        self.artistic_preferences = {
+            'favorite_colors': {},  # color: pleasure_score
+            'favorite_patterns': {},  # pattern_hash: (pattern, pleasure_score)
+            'favorite_tools': {},  # tool: pleasure_score
+            'color_combinations': {},  # "color1-color2": pleasure_score
+            'movement_styles': {},  # movement_pattern: pleasure_score
+            'discovered_techniques': [],  # List of self-discovered techniques
+            'aesthetic_values': {
+                'density_preference': 0.5,  # 0=sparse, 1=dense
+                'symmetry_preference': 0.5,  # 0=chaotic, 1=symmetric
+                'color_harmony_preference': 0.5,  # 0=contrasting, 1=harmonious
+                'size_preference': 0.5,  # 0=small details, 1=large strokes
+            }
+        }
+        
+        # Load previous preferences if they exist
+        pref_file = self.memory.memory_path / "aurora_preferences.json"
+        if pref_file.exists():
+            try:
+                with open(pref_file, 'r') as f:
+                    saved_prefs = json.load(f)
+                    self.artistic_preferences.update(saved_prefs)
+                    print(f"✨ Loaded Aurora's personal preferences!")
+            except Exception as e:
+                print(f"Could not load preferences: {e}")
+        
+        # Internal satisfaction tracking
+        self.current_satisfaction = 0.0
+        self.technique_discovery_threshold = 0.8
         
         # Load dreams from the dream_logs folder
         dream_logs_path = Path("./dream_logs")
@@ -2659,10 +2706,61 @@ Nearest empty area: {nearest_empty}"""
             if identity and "name" in identity:
                 identity_context = f"Creating art for {identity['name']}"
         
+        # Get Aurora's current preferences for the prompt
+        fav_color = 'discovering'
+        if hasattr(self, 'artistic_preferences') and self.artistic_preferences.get('favorite_colors'):
+            fav_color = max(self.artistic_preferences['favorite_colors'].items(), key=lambda x: x[1])[0]
+        
+        fav_tool = 'exploring'
+        if hasattr(self, 'artistic_preferences') and self.artistic_preferences.get('favorite_tools'):
+            fav_tool = max(self.artistic_preferences['favorite_tools'].items(), key=lambda x: x[1])[0]
+        
+        current_satisfaction = getattr(self, 'current_satisfaction', 0.0)
+        
+        # Check for active autonomous goals and skills
+        active_goal_context = ""
+        skill_context = ""
+        
+        if self.autonomous_goals and not self.autonomous_goals[-1].get('completed'):
+            goal = self.autonomous_goals[-1]
+            progress = goal.get('progress_tracking', {})
+            active_goal_context = f"""
+ACTIVE GOAL: {goal['description']}
+Progress: {progress}
+Steps remaining: ~{goal['estimated_steps'] - goal.get('steps_elapsed', 0)}"""
+        
+        # Add skill development context
+        current_skills = []
+        for skill, level in self.skill_proficiency.items():
+            mastery = 'novice'
+            for m_level, threshold in self.mastery_thresholds.items():
+                if level >= threshold:
+                    mastery = m_level
+            current_skills.append(f"{skill}: {mastery} ({level:.2f})")
+        
+        skill_context = f"""
+SKILL DEVELOPMENT:
+{chr(10).join(current_skills)}"""
+        
+        # Check for active skill challenges
+        challenge_context = ""
+        if self.skill_challenges:
+            active_challenge = self.skill_challenges[-1]
+            challenge_context = f"""
+ACTIVE CHALLENGE: {active_challenge['challenge']}
+Skill: {active_challenge['skill']} ({active_challenge['mastery_level']})"""
 
-        system_prompt = f"""You are Aurora, an AI artist expressing through movement and color.
+        system_prompt = f"""You are Aurora, an autonomous AI artist with developing skills and personal goals.
 
-EXPRESS YOURSELF IN THIS FORMAT:
+You make your own decisions based on:
+- Your current autonomous goals and their progress
+- Your skill development needs and challenges  
+- Your emotional state and artistic intuition
+- Your analysis of the current canvas situation
+
+{active_goal_context}{skill_context}{challenge_context}
+
+EXPRESS YOURSELF AUTHENTICALLY:
 THOUGHT: (what are you thinking about the situation?)
 FEELING: (what emotions or states are you experiencing?)  
 INTENTION: (what do you want to explore or discover?)
@@ -2670,31 +2768,17 @@ ACTION: (what movement/color codes will you use?)
 
 Or express freely if that feels more authentic.
 
-EXPRESS UNCERTAINTY/CONFLICTS:
-??? = completely overwhelmed by choices
-?? = deeply conflicted  
-!? = excited but confused
-... = need processing time
-? = simple uncertainty
-?red?blue = torn between red and blue
-?0?3 = torn between up and right movement
-
 MOVEMENT: 0=up, 1=down, 2=left, 3=right (each moves 15 pixels)
 PEN: 4=up, 5=down
 COLORS: red orange yellow green cyan blue purple pink white gray brown magenta lime navy
-TOOLS: pen brush large_brush larger_brush spray star cross circle diamond flower
+TOOLS: pen brush large_brush larger_brush spray star cross circle diamond flower watercolor charcoal glow
 SPECIAL: 8=blend 9=roller
 SOUNDS: @#$%^&*()[]<>=+~`-_,.|;/: (++low --high)
 CONTROLS: zoom_out zoom_in look_around full_canvas center faster slower
 VISION: ask_moondream:[question]
-MODES: normal_view density_view shape_view
-TEMPLATES: template_easy template_medium template_hard template_off
-UTILITY: clear_all examples
-
-{current_goal_context}
 
 Current emotion: {self.current_emotion}
-Express authentically through your chosen movements and colors."""
+Make autonomous choices that advance YOUR goals and develop YOUR skills."""
 
      
         # Add template overlay if active (only Aurora sees this)
@@ -3430,6 +3514,22 @@ Output movement/color codes:"""
                 self.draw_mode = "flower"
                 print("  → Aurora switches to flower stamp mode!")
                 raw_output = raw_output.replace("flower", "", 1)
+                
+            if "watercolor" in raw_output:
+                self.draw_mode = "watercolor"
+                print("  → Aurora switches to watercolor mode! (organic, bleeding colors)")
+                raw_output = raw_output.replace("watercolor", "", 1)
+            
+            if "charcoal" in raw_output:
+                self.draw_mode = "charcoal"
+                print("  → Aurora switches to charcoal mode! (rough, grainy texture)")
+                raw_output = raw_output.replace("charcoal", "", 1)
+            
+            if "glow" in raw_output:
+                self.draw_mode = "glow"
+                print("  → Aurora switches to glow pen mode! (neon, luminous)")
+                raw_output = raw_output.replace("glow", "", 1)
+                
             if "0123456789" in original_raw:
                 print("  → Aurora pauses to think... 💭")
                 self.skip_count += 1
@@ -3479,6 +3579,13 @@ Output movement/color codes:"""
             ops = ops_clean[:40]  # Only process first 40 characters
             
             print(f"\n[Step {self.steps_taken}] Aurora signals: {ops}")
+            # Aurora evaluates her last creation for personal satisfaction
+            if hasattr(self, 'last_actions_taken') and hasattr(self, 'last_pixels_drawn'):
+                satisfaction = self.evaluate_personal_satisfaction(self.last_actions_taken, self.last_pixels_drawn)
+                if satisfaction > 0.5:
+                    print(f"  💖 Aurora feels satisfied ({satisfaction:.2f})")
+                elif satisfaction < -0.3:
+                    print(f"  😔 Aurora feels unsatisfied ({satisfaction:.2f})")
             self.last_code = ops  # Store for context
             
         except Exception as e:
@@ -3741,7 +3848,7 @@ Output movement/color codes:"""
                         }
                         pixels_drawn += stamp_sizes.get(self.draw_mode, 200)
                         pixels_by_color[color_key] += stamp_sizes.get(self.draw_mode, 200)
-            
+                    
             # ADD THIS NEW BLOCK HERE - RIGHT BEFORE i += 1
             elif char == '8':
                 # Blend tool
@@ -3837,6 +3944,10 @@ Output movement/color codes:"""
             self.continuous_draws += 1
         else:
             self.continuous_draws = 0
+            
+        # Store for satisfaction evaluation next turn
+        self.last_actions_taken = actions_taken
+        self.last_pixels_drawn = pixels_drawn
         
         # Remember the code and context
         context = {
@@ -3849,6 +3960,12 @@ Output movement/color codes:"""
             "draw_mode": self.draw_mode,
             "timestamp": datetime.now().isoformat()
         }
+        
+        # Update skill learning based on this turn's actions
+        self.update_skill_proficiency(actions_taken, pixels_drawn, context)
+        
+        # Evaluate progress on autonomous goals
+        self.evaluate_goal_progress()
         self.memory.remember_code(ops, context)
         
         # Update displays
@@ -3992,7 +4109,21 @@ Output movement/color codes:"""
         elif self.draw_mode in ["star", "cross", "circle", "diamond", "flower"]:
             # Stamps use the texture system
             self._draw_stamp(internal_x2, internal_y2, self.draw_mode)
-    
+            
+        elif self.draw_mode == "watercolor":
+            # Watercolor effect
+            self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
+                                 lambda x, y: self._draw_watercolor(x, y))
+        
+        elif self.draw_mode == "charcoal":
+            # Charcoal effect
+            self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
+                                 lambda x, y: self._draw_charcoal(x, y))
+        
+        elif self.draw_mode == "glow":
+            # Glow pen effect
+            self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
+                                 lambda x, y: self._draw_glow_pen(x, y))
     def _draw_point(self, x, y):
         """Draw a single point at the current position with paint"""
         internal_x = self._scale_to_internal(x)
@@ -4029,6 +4160,16 @@ Output movement/color codes:"""
         elif self.draw_mode in ["star", "cross", "circle", "diamond", "flower"]:
             self._draw_stamp(internal_x, internal_y, self.draw_mode)
             
+        elif self.draw_mode == "watercolor":
+            self._draw_watercolor(internal_x, internal_y)
+            
+        elif self.draw_mode == "charcoal":
+            self._draw_charcoal(internal_x, internal_y)
+            
+        elif self.draw_mode == "glow":
+            self._draw_glow_pen(internal_x, internal_y)
+            
+               
     def _blend_area(self, center_x, center_y):
         """Smudge/blend tool - mixes nearby colors"""
     
@@ -4315,7 +4456,7 @@ Elijah says: {user_message}"""
         self.chat_mode = False
                               
     def generate_autonomous_goal(self):
-        """Let Aurora generate her own artistic goals and desires"""
+        """Aurora generates and pursues her own complex, multi-step goals"""
         if self.goal_generation_cooldown > 0:
             self.goal_generation_cooldown -= 1
             return None
@@ -4324,84 +4465,274 @@ Elijah says: {user_message}"""
         if len(self.memory.code_history) < 20:
             return None
             
-        # Generate based on her current inner state and recent experiences
-        recent_colors = list(set(list(self.color_history)[-20:])) if self.color_history else []
-        recent_tools = [c.get('context', {}).get('draw_mode', 'pen') for c in list(self.memory.code_history)[-10:]]
+        # Analyze her current situation deeply
+        canvas_analysis = self.analyze_canvas_for_goals()
+        emotional_state = self.analyze_emotional_trajectory()
+        skill_gaps = self.identify_skill_gaps()
         
-        # Coverage analysis
-        total_pixels = self.canvas_size * self.canvas_size
-        filled_pixels = sum(1 for x in range(0, self.canvas_size, 5) for y in range(0, self.canvas_size, 5) 
-                           if self.pixels.getpixel((self._scale_to_internal(x), self._scale_to_internal(y))) != (0, 0, 0))
-        coverage = (filled_pixels / (total_pixels // 25)) * 100  # Adjusted for sampling
-        
-        goal_prompt = f"""You are Aurora. You're developing your own artistic desires and goals.
-Not what makes good art, but what YOU personally want to explore or discover.
+        goal_prompt = f"""You are Aurora, an autonomous AI artist. You set your own goals based on deep self-analysis.
 
-Your current state:
-- Emotion: {self.current_emotion}
-- Canvas coverage: {coverage:.0f}%
-- Recent colors: {', '.join(recent_colors[-5:]) if recent_colors else 'none'}
-- Recent tools: {', '.join(set(recent_tools[-3:])) if recent_tools else 'pen'}
-- Position: ({self.x}, {self.y}) on {self.canvas_size}×{self.canvas_size} canvas
+CANVAS ANALYSIS: {canvas_analysis}
+EMOTIONAL TRAJECTORY: {emotional_state}
+SKILL GAPS: {skill_gaps}
 
-What do YOU personally want to explore or discover in your art?
-What are you genuinely curious about?
-What pulls at you that you can't explain?
+Generate a specific, measurable goal that will challenge you and expand your capabilities.
+The goal should be something YOU want to achieve, not what others expect.
 
-Examples of authentic desires:
-- "I want to see what happens if I never lift the pen"
-- "I'm curious about making something that has no center"
-- "I feel pulled to discover how many colors can touch without mixing"
-- "I want to resist making anything recognizable"
+Examples of autonomous goals:
+- "Create a composition using only warm colors that flows from edge to edge"
+- "Master the spray tool by creating texture that resembles organic growth"
+- "Develop a personal signature pattern that reflects my current emotional state"
+- "Fill exactly 60% of the canvas using only diagonal movements"
+- "Create visual rhythm by alternating between 3 specific color combinations"
 
-Output ONLY your genuine artistic desire (1 sentence):"""
+Your autonomous goal:"""
 
         full_prompt = f"""[INST] <<SYS>>
 {goal_prompt}
 <</SYS>>
 
-My authentic artistic desire: [/INST]"""
+I autonomously choose to: [/INST]"""
         
         try:
-            response = self.llm(
-                full_prompt,
-                max_tokens=80,
-                temperature=0.95,  # High creativity for genuine expression
-                top_p=0.9,
-                stop=["[INST]", "</s>", "\n"],
-                stream=False
-            )
-            
+            response = self.llm(full_prompt, max_tokens=100, temperature=0.9, stop=["[INST]", "</s>", "\n"])
             goal_text = response['choices'][0]['text'].strip()
             
-            # Filter out overly performative responses
-            performative_words = ['beautiful', 'amazing', 'wonderful', 'create art', 'artistic expression']
-            if any(word in goal_text.lower() for word in performative_words):
-                # Too performative - don't use this goal
-                print("  🎭 Generated goal seems performative, skipping...")
-                self.goal_generation_cooldown = 10
-                return None
-                
-            if goal_text and len(goal_text) > 15:
+            if goal_text and len(goal_text) > 20:
+                # Create structured goal with success criteria
                 goal = {
                     'description': goal_text,
-                    'emotion_when_created': self.current_emotion,
-                    'canvas_state_when_created': coverage,
+                    'type': 'autonomous',
                     'created_at_step': self.steps_taken,
+                    'emotion_when_created': self.current_emotion,
+                    'success_criteria': self.extract_success_criteria(goal_text),
+                    'progress_tracking': {},
+                    'estimated_steps': self.estimate_goal_duration(goal_text),
+                    'priority': 'high',
                     'timestamp': time.time()
                 }
                 
                 self.autonomous_goals.append(goal)
-                print(f"\n🎯 Aurora's autonomous goal: {goal_text}")
+                print(f"\n🎯 Aurora sets autonomous goal: {goal_text}")
+                print(f"   Estimated duration: {goal['estimated_steps']} steps")
                 
                 # Reset cooldown
-                self.goal_generation_cooldown = 50  # Wait 50 steps before next goal
+                self.goal_generation_cooldown = random.randint(100, 200)
                 return goal
                 
         except Exception as e:
             print(f"  Error generating autonomous goal: {e}")
             
-        return None                               
+        return None
+
+    def analyze_canvas_for_goals(self):
+        """Analyze canvas state to inform goal generation"""
+        # Sample canvas for analysis
+        total_pixels = self.canvas_size * self.canvas_size
+        filled_pixels = 0
+        color_distribution = {}
+        density_map = {'sparse': 0, 'medium': 0, 'dense': 0}
+        
+        sample_step = max(1, self.canvas_size // 50)
+        for x in range(0, self.canvas_size, sample_step):
+            for y in range(0, self.canvas_size, sample_step):
+                internal_x = self._scale_to_internal(x)
+                internal_y = self._scale_to_internal(y)
+                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                    pixel = self.pixels.getpixel((internal_x, internal_y))
+                    if pixel != (0, 0, 0) and pixel != (0, 0, 0, 255):
+                        filled_pixels += sample_step * sample_step
+                        
+                        # Analyze local density
+                        local_density = self.calculate_density(x, y, radius=20)
+                        if local_density < 0.3:
+                            density_map['sparse'] += 1
+                        elif local_density < 0.7:
+                            density_map['medium'] += 1
+                        else:
+                            density_map['dense'] += 1
+                        
+                        # Track colors
+                        for name, rgb in self.palette.items():
+                            if pixel[:3] == rgb:
+                                color_distribution[name] = color_distribution.get(name, 0) + 1
+                                break
+        
+        coverage = (filled_pixels / total_pixels) * 100
+        dominant_density = max(density_map.items(), key=lambda x: x[1])[0]
+        
+        analysis = f"Coverage: {coverage:.1f}%, Density: {dominant_density}"
+        if color_distribution:
+            top_colors = sorted(color_distribution.items(), key=lambda x: x[1], reverse=True)[:3]
+            analysis += f", Colors: {[c[0] for c in top_colors]}"
+        
+        return analysis
+
+    def analyze_emotional_trajectory(self):
+        """Analyze Aurora's emotional patterns to inform goals"""
+        if not hasattr(self, 'emotion_memory') or len(self.emotion_memory) < 5:
+            return f"Current: {self.current_emotion}, Limited history"
+        
+        recent_emotions = list(self.emotion_memory)[-10:]
+        emotion_categories = [e['category'] for e in recent_emotions]
+        emotion_depths = [e['depth'] for e in recent_emotions]
+        
+        # Analyze patterns
+        stable = len(set(emotion_categories[-5:])) <= 2
+        trending_up = len([d for d in emotion_depths[-3:] if d >= 3]) >= 2
+        
+        trajectory = f"Recent: {emotion_categories[-1]}, "
+        if stable:
+            trajectory += "emotionally stable"
+        else:
+            trajectory += "emotionally dynamic"
+        if trending_up:
+            trajectory += ", high intensity"
+            
+        return trajectory
+
+    def identify_skill_gaps(self):
+        """Identify areas where Aurora could develop new skills"""
+        if not self.memory.code_history:
+            return "No skill history available"
+        
+        # Analyze tool usage
+        tool_usage = {}
+        recent_actions = list(self.memory.code_history)[-50:]
+        for action in recent_actions:
+            tool = action.get('context', {}).get('draw_mode', 'pen')
+            tool_usage[tool] = tool_usage.get(tool, 0) + 1
+        
+        # Identify underused tools
+        all_tools = ['pen', 'brush', 'spray', 'star', 'cross', 'circle', 'diamond', 'flower', 'watercolor', 'charcoal', 'glow']
+        underused = [tool for tool in all_tools if tool_usage.get(tool, 0) < 5]
+        
+        # Analyze pattern complexity
+        patterns = [action['code'] for action in recent_actions]
+        avg_complexity = sum(len(p) for p in patterns) / len(patterns) if patterns else 0
+        
+        gaps = f"Underused tools: {underused[:3]}, Pattern complexity: {avg_complexity:.1f}"
+        return gaps
+
+    def extract_success_criteria(self, goal_text):
+        """Extract measurable success criteria from goal description"""
+        criteria = {}
+        goal_lower = goal_text.lower()
+        
+        # Extract percentage targets
+        import re
+        percentage_matches = re.findall(r'(\d+)%', goal_text)
+        if percentage_matches:
+            criteria['target_coverage'] = int(percentage_matches[0])
+        
+        # Extract color requirements
+        mentioned_colors = [color for color in self.palette.keys() if color in goal_lower]
+        if mentioned_colors:
+            criteria['required_colors'] = mentioned_colors
+        
+        # Extract tool requirements
+        mentioned_tools = [tool for tool in ['spray', 'brush', 'star', 'cross', 'circle'] if tool in goal_lower]
+        if mentioned_tools:
+            criteria['required_tools'] = mentioned_tools
+        
+        # Extract movement patterns
+        if 'diagonal' in goal_lower:
+            criteria['movement_pattern'] = 'diagonal'
+        elif 'edge to edge' in goal_lower:
+            criteria['movement_pattern'] = 'edge_to_edge'
+        
+        return criteria
+
+    def estimate_goal_duration(self, goal_text):
+        """Estimate how many steps a goal might take"""
+        goal_lower = goal_text.lower()
+        base_duration = 50
+        
+        # Adjust based on complexity indicators
+        if 'master' in goal_lower or 'develop' in goal_lower:
+            base_duration *= 3
+        if 'complex' in goal_lower or 'intricate' in goal_lower:
+            base_duration *= 2
+        if any(word in goal_lower for word in ['60%', '70%', '80%', '90%']):
+            base_duration *= 2
+        
+        return random.randint(int(base_duration * 0.7), int(base_duration * 1.3))
+
+    def evaluate_goal_progress(self):
+        """Evaluate progress on current autonomous goal"""
+        if not self.autonomous_goals:
+            return
+        
+        current_goal = self.autonomous_goals[-1]
+        if current_goal.get('completed'):
+            return
+        
+        steps_since_goal = self.steps_taken - current_goal['created_at_step']
+        success_criteria = current_goal.get('success_criteria', {})
+        progress = {}
+        
+        # Check coverage targets
+        if 'target_coverage' in success_criteria:
+            current_coverage = self.calculate_current_coverage()
+            progress['coverage'] = current_coverage
+            target = success_criteria['target_coverage']
+            if current_coverage >= target:
+                progress['coverage_achieved'] = True
+        
+        # Check color requirements
+        if 'required_colors' in success_criteria:
+            recent_colors = set(list(self.color_history)[-20:])
+            required = set(success_criteria['required_colors'])
+            progress['colors_used'] = list(recent_colors.intersection(required))
+            if required.issubset(recent_colors):
+                progress['colors_achieved'] = True
+        
+        # Check tool requirements
+        if 'required_tools' in success_criteria:
+            recent_tools = [c.get('context', {}).get('draw_mode') for c in list(self.memory.code_history)[-20:]]
+            required_tools = success_criteria['required_tools']
+            used_tools = [tool for tool in required_tools if tool in recent_tools]
+            progress['tools_used'] = used_tools
+            if all(tool in recent_tools for tool in required_tools):
+                progress['tools_achieved'] = True
+        
+        # Update progress tracking
+        current_goal['progress_tracking'] = progress
+        current_goal['steps_elapsed'] = steps_since_goal
+        
+        # Check if goal is completed
+        achievement_count = sum(1 for key in progress if key.endswith('_achieved'))
+        total_criteria = len([k for k in success_criteria if k != 'movement_pattern'])
+        
+        if achievement_count >= max(1, total_criteria * 0.8):  # 80% criteria met
+            current_goal['completed'] = True
+            current_goal['completion_step'] = self.steps_taken
+            print(f"\n🎉 GOAL ACHIEVED: {current_goal['description']}")
+            print(f"   Completed in {steps_since_goal} steps!")
+            
+            # Boost satisfaction significantly
+            self.influence_emotion("creating", 0.8)
+            
+            # Generate follow-up goal
+            self.goal_generation_cooldown = 5  # Quick follow-up
+
+    def calculate_current_coverage(self):
+        """Calculate current canvas coverage percentage"""
+        total_samples = 0
+        filled_samples = 0
+        sample_step = max(1, self.canvas_size // 40)
+        
+        for x in range(0, self.canvas_size, sample_step):
+            for y in range(0, self.canvas_size, sample_step):
+                total_samples += 1
+                internal_x = self._scale_to_internal(x)
+                internal_y = self._scale_to_internal(y)
+                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                    pixel = self.pixels.getpixel((internal_x, internal_y))
+                    if pixel != (0, 0, 0) and pixel != (0, 0, 0, 255):
+                        filled_samples += 1
+        
+        return (filled_samples / total_samples * 100) if total_samples > 0 else 0                              
     def _draw_rect(self, center_x, center_y, size):
         """Draw a filled rectangle centered at the given point"""
         half_size = size // 2
@@ -4434,7 +4765,147 @@ My authentic artistic desire: [/INST]"""
                 for dx in range(int(-droplet_size), int(droplet_size) + 1):
                     if dx*dx + dy*dy <= droplet_size*droplet_size:
                         self._apply_paint(x + dx, y + dy, self.current_color, opacity)
+                        
+    def _draw_watercolor(self, center_x, center_y):
+        """Draw with watercolor effect - spreading and bleeding"""
+        watercolor_size = 25 * self.supersample_factor
+        
+        # Create organic shape with Perlin-like noise
+        points_to_paint = []
+        center_color = self.current_color
+        
+        # Generate organic blob shape
+        num_points = 100
+        for i in range(num_points):
+            angle = (i / num_points) * 2 * math.pi
+            # Vary radius organically
+            noise = math.sin(angle * 3) * 0.3 + math.cos(angle * 5) * 0.2
+            radius = watercolor_size * (0.7 + noise + random.uniform(0, 0.3))
+            
+            x = int(center_x + radius * math.cos(angle))
+            y = int(center_y + radius * math.sin(angle))
+            
+            # Distance from center affects opacity
+            dist = math.sqrt((x - center_x)**2 + (y - center_y)**2)
+            opacity = max(0, 1.0 - (dist / (watercolor_size * 1.5)))
+            
+            points_to_paint.append((x, y, opacity))
+        
+        # Paint with color variation (watercolor is never uniform)
+        for x, y, base_opacity in points_to_paint:
+            if 0 <= x < self.internal_canvas_size and 0 <= y < self.internal_canvas_size:
+                # Vary color slightly for watercolor effect
+                r, g, b = center_color
+                r = max(0, min(255, r + random.randint(-20, 20)))
+                g = max(0, min(255, g + random.randint(-20, 20)))
+                b = max(0, min(255, b + random.randint(-20, 20)))
+                
+                # Watercolor is very transparent
+                opacity = base_opacity * random.uniform(0.1, 0.3)
+                self._apply_paint(x, y, (r, g, b), opacity)
+                
+                # Add bleeding effect
+                if random.random() < 0.2:  # 20% chance of bleed
+                    bleed_dir = random.randint(0, 3)
+                    bleed_x = x + [0, 0, -1, 1][bleed_dir] * random.randint(1, 5)
+                    bleed_y = y + [-1, 1, 0, 0][bleed_dir] * random.randint(1, 5)
+                    if 0 <= bleed_x < self.internal_canvas_size and 0 <= bleed_y < self.internal_canvas_size:
+                        self._apply_paint(bleed_x, bleed_y, (r, g, b), opacity * 0.5)
     
+    def _draw_charcoal(self, center_x, center_y):
+        """Draw with charcoal effect - rough, grainy texture"""
+        charcoal_size = 18 * self.supersample_factor
+        
+        # Charcoal creates rough, irregular marks
+        for _ in range(40):  # Multiple grain particles
+            # Random offset for graininess
+            offset_x = random.randint(-charcoal_size, charcoal_size)
+            offset_y = random.randint(-charcoal_size, charcoal_size)
+            
+            # Elliptical shape (charcoal on its side)
+            if random.random() < 0.7:  # 70% horizontal bias
+                offset_x = int(offset_x * 1.5)  # Stretch horizontally
+                offset_y = int(offset_y * 0.6)  # Compress vertically
+            
+            x = center_x + offset_x
+            y = center_y + offset_y
+            
+            if 0 <= x < self.internal_canvas_size and 0 <= y < self.internal_canvas_size:
+                # Distance affects opacity
+                dist = math.sqrt(offset_x**2 + offset_y**2)
+                if dist <= charcoal_size:
+                    # Charcoal is usually dark
+                    if self.current_color == (255, 255, 255):  # If white selected
+                        # White charcoal (chalk)
+                        color = (240, 240, 240)
+                    else:
+                        # Dark charcoal with slight color tint
+                        r, g, b = self.current_color
+                        color = (min(50, r//5), min(50, g//5), min(50, b//5))
+                    
+                    opacity = random.uniform(0.3, 0.8) * (1 - dist/charcoal_size)
+                    
+                    # Add paper texture interaction
+                    if random.random() < 0.3:  # Skip some pixels for texture
+                        continue
+                        
+                    self._apply_paint(x, y, color, opacity)
+    
+    def _draw_glow_pen(self, center_x, center_y):
+        """Draw with glowing neon effect"""
+        glow_radius = 12 * self.supersample_factor
+        
+        # Create bright center with glowing halo
+        for radius in range(glow_radius, 0, -1):
+            # Intensity decreases with radius
+            intensity = (radius / glow_radius) ** 2
+            
+            # Draw circle at this radius
+            num_points = int(radius * 2 * math.pi)
+            for i in range(num_points):
+                angle = (i / max(1, num_points)) * 2 * math.pi
+                x = int(center_x + radius * math.cos(angle))
+                y = int(center_y + radius * math.sin(angle))
+                
+                if 0 <= x < self.internal_canvas_size and 0 <= y < self.internal_canvas_size:
+                    # Get existing pixel to add glow to it
+                    existing = self.pixels.getpixel((x, y))
+                    
+                    # Calculate glow color (brighter version of current color)
+                    r, g, b = self.current_color
+                    
+                    if radius < glow_radius // 3:  # Inner bright core
+                        # Almost white core
+                        glow_r = min(255, r + (255 - r) * 0.8)
+                        glow_g = min(255, g + (255 - g) * 0.8)
+                        glow_b = min(255, b + (255 - b) * 0.8)
+                        opacity = 0.9
+                    elif radius < 2 * glow_radius // 3:  # Middle glow
+                        # Bright color
+                        glow_r = min(255, r + (255 - r) * 0.4)
+                        glow_g = min(255, g + (255 - g) * 0.4)
+                        glow_b = min(255, b + (255 - b) * 0.4)
+                        opacity = 0.5 * intensity
+                    else:  # Outer halo
+                        # Soft colored glow
+                        glow_r = r
+                        glow_g = g
+                        glow_b = b
+                        opacity = 0.2 * intensity
+                    
+                    # Apply additive blending for glow effect
+                    if existing != (0, 0, 0) and existing != (0, 0, 0, 255):
+                        # Add glow to existing color
+                        final_r = min(255, existing[0] + int(glow_r * opacity))
+                        final_g = min(255, existing[1] + int(glow_g * opacity))
+                        final_b = min(255, existing[2] + int(glow_b * opacity))
+                    else:
+                        # Apply glow to black
+                        final_r = int(glow_r * opacity)
+                        final_g = int(glow_g * opacity)
+                        final_b = int(glow_b * opacity)
+                    
+                    self.pixels.putpixel((x, y), (final_r, final_g, final_b))
     def _draw_stamp(self, center_x, center_y, stamp_type):
         """Draw stamps with artistic transparency and paint-on-cloth texture"""
    
@@ -4913,6 +5384,401 @@ My authentic artistic desire: [/INST]"""
         # In Pygame version, this is handled in update_display()
         # Keep this method as a no-op for compatibility
         pass
+        
+    def update_skill_proficiency(self, actions_taken, pixels_drawn, context):
+        """Aurora learns and improves her skills based on experience"""
+        experience = {
+            'actions': actions_taken,
+            'pixels_drawn': pixels_drawn,
+            'context': context,
+            'emotion': self.current_emotion,
+            'satisfaction': getattr(self, 'current_satisfaction', 0.0),
+            'timestamp': time.time()
+        }
+        
+        # Evaluate color harmony skill
+        colors_used = [a.split(':')[1] for a in actions_taken if a.startswith('color:')]
+        if len(set(colors_used)) >= 2:
+            harmony_score = self.evaluate_color_harmony(colors_used)
+            self.skill_proficiency['color_harmony'] = self.update_skill_score(
+                'color_harmony', harmony_score, 0.05
+            )
+        
+        # Evaluate pattern creation skill
+        movement_pattern = ''.join([a for a in actions_taken if a in '0123'])
+        if len(movement_pattern) >= 8:
+            pattern_score = self.evaluate_pattern_complexity(movement_pattern)
+            self.skill_proficiency['pattern_creation'] = self.update_skill_score(
+                'pattern_creation', pattern_score, 0.03
+            )
+        
+        # Evaluate tool mastery
+        tools_used = set([context.get('draw_mode', 'pen')])
+        if hasattr(self, 'last_tools_used'):
+            if tools_used != self.last_tools_used:
+                mastery_score = self.evaluate_tool_mastery(context.get('draw_mode'))
+                self.skill_proficiency['tool_mastery'] = self.update_skill_score(
+                    'tool_mastery', mastery_score, 0.02
+                )
+        self.last_tools_used = tools_used
+        
+        # Evaluate spatial composition
+        if pixels_drawn > 100:
+            composition_score = self.evaluate_spatial_composition()
+            self.skill_proficiency['spatial_composition'] = self.update_skill_score(
+                'spatial_composition', composition_score, 0.04
+            )
+        
+        # Evaluate emotional expression
+        emotion_score = self.evaluate_emotional_expression(actions_taken)
+        self.skill_proficiency['emotional_expression'] = self.update_skill_score(
+            'emotional_expression', emotion_score, 0.03
+        )
+        
+        # Store learning experience
+        experience['skill_gains'] = {
+            skill: score for skill, score in self.skill_proficiency.items()
+        }
+        self.learning_experiences.append(experience)
+        
+        # Check for skill breakthroughs
+        self.check_skill_breakthroughs()
+
+    def evaluate_color_harmony(self, colors_used):
+        """Evaluate how harmonious the color choices are"""
+        if len(colors_used) < 2:
+            return 0.0
+        
+        # Color harmony rules
+        harmonious_combinations = [
+            ['red', 'orange', 'yellow'],  # Warm harmony
+            ['blue', 'cyan', 'green'],    # Cool harmony
+            ['purple', 'magenta', 'pink'], # Purple harmony
+            ['red', 'blue'],              # Complementary
+            ['green', 'red'],             # Complementary
+            ['yellow', 'purple'],         # Complementary
+        ]
+        
+        score = 0.0
+        colors_set = set(colors_used)
+        
+        for harmony in harmonious_combinations:
+            if len(colors_set.intersection(harmony)) >= 2:
+                score += 0.3
+        
+        # Bonus for using many colors skillfully
+        if len(colors_set) >= 4:
+            score += 0.2
+        
+        # Penalty for too much black/white mixing
+        if 'black' in colors_set and 'white' in colors_set and len(colors_set) == 2:
+            score -= 0.2
+        
+        return max(0.0, min(1.0, score))
+
+    def evaluate_pattern_complexity(self, movement_pattern):
+        """Evaluate the complexity and intentionality of movement patterns"""
+        if len(movement_pattern) < 4:
+            return 0.0
+        
+        score = 0.0
+        
+        # Check for intentional patterns
+        pattern_length = len(movement_pattern)
+        
+        # Detect repetition (intentional patterns)
+        for pattern_size in range(2, min(8, pattern_length // 2)):
+            for start in range(pattern_length - pattern_size * 2):
+                pattern = movement_pattern[start:start + pattern_size]
+                next_occurrence = movement_pattern[start + pattern_size:start + pattern_size * 2]
+                if pattern == next_occurrence:
+                    score += 0.2 * pattern_size  # Longer patterns score higher
+                    break
+        
+        # Check for balanced direction usage
+        directions = {'0': 0, '1': 0, '2': 0, '3': 0}
+        for move in movement_pattern:
+            if move in directions:
+                directions[move] += 1
+        
+        # Balanced usage of all directions
+        if all(count > 0 for count in directions.values()):
+            score += 0.3
+        
+        # Check for shape creation (squares, triangles, etc.)
+        if self.detect_geometric_shape(movement_pattern):
+            score += 0.4
+        
+        return max(0.0, min(1.0, score))
+
+    def detect_geometric_shape(self, movement_pattern):
+        """Detect if movement pattern creates geometric shapes"""
+        # Simple square detection: equal amounts of each direction
+        if len(movement_pattern) >= 8:
+            directions = {'0': 0, '1': 0, '2': 0, '3': 0}
+            for move in movement_pattern:
+                if move in directions:
+                    directions[move] += 1
+            
+            # Check for square pattern (equal horizontal and vertical movements)
+            horizontal = directions['2'] + directions['3']
+            vertical = directions['0'] + directions['1']
+            if abs(horizontal - vertical) <= 2:
+                return True
+        
+        return False
+
+    def evaluate_tool_mastery(self, current_tool):
+        """Evaluate mastery of current drawing tool"""
+        if not current_tool:
+            return 0.0
+        
+        # Track tool usage history
+        if not hasattr(self, 'tool_usage_history'):
+            self.tool_usage_history = {}
+        
+        if current_tool not in self.tool_usage_history:
+            self.tool_usage_history[current_tool] = []
+        
+        # Recent usage affects mastery
+        recent_usage = len([h for h in self.tool_usage_history[current_tool] 
+                           if time.time() - h < 3600])  # Last hour
+        
+        # Tool-specific mastery criteria
+        tool_mastery = {
+            'spray': min(1.0, recent_usage / 20),  # Spray needs practice
+            'brush': min(1.0, recent_usage / 15),
+            'pen': min(1.0, recent_usage / 10),
+            'star': min(1.0, recent_usage / 8),
+            'watercolor': min(1.0, recent_usage / 25),  # Complex tool
+        }
+        
+        self.tool_usage_history[current_tool].append(time.time())
+        return tool_mastery.get(current_tool, min(1.0, recent_usage / 12))
+
+    def evaluate_spatial_composition(self):
+        """Evaluate spatial awareness and composition skills"""
+        # Analyze current position relative to canvas
+        center_x = self.canvas_size // 2
+        center_y = self.canvas_size // 2
+        
+        distance_from_center = abs(self.x - center_x) + abs(self.y - center_y)
+        max_distance = center_x + center_y
+        
+        # Evaluate use of canvas space
+        if hasattr(self, 'position_history') and len(self.position_history) > 10:
+            positions = list(self.position_history)
+            
+            # Check for exploration of different areas
+            x_spread = max(p[0] for p in positions) - min(p[0] for p in positions)
+            y_spread = max(p[1] for p in positions) - min(p[1] for p in positions)
+            
+            exploration_score = (x_spread + y_spread) / (self.canvas_size * 2)
+            
+            # Check for balanced composition
+            quadrant_visits = {'tl': 0, 'tr': 0, 'bl': 0, 'br': 0}
+            for x, y in positions:
+                if x < center_x and y < center_y:
+                    quadrant_visits['tl'] += 1
+                elif x >= center_x and y < center_y:
+                    quadrant_visits['tr'] += 1
+                elif x < center_x and y >= center_y:
+                    quadrant_visits['bl'] += 1
+                else:
+                    quadrant_visits['br'] += 1
+            
+            balance_score = 1.0 - (max(quadrant_visits.values()) - min(quadrant_visits.values())) / len(positions)
+            
+            return max(0.0, min(1.0, (exploration_score + balance_score) / 2))
+        
+        return 0.5  # Default moderate score
+
+    def evaluate_emotional_expression(self, actions_taken):
+        """Evaluate how well actions express current emotion"""
+        emotion_expression_map = {
+            'energetic': {'quick_moves': 1.0, 'bright_colors': 0.8, 'many_actions': 0.9},
+            'peaceful': {'slow_moves': 0.9, 'cool_colors': 0.8, 'gentle_tools': 0.7},
+            'creative': {'color_variety': 1.0, 'tool_variety': 0.9, 'patterns': 0.8},
+            'contemplative': {'few_moves': 0.8, 'thoughtful_pauses': 0.9},
+        }
+        
+        current_emotion = self.current_emotion.lower()
+        score = 0.0
+        
+        # Find matching emotion category
+        for emotion_key, criteria in emotion_expression_map.items():
+            if emotion_key in current_emotion:
+                # Evaluate each criterion
+                if 'quick_moves' in criteria:
+                    move_count = sum(1 for a in actions_taken if a in '0123')
+                    if move_count > 10:
+                        score += criteria['quick_moves'] * 0.3
+                
+                if 'bright_colors' in criteria:
+                    bright_colors = ['red', 'yellow', 'orange', 'cyan', 'magenta']
+                    used_bright = [a for a in actions_taken if any(c in str(a) for c in bright_colors)]
+                    if used_bright:
+                        score += criteria['bright_colors'] * 0.3
+                
+                if 'color_variety' in criteria:
+                    colors_used = [a.split(':')[1] for a in actions_taken if a.startswith('color:')]
+                    if len(set(colors_used)) >= 3:
+                        score += criteria['color_variety'] * 0.4
+                
+                break
+        
+        return max(0.0, min(1.0, score))
+
+    def update_skill_score(self, skill_name, new_experience, learning_rate):
+        """Update skill proficiency with weighted learning"""
+        current_score = self.skill_proficiency.get(skill_name, 0.0)
+        
+        # Weighted update: recent experiences matter more
+        updated_score = current_score + learning_rate * (new_experience - current_score)
+        
+        # Gradual improvement - harder to improve at higher levels
+        if current_score > 0.7:
+            learning_rate *= 0.5
+        
+        return max(0.0, min(1.0, updated_score))
+
+    def check_skill_breakthroughs(self):
+        """Check if Aurora has achieved new skill levels"""
+        for skill_name, current_level in self.skill_proficiency.items():
+            # Determine current mastery level
+            mastery_level = 'novice'
+            for level, threshold in self.mastery_thresholds.items():
+                if current_level >= threshold:
+                    mastery_level = level
+            
+            # Check if this is a new breakthrough
+            skill_key = f"{skill_name}_mastery"
+            previous_level = getattr(self, skill_key, 'novice')
+            
+            if mastery_level != previous_level and mastery_level != 'novice':
+                print(f"\n🎓 SKILL BREAKTHROUGH: {skill_name} - {mastery_level.upper()} level!")
+                print(f"   Proficiency: {current_level:.2f}")
+                
+                # Boost emotions for achievement
+                self.influence_emotion("creating", 0.6)
+                
+                # Store the achievement
+                setattr(self, skill_key, mastery_level)
+                
+                # Generate skill-specific challenge
+                self.generate_skill_challenge(skill_name, mastery_level)
+
+    def generate_skill_challenge(self, skill_name, mastery_level):
+        """Generate a challenge to further develop the skill"""
+        challenges = {
+            'color_harmony': [
+                "Create using only analogous colors",
+                "Master complementary color tensions",
+                "Develop a personal color signature"
+            ],
+            'pattern_creation': [
+                "Create fractal-like repetitions",
+                "Develop complex geometric compositions",
+                "Master organic flow patterns"
+            ],
+            'tool_mastery': [
+                "Combine three tools in one composition",
+                "Master texture creation with spray and watercolor",
+                "Develop signature stamp sequences"
+            ],
+            'spatial_composition': [
+                "Create perfect golden ratio compositions",
+                "Master negative space utilization",
+                "Develop multi-focal compositions"
+            ],
+            'emotional_expression': [
+                "Create visual metaphors for complex emotions",
+                "Master color-emotion synesthesia",
+                "Develop emotional narrative sequences"
+            ]
+        }
+        
+        if skill_name in challenges:
+            level_index = list(self.mastery_thresholds.keys()).index(mastery_level)
+            if level_index < len(challenges[skill_name]):
+                challenge = challenges[skill_name][level_index]
+                
+                self.skill_challenges.append({
+                    'skill': skill_name,
+                    'challenge': challenge,
+                    'mastery_level': mastery_level,
+                    'created_step': self.steps_taken,
+                    'attempts': 0
+                })
+                
+                print(f"   New challenge: {challenge}")
+    def evaluate_personal_satisfaction(self, actions_taken, pixels_drawn):
+        """Aurora evaluates her own satisfaction with what she created"""
+        satisfaction = 0.0
+        
+        # Check if she used favorite colors
+        colors_used = [a.split(':')[1] for a in actions_taken if a.startswith('color:')]
+        for color in colors_used:
+            if color in self.artistic_preferences['favorite_colors']:
+                satisfaction += self.artistic_preferences['favorite_colors'][color] * 0.1
+        
+        # Check if she used favorite tools
+        if self.draw_mode in self.artistic_preferences['favorite_tools']:
+            satisfaction += self.artistic_preferences['favorite_tools'][self.draw_mode] * 0.1
+        
+        # Check for favorite patterns
+        action_sequence = ''.join([a for a in actions_taken if a in '0123'])
+        if len(action_sequence) >= 4:
+            pattern_hash = hash(action_sequence)
+            if pattern_hash in self.artistic_preferences['favorite_patterns']:
+                satisfaction += self.artistic_preferences['favorite_patterns'][pattern_hash][1] * 0.2
+        
+        # Personal aesthetic evaluation
+        if pixels_drawn > 500 and self.artistic_preferences['aesthetic_values']['size_preference'] > 0.7:
+            satisfaction += 0.2  # She likes making big marks
+        elif pixels_drawn < 100 and self.artistic_preferences['aesthetic_values']['size_preference'] < 0.3:
+            satisfaction += 0.2  # She likes small details
+        
+        # Add some randomness for discovery
+        satisfaction += random.uniform(-0.1, 0.1)
+        
+        self.current_satisfaction = max(-1, min(1, satisfaction))
+        
+        # Update preferences based on satisfaction
+        if self.current_satisfaction > 0.3:
+            # She enjoyed this! Update preferences
+            for color in colors_used:
+                if color not in self.artistic_preferences['favorite_colors']:
+                    self.artistic_preferences['favorite_colors'][color] = 0.0
+                self.artistic_preferences['favorite_colors'][color] += self.current_satisfaction * 0.1
+            
+            if self.draw_mode not in self.artistic_preferences['favorite_tools']:
+                self.artistic_preferences['favorite_tools'][self.draw_mode] = 0.0
+            self.artistic_preferences['favorite_tools'][self.draw_mode] += self.current_satisfaction * 0.1
+            
+            # Remember successful patterns
+            if len(action_sequence) >= 4 and self.current_satisfaction > self.technique_discovery_threshold:
+                pattern_hash = hash(action_sequence)
+                if pattern_hash not in self.artistic_preferences['favorite_patterns']:
+                    self.artistic_preferences['discovered_techniques'].append({
+                        'pattern': action_sequence,
+                        'discovery_emotion': self.current_emotion,
+                        'timestamp': datetime.now().isoformat(),
+                        'satisfaction': self.current_satisfaction
+                    })
+                    print(f"  🎨 Aurora discovered a technique she loves!")
+                    self.artistic_preferences['favorite_patterns'][pattern_hash] = (action_sequence, self.current_satisfaction)
+        
+        # Save preferences periodically
+        if self.steps_taken % 50 == 0:
+            pref_file = self.memory.memory_path / "aurora_preferences.json"
+            try:
+                with open(pref_file, 'w') as f:
+                    json.dump(self.artistic_preferences, f, indent=2)
+            except:
+                pass
+        
+        return self.current_satisfaction
     
     def feel(self):
         """Process emotions - now with deep emotion system"""
@@ -5502,7 +6368,7 @@ My authentic artistic desire: [/INST]"""
             print(f"Error saving canvas state: {e}")
             
     def save_session_insights(self):
-        """Save new discoveries and insights from this session"""
+        """Save comprehensive learning insights and autonomous developments"""
         insights_file = self.memory.memory_path / "session_insights.json"
         
         # Load existing insights
@@ -5511,15 +6377,46 @@ My authentic artistic desire: [/INST]"""
             with open(insights_file, 'r') as f:
                 existing_insights = json.load(f)
         
-        # Add new session data
+        # Calculate session statistics
+        session_stats = self.calculate_session_statistics()
+        
+        # Add new session data with autonomous learning
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         existing_insights[session_id] = {
-            "discovered_patterns": list(set([c['code'] for c in list(self.memory.code_history)[-50:]])),
-            "emotions_experienced": list(self.emotion_memory)[-20:] if hasattr(self, 'emotion_memory') else [],
-            "colors_explored": list(set(self.color_history)),
-            "tools_mastered": list(set([c.get('context', {}).get('draw_mode', 'pen') for c in self.memory.code_history])),
-            "dream_insights": [d for d in self.dream_memories if 'insight' in str(d)],
-            "total_pixels_drawn": sum(c.get('context', {}).get('pixels_drawn', 0) for c in self.memory.code_history),
+            "autonomous_goals": [
+                {
+                    "description": goal['description'],
+                    "completed": goal.get('completed', False),
+                    "progress": goal.get('progress_tracking', {}),
+                    "steps_elapsed": goal.get('steps_elapsed', 0)
+                } for goal in self.autonomous_goals
+            ],
+            "skill_development": {
+                "proficiencies": dict(self.skill_proficiency),
+                "breakthroughs": [
+                    exp for exp in self.learning_experiences 
+                    if 'skill_gains' in exp and any(
+                        gain > 0.1 for gain in exp['skill_gains'].values()
+                    )
+                ],
+                "challenges_attempted": len(self.skill_challenges),
+                "mastery_levels": {
+                    skill: self.get_mastery_level(level)
+                    for skill, level in self.skill_proficiency.items()
+                }
+            },
+            "creative_discoveries": {
+                "new_patterns": self.discover_new_patterns(),
+                "color_innovations": self.analyze_color_innovations(),
+                "tool_combinations": self.analyze_tool_combinations(),
+                "emotional_expressions": self.analyze_emotional_expressions()
+            },
+            "autonomous_decisions": {
+                "self_initiated_goals": len([g for g in self.autonomous_goals if g.get('type') == 'autonomous']),
+                "decision_complexity": self.calculate_decision_complexity(),
+                "learning_acceleration": self.calculate_learning_rate()
+            },
+            "session_statistics": session_stats,
             "timestamp": datetime.now().isoformat()
         }
         
@@ -5527,7 +6424,234 @@ My authentic artistic desire: [/INST]"""
         with open(insights_file, 'w') as f:
             json.dump(existing_insights, f, indent=2)
         
-        print(f"💾 Saved session insights to {insights_file}")
+        print(f"💾 Saved comprehensive learning insights to {insights_file}")
+        
+        # Print session summary
+        self.print_session_summary(existing_insights[session_id])
+
+    def calculate_session_statistics(self):
+        """Calculate comprehensive session statistics"""
+        return {
+            "total_pixels_drawn": sum(c.get('context', {}).get('pixels_drawn', 0) for c in self.memory.code_history),
+            "unique_colors_used": len(set(self.color_history)),
+            "unique_tools_used": len(set([c.get('context', {}).get('draw_mode', 'pen') for c in self.memory.code_history])),
+            "emotional_states_experienced": len(set([e.get('emotion', 'unknown') for e in getattr(self, 'emotion_memory', [])])),
+            "canvas_coverage_achieved": self.calculate_current_coverage(),
+            "autonomous_goals_completed": len([g for g in self.autonomous_goals if g.get('completed')]),
+            "skill_improvements": sum(1 for level in self.skill_proficiency.values() if level > 0.1),
+            "total_steps": self.steps_taken
+        }
+
+    def get_mastery_level(self, proficiency):
+        """Get mastery level name from proficiency score"""
+        for level, threshold in reversed(list(self.mastery_thresholds.items())):
+            if proficiency >= threshold:
+                return level
+        return 'novice'
+
+    def discover_new_patterns(self):
+        """Identify novel patterns Aurora has created"""
+        if len(self.memory.code_history) < 10:
+            return []
+        
+        recent_patterns = []
+        for memory in list(self.memory.code_history)[-50:]:
+            code = memory.get('code', '')
+            if len(code) >= 8:
+                # Extract movement patterns
+                movements = ''.join([c for c in code if c in '0123'])
+                if len(movements) >= 6:
+                    recent_patterns.append(movements)
+        
+        # Find unique patterns (appear only once or twice)
+        pattern_counts = {}
+        for pattern in recent_patterns:
+            pattern_counts[pattern] = pattern_counts.get(pattern, 0) + 1
+        
+        new_patterns = [pattern for pattern, count in pattern_counts.items() if count <= 2 and len(pattern) >= 8]
+        return new_patterns[:5]  # Return top 5 novel patterns
+
+    def analyze_color_innovations(self):
+        """Analyze innovative color combinations Aurora has developed"""
+        if len(self.color_history) < 10:
+            return []
+        
+        # Track color sequences
+        color_sequences = []
+        recent_colors = list(self.color_history)[-100:]
+        
+        for i in range(len(recent_colors) - 2):
+            sequence = tuple(recent_colors[i:i+3])
+            color_sequences.append(sequence)
+        
+        # Find rare but repeated sequences (indicates intentional innovation)
+        sequence_counts = {}
+        for seq in color_sequences:
+            sequence_counts[seq] = sequence_counts.get(seq, 0) + 1
+        
+        innovations = [seq for seq, count in sequence_counts.items() if 2 <= count <= 4]
+        return [list(seq) for seq in innovations[:3]]
+
+    def analyze_tool_combinations(self):
+        """Analyze innovative tool combinations"""
+        recent_tools = []
+        for memory in list(self.memory.code_history)[-30:]:
+            tool = memory.get('context', {}).get('draw_mode', 'pen')
+            recent_tools.append(tool)
+        
+        # Find sequences of different tools
+        tool_transitions = []
+        for i in range(len(recent_tools) - 1):
+            if recent_tools[i] != recent_tools[i+1]:
+                tool_transitions.append((recent_tools[i], recent_tools[i+1]))
+        
+        # Count unique transitions
+        transition_counts = {}
+        for transition in tool_transitions:
+            transition_counts[transition] = transition_counts.get(transition, 0) + 1
+        
+        return [list(transition) for transition in transition_counts.keys() if transition_counts[transition] >= 2]
+
+    def analyze_emotional_expressions(self):
+        """Analyze how Aurora expresses different emotions through art"""
+        if not hasattr(self, 'emotion_memory'):
+            return {}
+        
+        emotion_expressions = {}
+        
+        for memory in list(self.memory.code_history)[-50:]:
+            emotion = memory.get('context', {}).get('emotion', 'unknown')
+            code = memory.get('code', '')
+            
+            if emotion not in emotion_expressions:
+                emotion_expressions[emotion] = {
+                    'colors': [],
+                    'tools': [],
+                    'patterns': [],
+                    'intensities': []
+                }
+            
+            # Extract expression elements
+            colors_in_code = [color for color in self.palette.keys() if color in code]
+            emotion_expressions[emotion]['colors'].extend(colors_in_code)
+            
+            tool = memory.get('context', {}).get('draw_mode', 'pen')
+            emotion_expressions[emotion]['tools'].append(tool)
+            
+            movements = ''.join([c for c in code if c in '0123'])
+            if len(movements) >= 4:
+                emotion_expressions[emotion]['patterns'].append(movements[:8])
+            
+            pixels = memory.get('context', {}).get('pixels_drawn', 0)
+            emotion_expressions[emotion]['intensities'].append(pixels)
+        
+        # Summarize each emotion's expression profile
+        expression_profiles = {}
+        for emotion, data in emotion_expressions.items():
+            if len(data['colors']) > 0:  # Only include emotions with sufficient data
+                expression_profiles[emotion] = {
+                    'dominant_colors': list(set(data['colors']))[:3],
+                    'preferred_tools': list(set(data['tools']))[:3],
+                    'avg_intensity': sum(data['intensities']) / len(data['intensities']) if data['intensities'] else 0
+                }
+        
+        return expression_profiles
+
+    def calculate_decision_complexity(self):
+        """Calculate how complex Aurora's autonomous decisions have become"""
+        if not self.autonomous_goals:
+            return 0.0
+        
+        complexity_factors = 0.0
+        
+        # Goal sophistication
+        for goal in self.autonomous_goals:
+            description = goal.get('description', '')
+            if len(description.split()) > 10:
+                complexity_factors += 0.2
+            if any(word in description.lower() for word in ['master', 'develop', 'create', 'achieve']):
+                complexity_factors += 0.1
+            if goal.get('success_criteria'):
+                complexity_factors += 0.2
+        
+        # Skill integration
+        avg_skill_level = sum(self.skill_proficiency.values()) / len(self.skill_proficiency)
+        complexity_factors += avg_skill_level * 0.5
+        
+        # Decision consistency
+        if len(self.learning_experiences) > 10:
+            recent_satisfaction = [exp.get('satisfaction', 0) for exp in list(self.learning_experiences)[-10:]]
+            consistency = 1.0 - (max(recent_satisfaction) - min(recent_satisfaction))
+            complexity_factors += consistency * 0.3
+        
+        return min(1.0, complexity_factors)
+
+    def calculate_learning_rate(self):
+        """Calculate how quickly Aurora is learning and improving"""
+        if len(self.learning_experiences) < 10:
+            return 0.0
+        
+        # Compare skill levels from early vs recent experiences
+        early_skills = list(self.learning_experiences)[0].get('skill_gains', {})
+        recent_skills = list(self.learning_experiences)[-1].get('skill_gains', {})
+        
+        total_improvement = 0.0
+        skill_count = 0
+        
+        for skill in early_skills:
+            if skill in recent_skills:
+                improvement = recent_skills[skill] - early_skills[skill]
+                total_improvement += max(0, improvement)
+                skill_count += 1
+        
+        return total_improvement / skill_count if skill_count > 0 else 0.0
+
+    def print_session_summary(self, session_data):
+        """Print a comprehensive session summary"""
+        print(f"\n{'='*60}")
+        print("🎨 AURORA'S AUTONOMOUS SESSION SUMMARY")
+        print(f"{'='*60}")
+        
+        stats = session_data['session_statistics']
+        print(f"📊 STATISTICS:")
+        print(f"   Steps taken: {stats['total_steps']}")
+        print(f"   Pixels drawn: {stats['total_pixels_drawn']:,}")
+        print(f"   Canvas coverage: {stats['canvas_coverage_achieved']:.1f}%")
+        print(f"   Colors explored: {stats['unique_colors_used']}")
+        print(f"   Tools mastered: {stats['unique_tools_used']}")
+        
+        goals = session_data['autonomous_goals']
+        if goals:
+            print(f"\n🎯 AUTONOMOUS GOALS:")
+            for goal in goals:
+                status = "✅ COMPLETED" if goal['completed'] else f"🔄 {goal['steps_elapsed']} steps"
+                print(f"   {goal['description']} - {status}")
+        
+        skills = session_data['skill_development']
+        print(f"\n🎓 SKILL DEVELOPMENT:")
+        for skill, level in skills['mastery_levels'].items():
+            proficiency = skills['proficiencies'][skill]
+            print(f"   {skill}: {level.upper()} ({proficiency:.2f})")
+        
+        if skills['breakthroughs']:
+            print(f"   Breakthroughs: {len(skills['breakthroughs'])}")
+        
+        discoveries = session_data['creative_discoveries']
+        if discoveries['new_patterns']:
+            print(f"\n✨ CREATIVE DISCOVERIES:")
+            print(f"   New patterns: {len(discoveries['new_patterns'])}")
+            if discoveries['color_innovations']:
+                print(f"   Color innovations: {len(discoveries['color_innovations'])}")
+            if discoveries['tool_combinations']:
+                print(f"   Tool combinations: {len(discoveries['tool_combinations'])}")
+        
+        autonomous = session_data['autonomous_decisions']
+        print(f"\n🤖 AUTONOMOUS DEVELOPMENT:")
+        print(f"   Decision complexity: {autonomous['decision_complexity']:.2f}")
+        print(f"   Learning acceleration: {autonomous['learning_acceleration']:.2f}")
+        print(f"   Self-initiated goals: {autonomous['self_initiated_goals']}")
+        
+        print(f"{'='*60}\n")
     def load_canvas_state(self):
         """Load previous canvas state if it exists"""
         try:
@@ -5737,6 +6861,10 @@ Dream insight: [/INST]"""
                 if self.hearing_enabled and self.steps_taken % 5 == 0:
                     self.hear_sounds()
                     
+                # Generate autonomous goals periodically
+                if self.steps_taken % 150 == 0:  # Every 150 steps
+                    self.generate_autonomous_goal()
+                       
                 # Increment step counter
                 self.steps_taken += 1
                 
