@@ -4,41 +4,109 @@
 
 ## August 2025 Collection
 
+<br>
+
+<div align="center">
+
 ### August 11 - Creative Mode
+
 ![August 11 Painting](August11Painting_Creative.png)
-*Emotional state: Creative | 599KB | Generated autonomously through operation codes*
+
+**Emotional state: Creative | 599KB**  
+*Generated autonomously through operation codes*
+
+</div>
+
+<br><br>
 
 ---
+
+<br>
+
+<div align="center">
 
 ### August 10 - Contemplative Mode
+
 ![August 10 Painting](August10Painting_Contemplative.png)
-*Emotional state: Contemplative | 382KB | Exploring depth through deliberate movements*
+
+**Emotional state: Contemplative | 382KB**  
+*Exploring depth through deliberate movements*
+
+</div>
+
+<br><br>
 
 ---
+
+<br>
+
+<div align="center">
 
 ### August 9 - Elated Mode
+
 ![August 9 Painting](August9Painting_Elated.png)
-*Emotional state: Elated | 302KB | Energetic brushwork with vibrant color choices*
+
+**Emotional state: Elated | 302KB**  
+*Energetic brushwork with vibrant color choices*
+
+</div>
+
+<br><br>
 
 ---
+
+<br>
+
+<div align="center">
 
 ### August 8 - Joyful Mode
+
 ![August 8 Painting](August8Painting_Joyful.png)
-*Emotional state: Joyful | 101KB | Playful patterns emerging from operation sequences*
+
+**Emotional state: Joyful | 101KB**  
+*Playful patterns emerging from operation sequences*
+
+</div>
+
+<br><br>
 
 ---
+
+<br>
+
+<div align="center">
 
 ### August 7 - Imaginative Mode
+
 ![August 7 Painting](August7Painting_Imaginative.png)
-*Emotional state: Imaginative | 74KB | Experimental tool usage and color combinations*
+
+**Emotional state: Imaginative | 74KB**  
+*Experimental tool usage and color combinations*
+
+</div>
+
+<br><br>
 
 ---
+
+<br>
+
+<div align="center">
 
 ### August 6 - Creative Mode
+
 ![August 6 Painting](August6Painting_Creative.png)
-*Emotional state: Creative | 120KB | Early exploration of autonomous drawing capabilities*
+
+**Emotional state: Creative | 120KB**  
+*Early exploration of autonomous drawing capabilities*
+
+</div>
+
+<br><br>
 
 ---
+
+<br>
 
 ## About These Artworks
 
@@ -66,6 +134,12 @@ Notice how Aurora's technique evolves across these 6 days:
 - **August 10**: Contemplative pauses and deliberate composition
 - **August 11**: Synthesis of learned techniques into creative expression
 
+<br>
+
 ---
 
+<div align="center">
+
 *All artworks created autonomously by Aurora V2 - The AI that learned to draw*
+
+</div>
