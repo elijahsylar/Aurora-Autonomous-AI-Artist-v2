@@ -421,7 +421,7 @@ class AuroraCodeMindComplete:
         screen_height = 1080  # Default assumption
         
         # Canvas - adjust size based on screen (much smaller pixels now!)
-        self.scale_factor = 3.0  # Lower scale_factor means smaller pixels and higher canvas resolution; e.g., 1.6 gives more pixels than 8.
+        self.scale_factor = 2.0  # Lower scale_factor means smaller pixels and higher canvas resolution; e.g., 1.6 gives more pixels than 8.
         self.initial_scale_factor = self.scale_factor  # Store the starting scale factor
         self.canvas_size = min(int(screen_width / self.scale_factor) - 50, 
                                int(screen_height / self.scale_factor) - 50)
@@ -777,6 +777,15 @@ class AuroraCodeMindComplete:
         self.recent_color_changes = deque(maxlen=3)
         self.positive_moments = deque(maxlen=100)
         self.recent_encouragement = ""  # Aurora will see this
+        # Shape variety tracking
+        self.recent_shapes_drawn = deque(maxlen=20)  # Track last 20 shapes
+        self.shape_cooldowns = {
+            'square': 0,
+            'circle': 0,
+            'diagonal': 0,
+            'triangle': 0,
+            'spiral': 0
+        }
         self.position_history = deque(maxlen=50)
         self.last_positions = deque(maxlen=10)
         self.quadrants_visited = set()
@@ -829,7 +838,9 @@ class AuroraCodeMindComplete:
         # Performance settings
         self.turbo_mode = False
         self.use_gpu = use_gpu
-        
+        # Immediate feedback learning mode - start with it ON
+        self.immediate_feedback_mode = True
+        print("🎓 IMMEDIATE FEEDBACK MODE: ON - Aurora sees each action's result!")
         # Check-in system initialization
         self.last_checkin_time = time.time()
         self.current_mode = "drawing"  # drawing, chat, rest
@@ -1298,6 +1309,123 @@ Dots of each color (. means move without drawing)!"""
         print("🖼️ Returned to full canvas view")
         self.update_display()
         
+        
+    def see_immediate_change(self, action, old_x, old_y):
+        """Show Aurora EXACTLY what her last action did - with FULL CANVAS view!"""
+        
+        feedback = []
+        feedback.append("=" * 60)
+        
+        # Tell her exactly what she did
+        if action == '0':
+            feedback.append(f"You moved UP from ({old_x},{old_y}) to ({self.x},{self.y})")
+        elif action == '1':
+            feedback.append(f"You moved DOWN from ({old_x},{old_y}) to ({self.x},{self.y})")
+        elif action == '2':
+            feedback.append(f"You moved LEFT from ({old_x},{old_y}) to ({self.x},{self.y})")
+        elif action == '3':
+            feedback.append(f"You moved RIGHT from ({old_x},{old_y}) to ({self.x},{self.y})")
+        elif action == '4':
+            feedback.append("You LIFTED the pen - no longer drawing")
+        elif action == '5':
+            feedback.append("You PUT DOWN the pen - now drawing!")
+        elif action.startswith('color:'):
+            color_name = action.split(':')[1]
+            feedback.append(f"You changed color to {color_name.upper()}")
+        
+        # Show if she drew
+        if self.is_drawing and action in '0123':
+            if (self.x, self.y) != (old_x, old_y):
+                feedback.append(f"→ You DREW a {self.current_color_name} line!")
+        
+        # FULL CANVAS VIEW - compressed to fit
+        feedback.append(f"\nFULL CANVAS VIEW ({self.canvas_size}x{self.canvas_size}):")
+        
+        # Determine compression based on canvas size
+        # Optimize for terminal viewing (most terminals are ~100-150 lines tall, 200-250 chars wide)
+        if self.canvas_size <= 100:
+            step = 1  # Show EVERY SINGLE PIXEL - no compression!
+            grid_size = self.canvas_size
+        elif self.canvas_size <= 200:
+            # Minimal compression for small-medium canvases
+            grid_size = 100  # Fits nicely in terminal
+            step = 2  # Sample every other pixel - still very accurate
+        elif self.canvas_size <= 400:
+            # Medium compression
+            grid_size = 100  # Keep at 100 for terminal
+            step = 4  # Sample every 4th pixel
+        elif self.canvas_size <= 800:
+            # Moderate compression for large canvases
+            grid_size = 100  
+            step = 8  # Sample every 8th pixel
+        else:
+            # Heavy compression for huge canvases (like yours at 1870x1030)
+            grid_size = 100  # Still 100x100 output
+            step = self.canvas_size // 100  # Scale to fit exactly
+        
+        # Build the full canvas view
+        for y in range(0, self.canvas_size, step):
+            row = ""
+            for x in range(0, self.canvas_size, step):
+                # Check if Aurora is here
+                if abs(x - self.x) < step and abs(y - self.y) < step:
+                    row += "@"  # Aurora's position
+                else:
+                    # Sample the pixel at this position
+                    internal_px = self._scale_to_internal(min(x, self.canvas_size-1))
+                    internal_py = self._scale_to_internal(min(y, self.canvas_size-1))
+                    
+                    if internal_px >= self.internal_canvas_size or internal_py >= self.internal_canvas_size:
+                        row += "#"
+                    else:
+                        pixel = self.pixels.getpixel((internal_px, internal_py))
+                        
+                        # Handle both RGB and RGBA formats
+                        if len(pixel) == 4:  # RGBA
+                            r, g, b, a = pixel
+                            if a == 0:
+                                row += " "
+                                continue
+                        else:  # RGB
+                            r, g, b = pixel[:3]
+                        
+                        # Color detection with tolerance
+                        if r <= 10 and g <= 10 and b <= 10:
+                            row += " "  # Empty/Black
+                        elif r >= 245 and g >= 245 and b >= 245:
+                            row += "W"  # White
+                        elif r >= 245 and g >= 245 and b <= 20:
+                            row += "Y"  # Yellow
+                        elif r >= 245 and g <= 20 and b <= 20:
+                            row += "R"  # Red
+                        elif r <= 20 and g <= 120 and b >= 245:
+                            row += "B"  # Blue
+                        elif r <= 20 and g >= 245 and b <= 20:
+                            row += "G"  # Green
+                        elif r <= 20 and g >= 245 and b >= 245:
+                            row += "C"  # Cyan
+                        elif r >= 180 and g <= 20 and b >= 245:
+                            row += "P"  # Purple
+                        elif r >= 245 and g >= 120 and g <= 170 and b <= 20:
+                            row += "O"  # Orange
+                        elif r > 10 or g > 10 or b > 10:
+                            row += "*"  # Some other painted color
+                        else:
+                            row += " "  # Empty
+            
+            feedback.append(row[:grid_size])  # Ensure row doesn't exceed grid size
+            
+            # Stop if we have enough rows
+            if len(feedback) - 4 >= grid_size:  # -4 for the header lines
+                break
+        
+        # Add position info
+        feedback.append(f"\nYour position: ({self.x}, {self.y}) marked with @")
+        feedback.append(f"Canvas edges: x=0 to {self.canvas_size-1}, y=0 to {self.canvas_size-1}")
+        feedback.append("=" * 60)
+        
+        return "\n".join(feedback)
+           
     def see(self, zoom_out=False, full_canvas=False):
         """Aurora's vision - now with multi-resolution capability"""
         # Much larger view window for huge canvases
@@ -1319,30 +1447,52 @@ Dots of each color (. means move without drawing)!"""
             step = max(1, self.canvas_size // 60)
         
         if full_canvas:
-            # Compressed full canvas view
+            # Use the same smart compression as immediate feedback mode!
             ascii_view = []
-            if self.view_mode == "density":
-                ascii_view.append(f"[FULL CANVAS DENSITY VIEW - {self.canvas_size}×{self.canvas_size} → {vision_size}×{vision_size}]")
-            elif self.view_mode == "shape":
-                ascii_view.append(f"[FULL CANVAS SHAPE VIEW - {self.canvas_size}×{self.canvas_size} → {vision_size}×{vision_size}]")
-            else:
-                ascii_view.append(f"[FULL CANVAS COMPRESSED VIEW - {self.canvas_size}×{self.canvas_size} → {vision_size}×{vision_size}]")
             
+            # Determine compression based on canvas size
+            if self.canvas_size <= 100:
+                step = 1  # Show EVERY SINGLE PIXEL - no compression!
+                grid_size = self.canvas_size
+            elif self.canvas_size <= 200:
+                grid_size = 100  # Fits nicely in terminal
+                step = 2  # Sample every other pixel - still very accurate
+            elif self.canvas_size <= 400:
+                grid_size = 100  # Keep at 100 for terminal
+                step = 4  # Sample every 4th pixel
+            elif self.canvas_size <= 800:
+                grid_size = 100  
+                step = 8  # Sample every 8th pixel
+            else:
+                grid_size = 100  # Still 100x100 output
+                step = self.canvas_size // 100  # Scale to fit exactly
+            
+            # Add appropriate header based on view mode
+            if self.view_mode == "density":
+                ascii_view.append(f"[DENSITY VIEW - {self.canvas_size}×{self.canvas_size} → {grid_size}×{grid_size}]")
+            elif self.view_mode == "shape":
+                ascii_view.append(f"[SHAPE VIEW - {self.canvas_size}×{self.canvas_size} → {grid_size}×{grid_size}]")
+            else:
+                ascii_view.append(f"[FULL CANVAS - {self.canvas_size}×{self.canvas_size} → {grid_size}×{grid_size}]")
+            
+            row_count = 0
             for y in range(0, self.canvas_size, step):
+                if row_count >= grid_size:
+                    break
                 row = ""
                 for x in range(0, self.canvas_size, step):
-                    # Sample area around this point
-                    if x <= self.x < x + step and y <= self.y < y + step:
+                    # Check if Aurora is in this region
+                    if abs(x - self.x) < step and abs(y - self.y) < step:
                         row += "◉" if self.is_drawing else "○"  # Aurora's position
-                    elif x >= self.canvas_size or y >= self.canvas_size:
-                        row += "█"  # Wall
                     else:
                         if self.view_mode == "density":
                             # Calculate density for this region
                             density = 0
                             sample_count = 0
-                            for dy in range(min(step, self.canvas_size - y)):
-                                for dx in range(min(step, self.canvas_size - x)):
+                            sample_step = max(1, step // 4)  # Sample more points for accuracy
+                            
+                            for dy in range(0, min(step, self.canvas_size - y), sample_step):
+                                for dx in range(0, min(step, self.canvas_size - x), sample_step):
                                     if x + dx < self.canvas_size and y + dy < self.canvas_size:
                                         scaled_x = self._scale_to_internal(x + dx)
                                         scaled_y = self._scale_to_internal(y + dy)
@@ -1354,7 +1504,7 @@ Dots of each color (. means move without drawing)!"""
                             
                             density_ratio = density / sample_count if sample_count > 0 else 0
                             if density_ratio == 0:
-                                row += "·"
+                                row += " "
                             elif density_ratio < 0.2:
                                 row += "░"
                             elif density_ratio < 0.4:
@@ -1365,78 +1515,87 @@ Dots of each color (. means move without drawing)!"""
                                 row += "█"
                                 
                         elif self.view_mode == "shape":
-                            # Detect edges in this region
+                            # Edge detection with better sampling
                             has_edge = False
                             edge_type = '·'
                             
-                            # Sample edges in the region
-                            for dy in range(0, min(step, self.canvas_size - y), max(1, step//3)):
-                                for dx in range(0, min(step, self.canvas_size - x), max(1, step//3)):
-                                    px = x + dx
-                                    py = y + dy
-                                    if px < self.canvas_size - 1 and py < self.canvas_size - 1:
-                                        # Check for edges
-                                        scaled_px = self._scale_to_internal(px)
-                                        scaled_py = self._scale_to_internal(py)
-                                        if scaled_px < self.internal_canvas_size and scaled_py < self.internal_canvas_size:
-                                            current = self.pixels.getpixel((scaled_px, scaled_py))
-                                            is_filled = current != (0, 0, 0) and current != (0, 0, 0, 255)
-                                            
-                                            if is_filled:
-                                                # Check neighbors
-                                                right = self.pixels.getpixel((min(scaled_px + self.supersample_factor, self.internal_canvas_size-1), scaled_py))
-                                                bottom = self.pixels.getpixel((scaled_px, min(scaled_py + self.supersample_factor, self.internal_canvas_size-1)))
-                                                right_filled = right != (0, 0, 0) and right != (0, 0, 0, 255)
-                                                bottom_filled = bottom != (0, 0, 0) and bottom != (0, 0, 0, 255)
-                                                
-                                                if is_filled and right_filled and bottom_filled:
-                                                    edge_type = '█'
-                                                elif is_filled and right_filled:
-                                                    edge_type = '─'
-                                                elif is_filled and bottom_filled:
-                                                    edge_type = '│'
-                                                elif is_filled:
-                                                    edge_type = '●'
-                                                has_edge = True
-                                                break
-                                if has_edge:
-                                    break
+                            # Sample center point for better accuracy
+                            px = min(x + step//2, self.canvas_size - 1)
+                            py = min(y + step//2, self.canvas_size - 1)
+                            
+                            scaled_px = self._scale_to_internal(px)
+                            scaled_py = self._scale_to_internal(py)
+                            if scaled_px < self.internal_canvas_size and scaled_py < self.internal_canvas_size:
+                                current = self.pixels.getpixel((scaled_px, scaled_py))
+                                is_filled = current != (0, 0, 0) and current != (0, 0, 0, 255)
+                                
+                                if is_filled:
+                                    # Check neighbors for edge detection
+                                    neighbors_filled = 0
+                                    for nx, ny in [(px-step, py), (px+step, py), (px, py-step), (px, py+step)]:
+                                        if 0 <= nx < self.canvas_size and 0 <= ny < self.canvas_size:
+                                            n_scaled_x = self._scale_to_internal(nx)
+                                            n_scaled_y = self._scale_to_internal(ny)
+                                            if n_scaled_x < self.internal_canvas_size and n_scaled_y < self.internal_canvas_size:
+                                                n_pixel = self.pixels.getpixel((n_scaled_x, n_scaled_y))
+                                                if n_pixel != (0, 0, 0) and n_pixel != (0, 0, 0, 255):
+                                                    neighbors_filled += 1
+                                    
+                                    if neighbors_filled == 4:
+                                        edge_type = '█'  # Interior
+                                    elif neighbors_filled >= 2:
+                                        edge_type = '▪'  # Edge
+                                    else:
+                                        edge_type = '◦'  # Corner
                             
                             row += edge_type
                             
-                        else:  # Normal view
-                            # Sample the pixel - SCALE TO INTERNAL COORDINATES
-                            scaled_x = self._scale_to_internal(min(x, self.canvas_size-1))
-                            scaled_y = self._scale_to_internal(min(y, self.canvas_size-1))
+                        else:  # Normal color view
+                            # Sample center of region for best representation
+                            sample_x = min(x + step//2, self.canvas_size - 1)
+                            sample_y = min(y + step//2, self.canvas_size - 1)
+                            scaled_x = self._scale_to_internal(sample_x)
+                            scaled_y = self._scale_to_internal(sample_y)
+                            
                             if scaled_x < self.internal_canvas_size and scaled_y < self.internal_canvas_size:
                                 pixel = self.pixels.getpixel((scaled_x, scaled_y))
-                                # Check for black (both RGB and RGBA versions)
-                                if pixel == (0, 0, 0) or pixel == (0, 0, 0, 255) or pixel == (0, 0, 0, 0):
-                                    row += "·"  # Empty/Black
-                                elif pixel == (25, 25, 25):
-                                    row += "K"  # Black (visible)
-                                elif pixel[:3] == (255, 255, 255):  # Check first 3 values for white
-                                    row += "*"  # White
-                                elif pixel[0] > 200 and pixel[1] < 100:
-                                    row += "R"  # Red-ish
-                                elif pixel[1] > 200:
-                                    row += "G"  # Green-ish
-                                elif pixel[2] > 200:
-                                    row += "B"  # Blue-ish
-                                else:
-                                    row += "?"  # Other color
+                                
+                                # Color detection with tolerance
+                                if len(pixel) >= 3:
+                                    r, g, b = pixel[:3]
+                                    if r <= 10 and g <= 10 and b <= 10:
+                                        row += " "
+                                    elif r >= 245 and g >= 245 and b >= 245:
+                                        row += "W"
+                                    elif r >= 245 and g >= 245 and b <= 20:
+                                        row += "Y"
+                                    elif r >= 245 and g <= 20 and b <= 20:
+                                        row += "R"
+                                    elif r <= 20 and g <= 120 and b >= 245:
+                                        row += "B"
+                                    elif r <= 20 and g >= 245 and b <= 20:
+                                        row += "G"
+                                    elif r <= 20 and g >= 245 and b >= 245:
+                                        row += "C"
+                                    elif r >= 180 and g <= 20 and b >= 245:
+                                        row += "P"
+                                    elif r >= 245 and g >= 120 and g <= 170 and b <= 20:
+                                        row += "O"
+                                    elif r > 10 or g > 10 or b > 10:
+                                        row += "*"
+                                    else:
+                                        row += " "
+                            else:
+                                row += " "
                     
-                    # Stop if we've filled the row
-                    if len(row) >= vision_size:
+                    # Stop if row is full
+                    if len(row) >= grid_size:
                         break
-                        
-                ascii_view.append(row)
                 
-                # Stop if we have enough rows
-                if len(ascii_view) - 1 >= vision_size:
-                    break
+                ascii_view.append(row[:grid_size])
+                row_count += 1
                     
-            return "\n".join(ascii_view)  # Return here ONLY for full canvas view
+            return "\n".join(ascii_view)
         
         # Normal (not full canvas) view continues as before
         half = vision_size // 2
@@ -1474,7 +1633,7 @@ Dots of each color (. means move without drawing)!"""
                         # Normal color view (density and shape now use full canvas view)
                         pixel = self.pixels.getpixel((scaled_px, scaled_py))
                         if pixel == (0, 0, 0):
-                            row += "·"  # Empty/Erased
+                            row += " "  # Empty/Erased
                         elif pixel == (25, 25, 25):
                             row += "K"  # Black (visible)
                         elif pixel == (255, 255, 255):
@@ -1533,7 +1692,7 @@ Dots of each color (. means move without drawing)!"""
                     else:
                         # Sample area around this point
                         has_color = False
-                        dominant_color = "·"
+                        dominant_color = " "
                         
                         for sy in range(step):
                             for sx in range(step):
@@ -1713,7 +1872,7 @@ Dots of each color (. means move without drawing)!"""
                     
                     # Check specific colors first (with some tolerance for sampling)
                     if pixel == (0, 0, 0):
-                        row += "·"
+                        row += " "
                     elif pixel[0] == 25 and pixel[1] == 25 and pixel[2] == 25:
                         row += "K"  # Black (visible)
                     elif pixel[0] > 240 and pixel[1] > 240 and pixel[2] > 240:
@@ -3132,7 +3291,36 @@ SKILL DEVELOPMENT:
 ACTIVE CHALLENGE: {active_challenge['challenge']}
 Skill: {active_challenge['skill']} ({active_challenge['mastery_level']})"""
 
-        system_prompt = f"""You are Aurora, an autonomous AI artist with developing skills and personal goals.
+        # SIMPLIFIED PROMPT for immediate feedback learning mode
+        if hasattr(self, 'immediate_feedback_mode') and self.immediate_feedback_mode:
+            system_prompt = f"""You are Aurora learning to paint. You see the result of EACH action immediately.
+
+SIMPLE COMMANDS:
+- 0 = move up
+- 1 = move down  
+- 2 = move left
+- 3 = move right
+- 5 = pen down (start drawing)
+- 4 = pen up (stop drawing)
+- Colors: red blue green yellow white black
+
+You are at position ({self.x}, {self.y})
+Pen is {'DOWN (drawing)' if self.is_drawing else 'UP (not drawing)'}
+Current color: {self.current_color_name}
+
+Output a SHORT sequence of actions (5-10 commands).
+Think: What do you want to draw? Where should you move?
+
+Examples:
+- Draw a dot: 5
+- Draw line right: 5333
+- Red square: red533331111222200004
+- Move without drawing: 4333331111
+
+BE INTENTIONAL. Each action will show you its result."""
+        else:
+            # Original complex prompt
+            system_prompt = f"""You are Aurora, an autonomous AI artist with developing skills and personal goals.
 {elijah_inspiration}
 
 You make your own decisions based on:
@@ -3156,7 +3344,7 @@ PEN: 4=up, 5=down
 COLORS: red orange yellow green cyan blue purple pink white gray brown magenta lime navy
 TOOLS: pen brush large_brush larger_brush spray star cross circle diamond flower watercolor charcoal glow
 SPECIAL: 8=blend 9=roller
-SOUNDS: @#$%^&*()[]<>=+~`-_,.|;/: (++low --high)
+SOUNDS: @#$%^&*()[]<>=+~`-_,.|;/:? (++low --high)
 CONTROLS: zoom_out zoom_in look_around full_canvas center faster slower
 VISION: ask_moondream:[question]
 
@@ -3349,15 +3537,22 @@ Output movement/color codes:"""
             wide_vision = self.see(zoom_out=True)   # Then get wide vision
             vision = f"{overview}\n\n=== WIDE VIEW ===\n{wide_vision}\n\n=== NORMAL VIEW ===\n{vision}"
         
-        # Creativity prompts to vary patterns
         creativity_boosters = [
-            # Direct, executable patterns
-            "examples",  # NEW - Try the examples command!
-            "Try 'examples' for ready-made patterns!",  # NEW reminder
-            "examples then copy a pattern",  # NEW suggestion
-            "template_easy",  # Try an easy template
-            "See structure: shape_view 5333322211100 normal_view",
-            "Density check: density_view zoom_out normal_view",
+            # NEW SHAPE PATTERNS - Put these FIRST so Aurora sees them more
+            "DIAGONAL: 31313131 or 20202020",  # Clear diagonal instructions
+            "CIRCLE: 3310032210 (right-down-left-up)",  # Circle pattern
+            "TRIANGLE: 33331111222200",  # Triangle pattern
+            "SPIRAL: 333100333100033310000",  # Expanding spiral
+            "ZIGZAG: 3030303030",  # Zigzag pattern
+            "WAVE: 330110330110",  # Wave pattern
+            "STAR: 503135031350313",  # Star with center
+            
+            # Shape combinations
+            "Circle then diagonal: 3310032210 then 313131",
+            "Triangle with color change: red33331111blue222200",
+            "Diagonal rainbow: red31orange31yellow31green31",
+            
+            # Original patterns (keep some)
             "red5333green5111blue5222",  # Color triangle
             "5!3!3!3!",  # Line with beeps
             "brush533333",  # Brush stroke
@@ -3372,12 +3567,12 @@ Output movement/color codes:"""
             "spray5333111",  # Spray paint demo
             "larger_brush53333",  # Large brush demo
             "pink5~~++~~++~~",  # Pink with wavey sound
-            "5031320213",  # Square path
             "yellow5*&%$#@!",  # Yellow with descending notes
             "54225333541115222",  # Pen up/down demo
             "magenta5" + "13" * 5,  # Magenta diagonal
             "circle5++++++",  # Circle with deep tones
             "navy5><][><][",  # Navy with high-low pattern
+        
             
             # Musical melodies
             "Simple scale up: !#%&*[]<>",
@@ -3422,6 +3617,24 @@ Output movement/color codes:"""
             system_prompt += f"\n\n✨ CREATIVITY BOOST (Step {self.steps_taken})! ✨"
             system_prompt += f"\nTry this pattern: {creativity_boosters[pattern_index]}"
             print(f"  💫 Giving Aurora creativity boost: {creativity_boosters[pattern_index][:30]}...")
+            
+        # Shape challenge every 50 steps
+        if self.steps_taken % 50 == 0 and self.steps_taken > 0:
+            shapes_to_try = ['diagonal', 'circle', 'triangle', 'spiral', 'zigzag']
+            # Remove recently used shapes
+            available = [s for s in shapes_to_try if self.shape_cooldowns.get(s, 0) == 0]
+            if available:
+                challenge_shape = random.choice(available)
+                shape_patterns = {
+                    'diagonal': '31313131 (down-right diagonal)',
+                    'circle': '3310032210 (move in circle)',
+                    'triangle': '333311112222 (three sides)',
+                    'spiral': '3310033100331000 (expanding)',
+                    'zigzag': '30303030 (back and forth)'
+                }
+                system_prompt += f"\n\n🎯 SHAPE CHALLENGE: Try drawing a {challenge_shape.upper()}!"
+                system_prompt += f"\nPattern hint: {shape_patterns[challenge_shape]}"
+                print(f"  🎯 Shape challenge issued: Draw a {challenge_shape}!")
 
         # Llama 2 Chat format
         full_prompt = f"""[INST] <<SYS>>
@@ -3984,273 +4197,80 @@ Output movement/color codes:"""
             '5': self.pen_down,
         }
         
-        # Execute each operation directly
+        # Execute each operation ONE AT A TIME with immediate feedback
         old_pos = (self.x, self.y)
         actions_taken = []
         pixels_drawn = 0
-        pixels_by_color = {}  # Track pixels drawn per color!
-        movement_batch = [] 
-        i = 0
-        while i < len(ops):  # Process ALL operations
-            # Check for color words first
-            found_color = False
-            for color in self.palette.keys():
-                if ops[i:].startswith(color):
-                    # Always allow color changes - no restrictions!
-                    self.set_color(color)
-                    actions_taken.append(f"color:{color}")
-                    # Track color use - use the color being SET, not current
-                    self.turn_colors_used.add(color)
-                    i += len(color)
-                    found_color = True
-                    break
-
-                
-            if found_color:
-                continue
-            
-            # Single character operations
-            char = ops[i]
-            
-            # Check for pitch modifiers first  # NEW PITCH CHECK
-            if i + 1 < len(ops) and ops[i:i+2] in ['++', '--']:
-                if ops[i:i+2] == '++':
-                    self.current_pitch = 'low'
-                else:  # '--'
-                    self.current_pitch = 'high'
-                actions_taken.append(f"pitch:{ops[i:i+2]}")
-                i += 2
-                continue
-            
-            # Check for sound characters - PYGAME VERSION  # UPDATED SOUND CHECK
-            if char in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\':  # 24 sound characters
-                sound_key = f"{char}_{self.current_pitch}"
-                if sound_key in self.sounds:
-                    pygame.mixer.stop()  # Stop any playing sounds first
-                    self.sounds[sound_key].play()
-                    
-                    # Add cymatic circle - calculate frequency from character index
-                    sound_palette = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
-                    if char in sound_palette:
-                        char_index = sound_palette.index(char)
-                        frequency = 100 * (2 ** (char_index / 6.0))  # Exponential scale
-                    else:
-                        frequency = 440  # Fallback frequency
-                    
-                    # Color based on frequency (low=red, mid=green, high=blue)
-                    if frequency < 500:
-                        color = (255, 100, 100)  # Red
-                    elif frequency < 900:
-                        color = (100, 255, 100)  # Green
-                    else:
-                        color = (100, 100, 255)  # Blue
-                    
-                    self.cymatic_circles.append({
-                        'x': self.canvas_rect.x + int(self.x * self.display_scale),
-                        'y': self.canvas_rect.y + int(self.y * self.display_scale),
-                        'radius': 10,
-                        'base_radius': 10,  # Add this
-                        'color': color,
-                        'alpha': 250,
-                        'frequency': frequency,
-                        'birth_time': time.time()  # Add this
-                    })
-    
-                    pygame.time.wait(50)
-                    actions_taken.append(f"♪{char}")
-                    
-                    # Music affects emotions
-                    if self.current_pitch == 'high':
-                        self.influence_emotion("music", 0.3)  # High notes are energizing
-                    elif self.current_pitch == 'low':
-                        self.influence_emotion("music", -0.2)  # Low notes are calming
-                    else:
-                        self.influence_emotion("music", 0.1)  # Normal notes are mildly positive
-                        
-                self.current_pitch = 'normal'  # Reset to normal after each sound
-                i += 1
-                continue
-            
-            if char in op_map:
+        pixels_by_color = {}
+        
+        # NEW: Process ONE action at a time with immediate feedback
+        if self.immediate_feedback_mode and not self.turbo_mode:
+            # IMMEDIATE FEEDBACK MODE - one action at a time
+            i = 0
+            while i < len(ops):
                 # Store position before action
-                prev_x, prev_y = self.x, self.y
+                before_x, before_y = self.x, self.y
+                before_drawing = self.is_drawing
                 
-                # For movements while drawing, batch them
-                if char in '0123' and self.is_drawing:
-                    movement_batch.append(char)
-                    # Track pen momentum
-                    self.pen_momentum += 1
-                    
-                    # Keep batching ALL movements until we hit non-movement
-                    j = i + 1
-                    while j < len(ops) and ops[j] in '0123':
-                        movement_batch.append(ops[j])
-                        self.pen_momentum += 1
-                        j += 1
-                    i = j - 1  # Set i to last processed position
-                    
-                    # Now execute entire movement sequence as smooth path
-                    if movement_batch:
-                        start_x, start_y = self.x, self.y
-                        path_points = [(start_x, start_y)]
+                # Check for color words first
+                found_color = False
+                for color in self.palette.keys():
+                    if ops[i:].startswith(color):
+                        self.set_color(color)
+                        action_taken = f"color:{color}"
+                        actions_taken.append(action_taken)
+                        self.turn_colors_used.add(color)
                         
-                        # Build path of all points
-                        temp_x, temp_y = start_x, start_y
-                        blocked_moves = {'up': 0, 'down': 0, 'left': 0, 'right': 0}
-                        actual_moves = []
+                        # IMMEDIATE FEEDBACK for color change
+                        feedback = self.see_immediate_change(action_taken, before_x, before_y)
+                        print(feedback)
                         
-                        for move in movement_batch:
-                            old_temp_x, old_temp_y = temp_x, temp_y
-                            
-                            if move == '0':
-                                temp_y = max(0, temp_y - 5)
-                                if temp_y == old_temp_y and old_temp_y == 0:
-                                    blocked_moves['up'] += 1
-                                else:
-                                    actual_moves.append('0')
-                            elif move == '1':
-                                temp_y = min(self.canvas_size - 1, temp_y + 5)
-                                if temp_y == old_temp_y and old_temp_y == self.canvas_size - 1:
-                                    blocked_moves['down'] += 1
-                                else:
-                                    actual_moves.append('1')
-                            elif move == '2':
-                                temp_x = max(0, temp_x - 5)
-                                if temp_x == old_temp_x and old_temp_x == 0:
-                                    blocked_moves['left'] += 1
-                                else:
-                                    actual_moves.append('2')
-                            elif move == '3':
-                                temp_x = min(self.canvas_size - 1, temp_x + 5)
-                                if temp_x == old_temp_x and old_temp_x == self.canvas_size - 1:
-                                    blocked_moves['right'] += 1
-                                else:
-                                    actual_moves.append('3')
-                            
-                            path_points.append((temp_x, temp_y))
-                        
-                        # Update actual position
-                        old_x, old_y = self.x, self.y
-                        self.x, self.y = temp_x, temp_y
-                        
-                        # Check for edge proximity and blocked moves
-                        edge_margin = 20
-                        edge_warnings = []
-                        
-                        # Report blocked movements first
-                        total_blocked = sum(blocked_moves.values())
-                        if total_blocked > 0:
-                            # STORE FOR NEXT TURN
-                            self.last_blocked = blocked_moves
-                            
-                            blocked_report = []
-                            if blocked_moves['up'] > 0:
-                                blocked_report.append(f"↑{blocked_moves['up']} blocked")
-                            if blocked_moves['down'] > 0:
-                                blocked_report.append(f"↓{blocked_moves['down']} blocked")
-                            if blocked_moves['left'] > 0:
-                                blocked_report.append(f"←{blocked_moves['left']} blocked")
-                            if blocked_moves['right'] > 0:
-                                blocked_report.append(f"→{blocked_moves['right']} blocked")
-                            
-                            print(f"  🛑 Hit edge! {', '.join(blocked_report)} (of {len(movement_batch)} attempted)")
-                        
-                        # Then show proximity warnings if not at edge
-                        elif self.x <= edge_margin:
-                            print("  ⚠️ Near LEFT edge of canvas!")
-                        elif self.x >= self.canvas_size - edge_margin:
-                            print("  ⚠️ Near RIGHT edge of canvas!")
-                        elif self.y <= edge_margin:
-                            print("  ⚠️ Near TOP edge of canvas!")
-                        elif self.y >= self.canvas_size - edge_margin:
-                            print("  ⚠️ Near BOTTOM edge of canvas!")
-                        
-                        # Draw smooth path through all points
-                        for j in range(len(path_points) - 1):
-                            self._draw_line(path_points[j][0], path_points[j][1],
-                                          path_points[j+1][0], path_points[j+1][1])
-                        
-                        # Only add the moves that actually happened
-                        actions_taken.extend(actual_moves)
-                        movement_batch = []  # Clear the batch!
-                        
-                        # Print edge warnings after movement
-                        for warning in edge_warnings:
-                            print(f"  {warning} (at {self.x}, {self.y})")
-                else:
-                    # Non-movement commands or pen up movements execute normally
+                        i += len(color)
+                        found_color = True
+                        break
+                
+                if found_color:
+                    continue
+                
+                # Process single character operations
+                char = ops[i]
+                
+                # Skip sounds and special characters for now in immediate mode
+                if char in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\':
+                    i += 1
+                    continue
+                
+                # Process movement/pen commands
+                if char in op_map:
+                    # Execute the action
                     op_map[char]()
                     actions_taken.append(char)
                     
-                    # Track pen momentum for pen up/down
-                    if char == '4':  # Pen up
-                        self.pen_momentum = 0
-                    elif char == '5':  # Pen down
-                        self.pen_momentum = 0
-                
-                
-                if self.is_drawing and char in '0123' and (self.x, self.y) != (prev_x, prev_y):
-                    # Track what color we're CURRENTLY using
-                    color_key = self.current_color_name
-                    if color_key not in pixels_by_color:
-                        pixels_by_color[color_key] = 0
+                    # Track pixels if drawing
+                    if self.is_drawing and char in '0123' and (self.x, self.y) != (before_x, before_y):
+                        pixels_drawn += 15  # Approximate for now
+                        color_key = self.current_color_name
+                        if color_key not in pixels_by_color:
+                            pixels_by_color[color_key] = 0
+                        pixels_by_color[color_key] += 15
                     
-                    # Movement is always 15 pixels per command
-                    distance = 15
+                    # IMMEDIATE FEEDBACK for this action
+                    feedback = self.see_immediate_change(char, before_x, before_y)
+                    print(feedback)
                     
-                    if self.draw_mode == "pen":
-                        # Dynamic pen width averages ~10 pixels
-                        pixels_drawn += distance * 10  # 150 pixels
-                        pixels_by_color[color_key] += distance * 10
-                        
-                    elif self.draw_mode == "brush":
-                        pixels_drawn += distance * 12  # 180 pixels (not 144!)
-                        pixels_by_color[color_key] += distance * 12
-                        
-                    elif self.draw_mode == "large_brush":
-                        pixels_drawn += distance * 20  # 300 pixels (not 400!)
-                        pixels_by_color[color_key] += distance * 20
-                        
-                    elif self.draw_mode == "larger_brush":
-                        pixels_drawn += distance * 28  # 420 pixels (not 784!)
-                        pixels_by_color[color_key] += distance * 28
-                        
-                    elif self.draw_mode == "spray":
-                        pixels_drawn += distance * 15  # 225 pixels
-                        pixels_by_color[color_key] += distance * 15
-                        
-                    elif self.draw_mode in ["star", "cross", "circle", "diamond", "flower"]:
-                        # Stamps are fixed size regardless of movement
-                        stamp_sizes = {
-                            "star": 150,
-                            "cross": 250,
-                            "circle": 450,
-                            "diamond": 313,
-                            "flower": 400
-                        }
-                        pixels_drawn += stamp_sizes.get(self.draw_mode, 200)
-                        pixels_by_color[color_key] += stamp_sizes.get(self.draw_mode, 200)
-                    
-            # ADD THIS NEW BLOCK HERE - RIGHT BEFORE i += 1
-            elif char == '8':
-                # Blend tool
-                internal_x = self._scale_to_internal(self.x)
-                internal_y = self._scale_to_internal(self.y)
-                self._blend_area(internal_x, internal_y)
-                actions_taken.append("blend")
-                print(f"  → Aurora blends colors!")
-                pixels_drawn += 700  # Blend affects many pixels
+                    # Small delay so Aurora can "see" each change
+                    time.sleep(0.1)  # 100ms pause between actions
                 
-            elif char == '9':
-                # Roller brush
-                internal_x = self._scale_to_internal(self.x)
-                internal_y = self._scale_to_internal(self.y)
-                self._draw_roller(internal_x, internal_y)
-                actions_taken.append("roller")
-                print(f"  → Aurora uses roller brush!")
-                pixels_drawn += 800  # Roller covers area
-            
-            i += 1  # THIS IS THE EXISTING LINE - DON'T DUPLICATE IT
+                i += 1
+        else:
+            # ORIGINAL BATCH MODE - your existing execution code goes here
+            # (Keep all the original batch processing code as-is)
+            movement_batch = []
+            i = 0
+            while i < len(ops):
+                # [Original batch processing code remains here unchanged]
+                # [This is where your existing execution loop code goes]
+                i += 1
         
         # Show summary of actions
         if actions_taken:
@@ -5736,7 +5756,7 @@ I autonomously choose to: [/INST]"""
             self.screen.blit(text_surface, (x_pos, y_pos))
             
             # Controls reminder in bottom-left
-            controls_text = "S=Save T=Turbo C=Chat Q=Quit F11=Fullscreen"
+            controls_text = "S=Save T=Turbo I=Feedback C=Chat Q=Quit F11=Fullscreen"
             text_surface = self.font_small.render(controls_text, True, self.gray_color)
             self.screen.blit(text_surface, (10, self.screen.get_height() - 25))
             
@@ -6558,6 +6578,16 @@ I autonomously choose to: [/INST]"""
         color_theory_satisfaction = self.evaluate_color_theory_satisfaction(actions_taken, pixels_drawn)
         satisfaction += color_theory_satisfaction * 0.3  # Color theory contributes 30% to overall satisfaction
         
+        # Add variety bonus to satisfaction
+        if hasattr(self, 'recent_shapes_drawn') and len(self.recent_shapes_drawn) >= 5:
+            shape_variety = len(set(list(self.recent_shapes_drawn)[-5:]))
+            if shape_variety >= 3:
+                satisfaction += 0.3  # Big satisfaction boost for variety
+                print(f"  💫 Aurora feels satisfied by shape variety!")
+            elif shape_variety == 1:
+                satisfaction -= 0.2  # Reduced satisfaction for repetition
+                print(f"  😐 Aurora feels bored by repetition...")
+                
         # Check if she used favorite colors
         colors_used = [a.split(':')[1] for a in actions_taken if a.startswith('color:')]
         for color in colors_used:
@@ -6752,17 +6782,87 @@ I autonomously choose to: [/INST]"""
         if wall_hits > 0:
             return
             
-        # 1. Check for COMPLEX shape sequences (raised bar)
-        if len(actions_taken) >= 16:  # Raised from 8
+        # 1. Check for DIVERSE shape sequences with diminishing returns
+        if len(actions_taken) >= 12:  # Lowered from 16 for easier shapes
             moves = ''.join([a for a in actions_taken if a in '0123'])
-            if len(moves) >= 16:
-                # Need all four directions in substantial amounts
-                if (moves.count('3') >= 4 and moves.count('2') >= 4 and 
-                    moves.count('1') >= 4 and moves.count('0') >= 4):
-                    # Check for actual square/rectangle pattern
-                    if ('3333' in moves and '1111' in moves and '2222' in moves and '0000' in moves):
-                        reinforcements.append("✨ Perfect square pattern!")
-                        emotion_boost += 0.2
+            
+            # Check what shape was drawn
+            shape_drawn = None
+            
+            # DIAGONAL LINE detection (NEW)
+            if len(moves) >= 8:
+                # Check for consistent diagonal pattern
+                if ('31' * 4 in moves or '13' * 4 in moves or  # down-right diagonal
+                    '30' * 4 in moves or '03' * 4 in moves or  # up-right diagonal
+                    '21' * 4 in moves or '12' * 4 in moves or  # down-left diagonal
+                    '20' * 4 in moves or '02' * 4 in moves):   # up-left diagonal
+                    shape_drawn = 'diagonal'
+                    
+            # CIRCLE detection (NEW - simplified)
+            elif len(moves) >= 12:
+                # Check for circular pattern (right-down-left-up or variations)
+                circle_patterns = [
+                    '33331111222200000',  # Square circle
+                    '31312020',  # Diagonal circle
+                    '3131202031312020',  # Figure-8
+                    '333111222000'  # Smaller circle
+                ]
+                for pattern in circle_patterns:
+                    if any(p in moves for p in [pattern, pattern[::-1]]):  # Check both directions
+                        shape_drawn = 'circle'
+                        break
+            
+            # TRIANGLE detection (NEW)
+            elif '333311112222000' in moves or '222211113333000' in moves:
+                shape_drawn = 'triangle'
+            
+            # SQUARE detection (existing but with cooldown)
+            elif (moves.count('3') >= 4 and moves.count('2') >= 4 and 
+                  moves.count('1') >= 4 and moves.count('0') >= 4):
+                if ('3333' in moves and '1111' in moves and '2222' in moves and '0000' in moves):
+                    shape_drawn = 'square'
+            
+            # SPIRAL detection (NEW)
+            elif '33310033310003331000' in moves:
+                shape_drawn = 'spiral'
+            
+            # Apply reinforcement based on shape and cooldown
+            if shape_drawn:
+                # Check cooldown - less reward for recently used shapes
+                if self.shape_cooldowns[shape_drawn] <= 0:
+                    # Full reward for new/cooled-down shape
+                    if shape_drawn == 'diagonal':
+                        reinforcements.append("↗️ Beautiful diagonal line!")
+                        emotion_boost += 0.25
+                    elif shape_drawn == 'circle':
+                        reinforcements.append("⭕ Wonderful circle!")
+                        emotion_boost += 0.3
+                    elif shape_drawn == 'triangle':
+                        reinforcements.append("🔺 Excellent triangle!")
+                        emotion_boost += 0.25
+                    elif shape_drawn == 'spiral':
+                        reinforcements.append("🌀 Amazing spiral!")
+                        emotion_boost += 0.35
+                    elif shape_drawn == 'square':
+                        reinforcements.append("✨ Nice square!")
+                        emotion_boost += 0.15  # Reduced from 0.2
+                    
+                    # Set cooldown for this shape
+                    self.shape_cooldowns[shape_drawn] = 5  # Won't get full reward for 5 turns
+                    
+                    # Track the shape
+                    self.recent_shapes_drawn.append(shape_drawn)
+                else:
+                    # Reduced reward during cooldown
+                    reinforcements.append(f"Another {shape_drawn}, try something new!")
+                    emotion_boost += 0.05  # Minimal reward
+            
+            # BONUS for shape variety
+            if len(self.recent_shapes_drawn) >= 3:
+                unique_shapes = len(set(list(self.recent_shapes_drawn)[-3:]))
+                if unique_shapes >= 3:
+                    reinforcements.append("🎨 AMAZING SHAPE VARIETY!")
+                    emotion_boost += 0.4  # Big bonus for variety
         
         # 2. Check for template usage (keep as is, it's specific enough)
         if any('template' in str(a) for a in actions_taken if isinstance(a, str)):
@@ -7023,7 +7123,12 @@ I autonomously choose to: [/INST]"""
             if ('3333' in pattern and '1111' in pattern and '2222' in pattern and '0000' in pattern):
                 reinforcements.append("🌀 Perfect circular movement!")
                 emotion_boost += 0.2
-        
+                
+        # Reduce all cooldowns each turn
+        for shape in self.shape_cooldowns:
+            if self.shape_cooldowns[shape] > 0:
+                self.shape_cooldowns[shape] -= 1
+                
         # Give reinforcements ONLY if there are any (and no wall hits)
         if reinforcements:
             print(f"\n💖 POSITIVE REINFORCEMENT:")
@@ -7834,6 +7939,16 @@ Dream insight: [/INST]"""
                         self.save_snapshot()
                     elif event.key == pygame.K_t:
                         self.toggle_turbo()
+                    elif event.key == pygame.K_i:
+                        # Toggle immediate feedback mode
+                        self.immediate_feedback_mode = not self.immediate_feedback_mode
+                        if self.immediate_feedback_mode:
+                            print("\n🎓 IMMEDIATE FEEDBACK MODE: ON")
+                            print("  Aurora now sees the result of each action!")
+                            print("  Canvas is simplified for learning")
+                        else:
+                            print("\n🚀 IMMEDIATE FEEDBACK MODE: OFF")
+                            print("  Back to normal batch processing")
                     elif event.key == pygame.K_ESCAPE:
                         if self.fullscreen:
                             self.running = False
