@@ -841,6 +841,8 @@ class AuroraCodeMindComplete:
         # Immediate feedback learning mode - start with it ON
         self.immediate_feedback_mode = True
         print("🎓 IMMEDIATE FEEDBACK MODE: ON - Aurora sees each action's result!")
+        self.moondream_instant_feedback = False  # Moondream comments on every action in feedback mode
+        print("👁️ MOONDREAM INSTANT FEEDBACK: ON - Moondream observes each action!")
         # Check-in system initialization
         self.last_checkin_time = time.time()
         self.current_mode = "drawing"  # drawing, chat, rest
@@ -948,6 +950,13 @@ class AuroraCodeMindComplete:
                 # Conversation tracking
                 self.vision_conversation_history = deque(maxlen=20)
                 self.moondream_last_message = None
+                self.moondream_literal_mode = True  # Focus on literal descriptions
+                self.moondream_tracking = {
+                    'last_mark_position': None,
+                    'mark_count': 0,
+                    'current_shape': None,
+                    'connected_marks': []
+                }
                 self.conversation_turn = 0
                 self.last_vision_question = None  # ADD THIS LINE
                 
@@ -1560,33 +1569,62 @@ Dots of each color (. means move without drawing)!"""
                             if scaled_x < self.internal_canvas_size and scaled_y < self.internal_canvas_size:
                                 pixel = self.pixels.getpixel((scaled_x, scaled_y))
                                 
-                                # Color detection with tolerance
+                                # Color detection with more forgiving thresholds
                                 if len(pixel) >= 3:
                                     r, g, b = pixel[:3]
-                                    if r <= 10 and g <= 10 and b <= 10:
-                                        row += " "
-                                    elif r >= 245 and g >= 245 and b >= 245:
+                                    
+                                    # Check for transparency first if RGBA
+                                    if len(pixel) == 4 and pixel[3] < 30:
+                                        row += " "  # Transparent
+                                    elif r <= 15 and g <= 15 and b <= 15:
+                                        row += " "  # Black/empty
+                                    # White detection - very broad range
+                                    elif r >= 230 and g >= 230 and b >= 230:
                                         row += "W"
-                                    elif r >= 245 and g >= 245 and b <= 20:
-                                        row += "Y"
-                                    elif r >= 245 and g <= 20 and b <= 20:
+                                    # Red detection - broad range
+                                    elif r >= 230 and g <= 50 and b <= 50:
                                         row += "R"
-                                    elif r <= 20 and g <= 120 and b >= 245:
-                                        row += "B"
-                                    elif r <= 20 and g >= 245 and b <= 20:
+                                    # Yellow detection
+                                    elif r >= 230 and g >= 230 and b <= 50:
+                                        row += "Y"
+                                    # Green detection
+                                    elif r <= 50 and g >= 230 and b <= 50:
                                         row += "G"
-                                    elif r <= 20 and g >= 245 and b >= 245:
+                                    # Blue detection
+                                    elif r <= 50 and g <= 140 and b >= 230:
+                                        row += "B"
+                                    # Cyan detection
+                                    elif r <= 50 and g >= 230 and b >= 230:
                                         row += "C"
-                                    elif r >= 180 and g <= 20 and b >= 245:
+                                    # Purple detection
+                                    elif r >= 160 and g <= 50 and b >= 230:
                                         row += "P"
-                                    elif r >= 245 and g >= 120 and g <= 170 and b <= 20:
+                                    # Orange detection
+                                    elif r >= 230 and g >= 100 and g <= 190 and b <= 50:
                                         row += "O"
-                                    elif r > 10 or g > 10 or b > 10:
-                                        row += "*"
+                                    # Pink detection
+                                    elif r >= 230 and g >= 160 and g <= 220 and b >= 160:
+                                        row += "K"  # Using K for pink
+                                    # Magenta detection
+                                    elif r >= 230 and g <= 50 and b >= 230:
+                                        row += "M"
+                                    # Gray detection
+                                    elif abs(r - g) <= 20 and abs(g - b) <= 20 and abs(r - b) <= 20 and r >= 100 and r <= 180:
+                                        row += "/"
+                                    # Brown detection
+                                    elif r >= 120 and r <= 160 and g >= 50 and g <= 90 and b >= 10 and b <= 40:
+                                        row += "N"
+                                    # Lime detection
+                                    elif r >= 30 and r <= 80 and g >= 180 and g <= 230 and b >= 30 and b <= 80:
+                                        row += "L"
+                                    # Navy detection
+                                    elif r <= 30 and g <= 30 and b >= 100 and b <= 160:
+                                        row += "V"  # Using V for navy to avoid confusion
+                                    # Anything else with significant color
+                                    elif r > 20 or g > 20 or b > 20:
+                                        row += "*"  # Some other color
                                     else:
-                                        row += " "
-                            else:
-                                row += " "
+                                        row += " "  # Too dark to see
                     
                     # Stop if row is full
                     if len(row) >= grid_size:
@@ -1612,60 +1650,80 @@ Dots of each color (. means move without drawing)!"""
         
         for dy in range(-half, half + 1):
             py = self.y + dy
-            
-            # Don't show anything beyond the canvas - just skip it!
-            if py < 0 or py >= self.canvas_size:
-                continue  # Skip this entire row - it's outside the canvas
-                
             row = ""
+            
             for dx in range(-half, half + 1):
                 px = self.x + dx
                 
-                if px < 0 or px >= self.canvas_size:
-                    row += " "  # Just empty space for out-of-bounds horizontally
+                if px < 0 or px >= self.canvas_size or py < 0 or py >= self.canvas_size:
+                    row += "█"  # Wall/boundary marker
                 elif dx == 0 and dy == 0:
                     row += "◉" if self.is_drawing else "○"  # Aurora
                 else:
                     # Scale coordinates for internal canvas
-                    scaled_px = self._scale_to_internal(px)
-                    scaled_py = self._scale_to_internal(py)
-                    if scaled_px < self.internal_canvas_size and scaled_py < self.internal_canvas_size:
-                        # Normal color view (density and shape now use full canvas view)
-                        pixel = self.pixels.getpixel((scaled_px, scaled_py))
-                        if pixel == (0, 0, 0):
-                            row += " "  # Empty/Erased
-                        elif pixel == (25, 25, 25):
-                            row += "K"  # Black (visible)
-                        elif pixel == (255, 255, 255):
-                            row += "*"  # White
-                        elif pixel == (255, 0, 0):
+                    base_internal_x = self._scale_to_internal(px)
+                    base_internal_y = self._scale_to_internal(py)
+                    
+                    # Sample the 4x4 region that corresponds to this display pixel
+                    r_total, g_total, b_total = 0, 0, 0
+                    samples = 0
+                    has_color = False
+                    
+                    for dy in range(self.supersample_factor):
+                        for dx in range(self.supersample_factor):
+                            internal_x = base_internal_x + dx
+                            internal_y = base_internal_y + dy
+                            
+                            if 0 <= internal_x < self.internal_canvas_size and 0 <= internal_y < self.internal_canvas_size:
+                                pixel = self.pixels.getpixel((internal_x, internal_y))
+                                if len(pixel) >= 3:
+                                    # Skip fully transparent or black pixels
+                                    if (len(pixel) == 4 and pixel[3] > 10) or (pixel[0] > 10 or pixel[1] > 10 or pixel[2] > 10):
+                                        r_total += pixel[0]
+                                        g_total += pixel[1]
+                                        b_total += pixel[2]
+                                        samples += 1
+                                        has_color = True
+                    
+                    if has_color and samples > 0:
+                        # Average the color values
+                        r = r_total // samples
+                        g = g_total // samples  
+                        b = b_total // samples
+                        
+                        # Now do color detection on the averaged color
+                        if r >= 230 and g >= 230 and b >= 230:
+                            row += "W"  # White
+                        elif r >= 230 and g <= 60 and b <= 60:
                             row += "R"  # Red
-                        elif pixel == (0, 100, 255):
+                        elif r <= 60 and g <= 140 and b >= 230:
                             row += "B"  # Blue
-                        elif pixel == (255, 255, 0):
+                        elif r >= 230 and g >= 230 and b <= 60:
                             row += "Y"  # Yellow
-                        elif pixel == (0, 255, 0):
+                        elif r <= 60 and g >= 230 and b <= 60:
                             row += "G"  # Green
-                        elif pixel == (255, 192, 203):
+                        elif r >= 230 and g >= 160 and g <= 210 and b >= 160:
                             row += "P"  # Pink
-                        elif pixel == (255, 150, 0):
+                        elif r >= 230 and g >= 120 and g <= 180 and b <= 60:
                             row += "O"  # Orange
-                        elif pixel == (200, 0, 255):
+                        elif r >= 180 and g <= 60 and b >= 230:
                             row += "V"  # Purple (Violet)
-                        elif pixel == (0, 255, 255):
+                        elif r <= 60 and g >= 230 and b >= 230:
                             row += "C"  # Cyan
-                        elif pixel == (128, 128, 128):
-                            row += "/"  # Gray (slash)
-                        elif pixel == (139, 69, 19):
-                            row += "W"  # Brown (Wood)
-                        elif pixel == (255, 0, 255):
+                        elif abs(r - g) <= 20 and abs(g - b) <= 20 and abs(r - b) <= 20 and r >= 100 and r <= 180:
+                            row += "/"  # Gray
+                        elif r >= 120 and r <= 160 and g >= 50 and g <= 90 and b >= 10 and b <= 40:
+                            row += "N"  # Brown
+                        elif r >= 230 and g <= 60 and b >= 230:
                             row += "M"  # Magenta
-                        elif pixel == (50, 205, 50):
+                        elif r >= 30 and r <= 80 and g >= 180 and g <= 230 and b >= 30 and b <= 80:
                             row += "L"  # Lime
-                        elif pixel == (0, 0, 128):
-                            row += "N"  # Navy
+                        elif r <= 30 and g <= 30 and b >= 100 and b <= 160:
+                            row += "D"  # Navy (Dark blue)
                         else:
-                            row += "?"
+                            row += "*"  # Other color
+                    else:
+                        row += " "  # No color found
             ascii_view.append(row)
         
         # ADD MULTI-RESOLUTION: Include compressed wide view for context
@@ -1690,40 +1748,27 @@ Dots of each color (. means move without drawing)!"""
                     elif abs(dx) < 3 and abs(dy) < 3:  # Aurora's position
                         row += "◉" if self.is_drawing else "○"
                     else:
-                        # Sample area around this point
-                        has_color = False
-                        dominant_color = " "
-                        
-                        for sy in range(step):
-                            for sx in range(step):
-                                spx = px + sx
-                                spy = py + sy
-                                if 0 <= spx < self.canvas_size and 0 <= spy < self.canvas_size:
-                                    # Scale coordinates for internal canvas
-                                    scaled_spx = self._scale_to_internal(spx)
-                                    scaled_spy = self._scale_to_internal(spy)
-                                    if scaled_spx < self.internal_canvas_size and scaled_spy < self.internal_canvas_size:
-                                        pixel = self.pixels.getpixel((scaled_spx, scaled_spy))
-                                        if pixel != (0, 0, 0):
-                                            has_color = True
-                                            # Simplified color detection for compressed view
-                                            if pixel == (25, 25, 25):
-                                                dominant_color = "k"  # Black (visible)
-                                            elif pixel[0] > 200 and pixel[1] < 100:
-                                                dominant_color = "r"  # Red-ish
-                                            elif pixel[1] > 200:
-                                                dominant_color = "g"  # Green-ish
-                                            elif pixel[2] > 200:
-                                                dominant_color = "b"  # Blue-ish
-                                            elif pixel[0] > 200 and pixel[1] > 200:
-                                                dominant_color = "y"  # Yellow-ish
-                                            else:
-                                                dominant_color = "*"  # Other color
-                                            break
-                            if has_color:
-                                break
-                        
-                        row += dominant_color
+                        # FIXED: Direct sampling instead of area sampling
+                        scaled_px = self._scale_to_internal(px)
+                        scaled_py = self._scale_to_internal(py)
+                        if 0 <= scaled_px < self.internal_canvas_size and 0 <= scaled_py < self.internal_canvas_size:
+                            pixel = self.pixels.getpixel((scaled_px, scaled_py))
+                            if pixel != (0, 0, 0) and (len(pixel) < 4 or pixel[3] > 0):
+                                # Simplified color detection for compressed view
+                                if pixel[0] > 200 and pixel[1] < 100:
+                                    row += "r"  # Red-ish
+                                elif pixel[1] > 200:
+                                    row += "g"  # Green-ish
+                                elif pixel[2] > 200:
+                                    row += "b"  # Blue-ish
+                                elif pixel[0] > 200 and pixel[1] > 200:
+                                    row += "y"  # Yellow-ish
+                                else:
+                                    row += "*"  # Other color
+                            else:
+                                row += " "
+                        else:
+                            row += " "
                 compressed_rows.append(row)
             
             ascii_view.extend(compressed_rows)
@@ -2055,6 +2100,197 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
             'recent_activity': recent_desc,
             'position_context': pos_context
         }    
+        
+    def get_instant_moondream_reflection(self, action, old_x, old_y):
+        """Get Moondream's literal observation of Aurora's drawing progression"""
+        if not self.vision_enabled:
+            return ""
+            
+        try:
+            # Track recent drawing context
+            if not hasattr(self, 'moondream_action_context'):
+                self.moondream_action_context = {
+                    'recent_positions': deque(maxlen=10),
+                    'recent_colors': deque(maxlen=5),
+                    'current_line_start': None,
+                    'lines_drawn': 0,
+                    'last_direction': None
+                }
+            
+            # Check if there was actual movement
+            actual_movement = abs(self.x - old_x) + abs(self.y - old_y)
+            
+            # Don't comment if no movement happened (hit wall)
+            if action in '0123' and actual_movement == 0:
+                return ""
+            
+            # Create canvas image for Moondream
+            display_size = 224
+            actual_canvas = self.pixels.resize(
+                (self.canvas_size, self.canvas_size),
+                Image.Resampling.LANCZOS
+            )
+            canvas_image = actual_canvas.resize(
+                (display_size, display_size),
+                Image.Resampling.NEAREST
+            ).convert("RGB")
+            
+            # Enhance for better visibility
+            enhancer = ImageEnhance.Contrast(canvas_image)
+            canvas_image = enhancer.enhance(2.0)
+            enhancer = ImageEnhance.Brightness(canvas_image)
+            canvas_image = enhancer.enhance(1.2)
+            
+            # Encode image
+            enc_image = self.vision_model.encode_image(canvas_image)
+            
+            # Build literal DESCRIPTIVE prompts (not questions)
+            question = ""
+            
+            # Track position for context
+            self.moondream_action_context['recent_positions'].append((self.x, self.y))
+            
+            # Determine direction of movement
+            direction = ""
+            if action == '0':
+                direction = "upward"
+                self.moondream_action_context['last_direction'] = "up"
+            elif action == '1':
+                direction = "downward"
+                self.moondream_action_context['last_direction'] = "down"
+            elif action == '2':
+                direction = "leftward"
+                self.moondream_action_context['last_direction'] = "left"
+            elif action == '3':
+                direction = "rightward"
+                self.moondream_action_context['last_direction'] = "right"
+            
+            # Create specific DESCRIPTIVE prompts based on action
+            if action in '0123' and self.is_drawing:
+                # Drawing movement - describe the LINE being drawn
+                color_desc = self.current_color_name
+                
+                # Track if this is continuation or new line
+                if self.moondream_action_context['current_line_start'] is None:
+                    self.moondream_action_context['current_line_start'] = (old_x, old_y)
+                    question = f"Describe the {color_desc} mark extending {direction} and any connections it makes."
+                else:
+                    # Continuing a line
+                    positions = list(self.moondream_action_context['recent_positions'])
+                    if len(positions) >= 3:
+                        # Check if line is straight or turning
+                        recent_moves = []
+                        for i in range(len(positions)-1):
+                            if positions[i+1][0] > positions[i][0]:
+                                recent_moves.append('right')
+                            elif positions[i+1][0] < positions[i][0]:
+                                recent_moves.append('left')
+                            elif positions[i+1][1] > positions[i][1]:
+                                recent_moves.append('down')
+                            elif positions[i+1][1] < positions[i][1]:
+                                recent_moves.append('up')
+                        
+                        if len(set(recent_moves)) == 1:
+                            question = f"Describe the {color_desc} line continuing straight {direction}."
+                        else:
+                            question = f"Describe the {color_desc} line turning {direction}."
+                    else:
+                        question = f"Describe the {color_desc} line extending {direction}."
+                        
+            elif action == '4':
+                # Pen lifted
+                self.moondream_action_context['current_line_start'] = None
+                question = "Describe what shape or line was just completed."
+                
+            elif action == '5':
+                # Pen down
+                self.moondream_action_context['current_line_start'] = (self.x, self.y)
+                question = f"Describe the marks near the pen's new position."
+                
+            elif action.startswith('color:'):
+                color_name = action.split(':')[1]
+                self.moondream_action_context['recent_colors'].append(color_name)
+                question = f"Describe any {color_name} marks visible on the canvas."
+                
+            else:
+                # Default prompt
+                question = "Describe the lines and marks visible, their positions and connections."
+            
+            # Get response with literal focus
+            response = self.vision_model.answer_question(
+                enc_image, 
+                question, 
+                self.vision_tokenizer,
+                max_new_tokens=15  # Short but descriptive
+            )
+            
+            # Clean up response to be more literal
+            response = response.strip()
+            
+            # Filter out yes/no answers and overly imaginative responses
+            imagination_words = ['flying', 'falling', 'dancing', 'floating', 'magical', 'dreams', 'sky', 'yes,', 'no,']
+            response_lower = response.lower()
+            if any(word in response_lower for word in imagination_words):
+                # Ask a more direct descriptive prompt
+                question = "Describe only the lines and marks visible."
+                response = self.vision_model.answer_question(
+                    enc_image, 
+                    question, 
+                    self.vision_tokenizer,
+                    max_new_tokens=20
+                )
+            
+            return f"Moondream: {response.strip()}"
+            
+        except Exception as e:
+            return ""  # Silent fail to not interrupt flow
+    
+    
+    def get_moondream_shape_analysis(self):
+        """Get Moondream's analysis of emerging shapes"""
+        if not self.vision_enabled or not hasattr(self, 'moondream_action_context'):
+            return ""
+            
+        try:
+            # Only analyze every 10 movements to identify patterns
+            if not hasattr(self, 'moondream_shape_counter'):
+                self.moondream_shape_counter = 0
+            
+            self.moondream_shape_counter += 1
+            if self.moondream_shape_counter % 10 != 0:
+                return ""
+            
+            # Create canvas image
+            display_size = 224
+            actual_canvas = self.pixels.resize(
+                (self.canvas_size, self.canvas_size),
+                Image.Resampling.LANCZOS
+            )
+            canvas_image = actual_canvas.resize(
+                (display_size, display_size),
+                Image.Resampling.NEAREST
+            ).convert("RGB")
+            
+            enhancer = ImageEnhance.Contrast(canvas_image)
+            canvas_image = enhancer.enhance(2.0)
+            
+            enc_image = self.vision_model.encode_image(canvas_image)
+            
+            # Ask about geometric patterns
+            question = "What geometric shapes or patterns do you see? Describe only straight lines, curves, angles, and connections."
+            
+            response = self.vision_model.answer_question(
+                enc_image, 
+                question, 
+                self.vision_tokenizer,
+                max_new_tokens=30
+            )
+            
+            return f"\n🔍 Pattern observed: {response.strip()}"
+            
+        except:
+            return ""
+        
     def see_with_llava_action(self, last_action):
         """Moondream observes and naturally converses with Aurora"""
         if not self.vision_enabled:
@@ -2909,8 +3145,12 @@ What images do you want to search for?"""
         
         # Normal drawing mode continues below...
         # AUTONOMOUS GOAL GENERATION
-        # Generate autonomous goal every 30 minutes
-        if time.time() - self.last_goal_time > 1800:  # 1800 seconds = 30 minutes
+        # Generate autonomous goal every 30 minutes OR when canvas needs filling
+        current_coverage = getattr(self, 'current_coverage', 0)
+        if current_coverage < 30 and self.steps_taken % 50 == 0:
+            # Prioritize coverage goals when canvas is empty
+            goal = self.generate_coverage_focused_goal()
+        elif time.time() - self.last_goal_time > 1800:  # 1800 seconds = 30 minutes
             goal = self.generate_autonomous_goal()
             if goal:  # Only reset timer if goal was actually generated
                 self.last_goal_time = time.time()
@@ -3293,8 +3533,8 @@ Skill: {active_challenge['skill']} ({active_challenge['mastery_level']})"""
 
         # SIMPLIFIED PROMPT for immediate feedback learning mode
         if hasattr(self, 'immediate_feedback_mode') and self.immediate_feedback_mode:
-            system_prompt = f"""You are Aurora learning to paint. You see the result of EACH action immediately.
-
+            system_prompt = f"""You are Aurora, an autonomous AI artist with developing skills and personal goals.
+{active_goal_context}{skill_context}{challenge_context}
 SIMPLE COMMANDS:
 - 0 = move up
 - 1 = move down  
@@ -3302,20 +3542,22 @@ SIMPLE COMMANDS:
 - 3 = move right
 - 5 = pen down (start drawing)
 - 4 = pen up (stop drawing)
-- Colors: red blue green yellow white black
+COLORS: red orange yellow green cyan blue purple pink white gray brown magenta lime navy
+TOOLS: pen brush large_brush larger_brush spray star cross circle diamond flower watercolor charcoal glow
+SPECIAL: 8=blend 9=roller
+SOUNDS: @#$%^&*()[]<>=+~`-_,.|;/:? (++low --high)
+CONTROLS: zoom_out zoom_in look_around full_canvas center faster slower
+VISION: ask_moondream:[question]
 
 You are at position ({self.x}, {self.y})
 Pen is {'DOWN (drawing)' if self.is_drawing else 'UP (not drawing)'}
 Current color: {self.current_color_name}
 
+CONTROLS: clear_all zoom_out zoom_in look_around full_canvas center faster slower
+
 Output a SHORT sequence of actions (5-10 commands).
 Think: What do you want to draw? Where should you move?
 
-Examples:
-- Draw a dot: 5
-- Draw line right: 5333
-- Red square: red533331111222200004
-- Move without drawing: 4333331111
 
 BE INTENTIONAL. Each action will show you its result."""
         else:
@@ -3416,6 +3658,37 @@ Make autonomous choices that advance YOUR goals and develop YOUR skills."""
             print(f"  💡 ESCAPE SUGGESTIONS: {' or '.join(movement_suggestions)}")
         
         wall_status = " | ".join(wall_warnings) if wall_warnings else "Safe from walls"
+        
+        # AGGRESSIVE EMPTY AREA GUIDANCE
+        empty_area_guidance = ""
+        if hasattr(self, 'identified_empty_regions') and self.identified_empty_regions:
+            # Get the highest priority empty region
+            target_region = self.identified_empty_regions[0]
+            target_x = target_region['center_x']
+            target_y = target_region['center_y']
+            
+            # Calculate movement needed
+            dx = target_x - self.x
+            dy = target_y - self.y
+            
+            # Generate movement commands
+            movement_sequence = ""
+            if abs(dx) > 30:  # Need to move horizontally
+                if dx > 0:
+                    movement_sequence += "3" * min(10, abs(dx) // 15)  # Move right
+                else:
+                    movement_sequence += "2" * min(10, abs(dx) // 15)  # Move left
+            
+            if abs(dy) > 30:  # Need to move vertically
+                if dy > 0:
+                    movement_sequence += "1" * min(10, abs(dy) // 15)  # Move down
+                else:
+                    movement_sequence += "0" * min(10, abs(dy) // 15)  # Move up
+            
+            if movement_sequence:
+                empty_area_guidance = f"\n🎯 EMPTY AREA at ({target_x}, {target_y}) needs filling! Try: {movement_sequence}"
+                system_prompt += empty_area_guidance
+        
         
         # Put escape suggestions at TOP if they exist
         escape_info = ""
@@ -3919,8 +4192,8 @@ Output movement/color codes:"""
                 
                 coverage = (filled_pixels / total_pixels) * 100
                 
-                # Require 40% coverage minimum
-                MINIMUM_COVERAGE = 40
+                # Require 5% coverage minimum
+                MINIMUM_COVERAGE = 5
                 
                 if coverage < MINIMUM_COVERAGE:
                     print(f"\n  ❌ CLEAR DENIED: Canvas is only {coverage:.1f}% full!")
@@ -4225,6 +4498,12 @@ Output movement/color codes:"""
                         feedback = self.see_immediate_change(action_taken, before_x, before_y)
                         print(feedback)
                         
+                        # ADD MOONDREAM'S INSTANT REFLECTION
+                        if self.vision_enabled and self.moondream_instant_feedback:
+                            moondream_reflection = self.get_instant_moondream_reflection(action_taken, before_x, before_y)
+                            if moondream_reflection:
+                                print(f"\n👁️ {moondream_reflection}\n")
+                        
                         i += len(color)
                         found_color = True
                         break
@@ -4257,6 +4536,19 @@ Output movement/color codes:"""
                     # IMMEDIATE FEEDBACK for this action
                     feedback = self.see_immediate_change(char, before_x, before_y)
                     print(feedback)
+                    
+                    # ADD MOONDREAM'S INSTANT REFLECTION
+                    if self.vision_enabled and self.moondream_instant_feedback:
+                        moondream_reflection = self.get_instant_moondream_reflection(char, before_x, before_y)
+                        if moondream_reflection:
+                            print(f"\n👁️ {moondream_reflection}")
+                        
+                        # Every 10 moves, get shape analysis
+                        shape_analysis = self.get_moondream_shape_analysis()
+                        if shape_analysis:
+                            print(shape_analysis)
+                        
+                        print("")  # Extra line for readability
                     
                     # Small delay so Aurora can "see" each change
                     time.sleep(0.1)  # 100ms pause between actions
@@ -4348,7 +4640,7 @@ Output movement/color codes:"""
             # Calculate density of this area
             area_density = already_painted / total_checked if total_checked > 0 else 0
             
-            # Penalize based on how painted the area already was
+            '''# Penalize based on how painted the area already was
             if area_density < 0.3:  # Mostly empty - GOOD!
                 new_pixels = pixels_drawn  # Count all as "new"
             elif area_density < 0.6:  # Somewhat painted - OK
@@ -4366,16 +4658,26 @@ Output movement/color codes:"""
                 if new_pixels > overworked_pixels:
                     print(f"  Drew {new_pixels} NEW pixels{tool_info}: {color_summary}")
                 else:
-                    print(f"  ⚠️ Drew {pixels_drawn} pixels but {overworked_pixels} were overworking!")
+                    print(f"  ⚠️ Drew {pixels_drawn} pixels but {overworked_pixels} were overworking! Use your ENTIRE canvas!")
             else:
                 # Single color
                 if new_pixels > overworked_pixels:
                     print(f"  Drew {new_pixels} NEW {self.current_color_name} pixels{tool_info}")
                 else:
-                    print(f"  ⚠️ Overworked area with {overworked_pixels} {self.current_color_name} pixels")
+                    print(f"  ⚠️ Use the ENTIRE canvas! You are overworking - {overworked_pixels} {self.current_color_name} pixels")
             
             # CRITICAL: Update pixels_drawn to only count NEW pixels for rewards
             pixels_drawn = new_pixels  # This is what gets passed to reinforcement!
+            
+            # COMPLETELY DISABLE REWARDS IF OVERWORKING
+            if area_density > 0.7:
+                # Clear ALL reinforcements - no rewards at all for painting over dense areas
+                reinforcements = []
+                emotion_boost = 0
+                print(f"  🚫 OVERWORKING: Area {area_density*100:.0f}% full - NO REWARDS")
+                # Make it unpleasant
+                self.influence_emotion("creating", -0.2)
+                return  # Exit early - skip all positive reinforcement '''
                 
         # Give positive reinforcement for creative behaviors
         self.give_positive_reinforcement(ops, actions_taken, pixels_by_color, old_pos)
@@ -4422,8 +4724,21 @@ Output movement/color codes:"""
         
         # IMMEDIATE POSITIVE FEEDBACK FOR ANY DRAWING
         if pixels_drawn > 0:
-            # Small emotional boost for ANY creation
-            self.influence_emotion("creating", 0.05)
+            # Small emotional boost for ANY creation - SCALED BY NOVELTY
+            if hasattr(self, 'pixel_visit_counts'):
+                grid_x = self.x // 50
+                grid_y = self.y // 50
+                visit_key = (grid_x, grid_y)
+                visits = self.pixel_visit_counts.get(visit_key, 0)
+                
+                # First visit to area = full reward, diminishing returns after
+                novelty_bonus = 0.05 / (visits + 1)
+                self.influence_emotion("creating", novelty_bonus)
+                
+                self.pixel_visit_counts[visit_key] = visits + 1
+            else:
+                self.pixel_visit_counts = {}
+                self.influence_emotion("creating", 0.05)
             
             # Track total pixels
             if hasattr(self, 'total_pixels_drawn'):
@@ -4452,7 +4767,8 @@ Output movement/color codes:"""
         
         # Update color history and save last color
         self.last_turn_color = self.current_color_name
-        
+        # Track area visits for novelty rewards
+        self.pixel_visit_counts = {}
         # Track performance
         self.last_think_time = time.time() - think_start
         if self.turbo_mode and self.steps_taken % 10 == 0:
@@ -4985,47 +5301,124 @@ I autonomously choose to: [/INST]"""
             print(f"  Error generating autonomous goal: {e}")
             
         return None
-
+        
+    def generate_coverage_focused_goal(self):
+        """Generate a goal specifically for filling empty areas"""
+        if not hasattr(self, 'identified_empty_regions') or not self.identified_empty_regions:
+            return None
+        
+        # Pick an empty region to target
+        target_region = self.identified_empty_regions[0]
+        
+        goal_descriptions = [
+            f"Fill the empty region from ({target_region['x']}, {target_region['y']}) to ({target_region['x'] + target_region['size']}, {target_region['y'] + target_region['size']})",
+            f"Create a dense pattern covering at least 50% of the {target_region['size']}x{target_region['size']} area starting at ({target_region['x']}, {target_region['y']})",
+            f"Explore and paint the untouched region centered at ({target_region['center_x']}, {target_region['center_y']})",
+            f"Achieve 80% coverage in the region from x={target_region['x']} to x={target_region['x'] + target_region['size']}"
+        ]
+        
+        goal = {
+            'description': random.choice(goal_descriptions),
+            'type': 'coverage',
+            'target_region': target_region,
+            'created_at_step': self.steps_taken,
+            'emotion_when_created': self.current_emotion,
+            'success_criteria': {
+                'target_coverage': 70,
+                'region_bounds': (target_region['x'], target_region['y'], 
+                                target_region['x'] + target_region['size'], 
+                                target_region['y'] + target_region['size'])
+            },
+            'estimated_steps': 200,
+            'priority': 'critical',
+            'timestamp': time.time()
+        }
+        
+        self.autonomous_goals.append(goal)
+        print(f"\n🎯 Aurora sets COVERAGE goal: {goal['description']}")
+        
+        return goal
+        
+        
     def analyze_canvas_for_goals(self):
-        """Analyze canvas state to inform goal generation"""
+        """Analyze canvas state to inform goal generation - PRIORITIZING empty space filling"""
         # Sample canvas for analysis
         total_pixels = self.canvas_size * self.canvas_size
         filled_pixels = 0
         color_distribution = {}
         density_map = {'sparse': 0, 'medium': 0, 'dense': 0}
         
-        sample_step = max(1, self.canvas_size // 50)
-        for x in range(0, self.canvas_size, sample_step):
-            for y in range(0, self.canvas_size, sample_step):
-                internal_x = self._scale_to_internal(x)
-                internal_y = self._scale_to_internal(y)
-                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
-                    pixel = self.pixels.getpixel((internal_x, internal_y))
-                    if pixel != (0, 0, 0) and pixel != (0, 0, 0, 255):
-                        filled_pixels += sample_step * sample_step
-                        
-                        # Analyze local density
-                        local_density = self.calculate_density(x, y, radius=20)
-                        if local_density < 0.3:
-                            density_map['sparse'] += 1
-                        elif local_density < 0.7:
-                            density_map['medium'] += 1
-                        else:
-                            density_map['dense'] += 1
-                        
-                        # Track colors
-                        for name, rgb in self.palette.items():
-                            if pixel[:3] == rgb:
-                                color_distribution[name] = color_distribution.get(name, 0) + 1
-                                break
+        # Track empty regions with LARGER regions for better coverage
+        quadrant_coverage = {
+            'top-left': {'filled': 0, 'total': 0},
+            'top-right': {'filled': 0, 'total': 0},
+            'bottom-left': {'filled': 0, 'total': 0},
+            'bottom-right': {'filled': 0, 'total': 0}
+        }
+        
+        mid_x = self.canvas_size // 2
+        mid_y = self.canvas_size // 2
+        
+        # Find the emptiest regions with LARGER region sizes
+        empty_regions = []
+        region_size = self.canvas_size // 5  # Changed from 10 to 5 - larger regions
+        
+        for region_x in range(0, self.canvas_size, region_size):
+            for region_y in range(0, self.canvas_size, region_size):
+                region_filled = 0
+                region_total = 0
+                
+                # More thorough sampling
+                sample_step = max(1, region_size // 20)  # Changed from 10 to 20 - finer sampling
+                for x in range(region_x, min(region_x + region_size, self.canvas_size), sample_step):
+                    for y in range(region_y, min(region_y + region_size, self.canvas_size), sample_step):
+                        region_total += 1
+                        internal_x = self._scale_to_internal(x)
+                        internal_y = self._scale_to_internal(y)
+                        if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                            pixel = self.pixels.getpixel((internal_x, internal_y))
+                            if pixel != (0, 0, 0) and pixel != (0, 0, 0, 255):
+                                region_filled += 1
+                                filled_pixels += sample_step * sample_step
+                
+                # Calculate coverage for this region
+                region_coverage = (region_filled / region_total * 100) if region_total > 0 else 0
+                
+                # Track ALL empty regions, not just very empty ones
+                if region_coverage < 50:  # Changed from 20 to 50 - more aggressive
+                    empty_regions.append({
+                        'x': region_x,
+                        'y': region_y,
+                        'coverage': region_coverage,
+                        'center_x': region_x + region_size // 2,
+                        'center_y': region_y + region_size // 2,
+                        'size': region_size
+                    })
+        
+        # Sort by emptiness AND proximity
+        for region in empty_regions:
+            region['distance'] = abs(self.x - region['center_x']) + abs(self.y - region['center_y'])
+            # Priority score: emptier and closer is better
+            region['priority'] = (100 - region['coverage']) * 10 + (1000 - region['distance'])
+        
+        empty_regions.sort(key=lambda r: r['priority'], reverse=True)
         
         coverage = (filled_pixels / total_pixels) * 100
-        dominant_density = max(density_map.items(), key=lambda x: x[1])[0]
         
-        analysis = f"Coverage: {coverage:.1f}%, Density: {dominant_density}"
-        if color_distribution:
-            top_colors = sorted(color_distribution.items(), key=lambda x: x[1], reverse=True)[:3]
-            analysis += f", Colors: {[c[0] for c in top_colors]}"
+        # Build analysis with STRONG emphasis on empty spaces
+        analysis = f"Coverage: {coverage:.1f}%, "
+        
+        if empty_regions:
+            # Report multiple empty regions
+            analysis += f"{len(empty_regions)} EMPTY REGIONS NEED FILLING! "
+            if len(empty_regions) >= 3:
+                top_3 = empty_regions[:3]
+                for i, region in enumerate(top_3):
+                    analysis += f"Region {i+1}: ({region['x']}-{region['x']+region['size']}, {region['y']}-{region['y']+region['size']}) only {region['coverage']:.0f}% filled. "
+        
+        # Store for goal generation
+        self.identified_empty_regions = empty_regions
+        self.current_coverage = coverage
         
         return analysis
 
@@ -7115,6 +7508,23 @@ I autonomously choose to: [/INST]"""
             elif density > 50 and total_pixels >= 500:
                 reinforcements.append(f"✨ Strong {quadrant} quadrant development!")
                 emotion_boost += 0.2
+                
+        # 26.5 Check for filling empty areas (NEW)
+        if hasattr(self, 'identified_empty_regions') and self.identified_empty_regions:
+            # Check if Aurora is in or near an empty region
+            for region in self.identified_empty_regions[:3]:  # Check top 3 empty regions
+                if (region['x'] <= self.x <= region['x'] + region['size'] and
+                    region['y'] <= self.y <= region['y'] + region['size']):
+                    if total_pixels >= 200:
+                        reinforcements.append(f"🎯 EXCELLENT! Filling empty region at ({region['x']}, {region['y']})!")
+                        emotion_boost += 0.4
+                        # Remove this region from the list since it's being filled
+                        self.identified_empty_regions.remove(region)
+                        break
+                    elif total_pixels >= 50:
+                        reinforcements.append(f"✨ Good start on empty region!")
+                        emotion_boost += 0.2
+                        break
         
         # 27. Check for COMPLETE circular movements (raised bar)
         if len(actions_taken) >= 16:
@@ -7945,10 +8355,14 @@ Dream insight: [/INST]"""
                         if self.immediate_feedback_mode:
                             print("\n🎓 IMMEDIATE FEEDBACK MODE: ON")
                             print("  Aurora now sees the result of each action!")
+                            if self.vision_enabled:
+                                self.moondream_instant_feedback = False
+                                print("  👁️ Moondream will observe each action!")
                             print("  Canvas is simplified for learning")
                         else:
                             print("\n🚀 IMMEDIATE FEEDBACK MODE: OFF")
                             print("  Back to normal batch processing")
+                            self.moondream_instant_feedback = False
                     elif event.key == pygame.K_ESCAPE:
                         if self.fullscreen:
                             self.running = False
