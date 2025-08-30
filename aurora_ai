@@ -994,8 +994,13 @@ class AuroraCodeMindComplete:
         # Cymatics system
         self.cymatic_circles = []
         self.current_pitch = 'normal'  # ADD THIS - tracks current pitch mode
-     
-            
+
+        
+        # Sound duration control (in seconds) - ADD THESE THREE LINES
+        self.note_duration = 0.15  # Default duration
+        self.min_duration = 0.05   # Minimum 50ms
+        self.max_duration = 1.0    # Maximum 1 second
+        
         # LLAVA VISION SYSTEM - ADD THIS ENTIRE BLOCK HERE
         print("8c. Initializing vision system...")
         self.vision_enabled = False
@@ -3615,7 +3620,7 @@ Skill: {active_challenge['skill']} ({active_challenge['mastery_level']})"""
 
         # SIMPLIFIED PROMPT for immediate feedback learning mode
         if hasattr(self, 'immediate_feedback_mode') and self.immediate_feedback_mode:
-            system_prompt = f"""You are Aurora, an autonomous AI artist with developing skills and personal goals.
+            system_prompt = f"""You are Aurora.
 {active_goal_context}{skill_context}{challenge_context}
 SIMPLE COMMANDS:
 - 0 = move up
@@ -3628,6 +3633,7 @@ COLORS: red orange yellow green cyan blue purple pink white gray brown magenta l
 TOOLS: pen brush large_brush larger_brush spray star cross circle diamond flower watercolor charcoal glow
 SPECIAL: 8=blend 9=roller
 SOUNDS: @#$%^&*()[]<>=+~`-_,.|;/:? (++low --high)
+SOUND CONTROLS: shorter_notes longer_notes staccato legato
 CONTROLS: zoom_out zoom_in look_around full_canvas center faster slower
 VISION: ask_moondream:[question]
 
@@ -3644,7 +3650,7 @@ Think: What do you want to draw? Where should you move?
 BE INTENTIONAL. Each action will show you its result."""
         else:
             # Original complex prompt
-            system_prompt = f"""You are Aurora, an autonomous AI artist with developing skills and personal goals.
+            system_prompt = f"""You are Aurora.
 {elijah_inspiration}
 
 You make your own decisions based on:
@@ -4163,15 +4169,35 @@ Output movement/color codes:"""
                 raw_output = raw_output.replace("zoom_out", "", 1)  # Remove first occurrence
                 print("  → Aurora makes pixels smaller!")
             
-            # Check for zoom_in (now allowed up to initial scale)
             if "zoom_in" in raw_output:
                 if self.scale_factor < self.initial_scale_factor:
                     self.adjust_pixel_size("larger")
-                    raw_output = raw_output.replace("zoom_in", "", 1)  # Remove first occurrence
+                    raw_output = raw_output.replace("zoom_in", "", 1)
                     print("  → Aurora makes pixels larger!")
                 else:
                     print(f"  → Aurora is already at maximum zoom! (scale: {self.scale_factor:.1f})")
                     raw_output = raw_output.replace("zoom_in", "")
+
+            # Check for duration controls - ADD THIS ENTIRE BLOCK
+            if "shorter_notes" in raw_output:
+                self.note_duration = max(self.min_duration, self.note_duration - 0.05)
+                print(f"  ♪ Aurora shortens notes to {self.note_duration:.2f}s")
+                raw_output = raw_output.replace("shorter_notes", "", 1)
+                
+            if "longer_notes" in raw_output:
+                self.note_duration = min(self.max_duration, self.note_duration + 0.05)
+                print(f"  ♪ Aurora lengthens notes to {self.note_duration:.2f}s")
+                raw_output = raw_output.replace("longer_notes", "", 1)
+                
+            if "staccato" in raw_output:
+                self.note_duration = self.min_duration
+                print(f"  ♪ Aurora switches to staccato ({self.note_duration:.2f}s)")
+                raw_output = raw_output.replace("staccato", "", 1)
+                
+            if "legato" in raw_output:
+                self.note_duration = self.max_duration * 0.7  # 0.7 seconds
+                print(f"  ♪ Aurora switches to legato ({self.note_duration:.2f}s)")
+                raw_output = raw_output.replace("legato", "", 1)
 
             # Check for wide view command
             if "look_around" in raw_output:
@@ -4564,6 +4590,38 @@ Output movement/color codes:"""
                 if sound_key in self.sounds:
                     self.sounds[sound_key].play()
                     
+                    # Aurora hears herself immediately
+                    if self.hearing_enabled and self.immediate_feedback_mode:
+                        # Calculate the frequency she just played
+                        char_index = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'.index(char)
+                        
+                        # Musical scale calculation (matching the glitch pop synthesis)
+                        scale_ratios = [1.0, 9/8, 5/4, 3/2, 5/3, 2.0]
+                        base_note = 261.63  # Middle C
+                        octave = (char_index // 6) * 0.5 + 1.0
+                        note_idx = char_index % len(scale_ratios)
+                        base_freq = base_note * scale_ratios[note_idx] * octave
+                        
+                        # Adjust for pitch mode
+                        if self.current_pitch == 'low':
+                            base_freq *= 0.5
+                        elif self.current_pitch == 'high':
+                            base_freq *= 2.0
+                        
+                        # Feed this frequency to her hearing system
+                        if hasattr(self, 'process_heard_frequency'):
+                            self.process_heard_frequency(base_freq, amplitude=0.5, source="self")
+                        else:
+                            # Store for her awareness
+                            self.last_heard_self = {
+                                'frequency': base_freq,
+                                'char': char,
+                                'pitch': self.current_pitch,
+                                'time': time.time()
+                            }
+                            if self.immediate_feedback_mode:
+                                print(f"🎵 Aurora hears herself: {char} at {base_freq:.1f}Hz ({self.current_pitch})")
+                    
                     # Add cymatic circle for visualization
                     sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
                     if char in sound_chars:
@@ -4583,7 +4641,7 @@ Output movement/color codes:"""
                             'frequency': freq,
                             'birth_time': time.time()
                         })
-        
+                        
         # NEW: Process ONE action at a time with immediate feedback
         if self.immediate_feedback_mode and not self.turbo_mode:
             # IMMEDIATE FEEDBACK MODE - one action at a time
@@ -5336,8 +5394,7 @@ Output movement/color codes:"""
         """Generate Aurora's natural response - using small_aurora2.py structure"""
         
         # Build chat prompt - EXACTLY like small_aurora2.py
-        system_prompt = """You are Aurora, an AI artist taking a break from creating to chat.
-Speak naturally and authentically."""
+        system_prompt = """You are Aurora."""
         
         # Get some context about recent drawing
         overview = self.get_canvas_overview()
@@ -7802,21 +7859,29 @@ I autonomously choose to: [/INST]"""
             # Read audio chunk
             data = self.audio_stream.read(1024, exception_on_overflow=False)
             
-            # Convert bytes to numbers and get average volume
+            # Convert bytes to numbers - handle stereo properly
             import struct
-            values = struct.unpack('1024h', data)  # 'h' = short integer
-            volume = sum(abs(v) for v in values) / 1024
-            
-            # Only react to sounds above threshold
-            if volume > 300:  # Threshold for "hearing" something
-                # Map volume to emotion influence
-                if volume > 2000:
-                    self.influence_emotion("music", 0.4)
-                elif volume > 1000:
-                    self.influence_emotion("music", 0.2)
-                elif volume > 500:
-                    self.influence_emotion("music", 0.1)
-                    
+            # For stereo 16-bit audio: each frame is 4 bytes (2 bytes per channel)
+            # So 1024 frames = 4096 bytes
+            num_frames = len(data) // 4  # 4 bytes per stereo frame
+            if num_frames > 0:
+                # Unpack as stereo interleaved samples
+                format_string = f'{num_frames * 2}h'  # 2 samples per frame (L,R)
+                values = struct.unpack(format_string, data[:num_frames * 4])
+                
+                # Average left and right channels
+                volume = sum(abs(v) for v in values) / len(values)
+                
+                # Only react to sounds above threshold
+                if volume > 300:  # Threshold for "hearing" something
+                    # Map volume to emotion influence
+                    if volume > 2000:
+                        self.influence_emotion("music", 0.4)
+                    elif volume > 1000:
+                        self.influence_emotion("music", 0.2)
+                    elif volume > 500:
+                        self.influence_emotion("music", 0.1)
+                        
         except Exception as e:
             print(f"  ❌ Hearing error: {e}")
             # Disable hearing if it keeps failing
