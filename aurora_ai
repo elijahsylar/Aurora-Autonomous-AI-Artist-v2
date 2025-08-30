@@ -866,53 +866,135 @@ class AuroraCodeMindComplete:
 
         
         # Simple pygame sound system  # ADD ALL OF THIS
-        pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
+        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
         pygame.mixer.set_num_channels(8)  # 8 simultaneous sounds
         
         # Pre-generate simple beeps (so they're instant to play)
         self.sounds = {}
+  
+        try:
+            # GLITCH POP SOUND SYNTHESIS - Musical hyperpop voice for Aurora
+            sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
+            sample_rate = 22050
+            
+            # Musical scale - C major pentatonic for pleasant harmonies
+            scale_ratios = [1.0, 9/8, 5/4, 3/2, 5/3, 2.0]  # C D E G A C
+            base_note = 261.63  # Middle C
+            
+            # Helper functions
+            def bit_crush(samples, bits=8):
+                """Gentle bit reduction for texture, not destruction"""
+                max_val = 2**(bits-1)
+                return np.round(samples * max_val) / max_val
+            
+            def soft_clip(samples, threshold=0.7):
+                """Soft clipping for warmth without harshness"""
+                return np.tanh(samples / threshold) * threshold
+            
+            # Generate musical hyperpop sounds for each character
+            for i, char in enumerate(sound_chars):
+                # Map characters to musical notes
+                octave = (i // 6) * 0.5 + 1.0  # Spread across octaves
+                note_idx = i % len(scale_ratios)
+                base_freq = base_note * scale_ratios[note_idx] * octave
+                
+                # NORMAL PITCH - Clean hyperpop tone
+                duration = 0.15  # Longer for musicality
+                t = np.arange(0, int(duration * sample_rate)) / sample_rate
+                
+                # Start with a clean sine wave
+                samples = np.sin(2 * np.pi * base_freq * t) * 0.5
+                
+                # Add a bright harmonic for hyperpop sparkle
+                samples += np.sin(2 * np.pi * base_freq * 2 * t) * 0.2
+                samples += np.sin(2 * np.pi * base_freq * 3 * t) * 0.1
+                
+                # Gentle FM for character
+                mod_depth = 1.5
+                mod_freq = base_freq * 1.5
+                modulator = mod_depth * np.sin(2 * np.pi * mod_freq * t)
+                samples += np.sin(2 * np.pi * base_freq * t + modulator) * 0.3
+                
+                # Musical envelope - quick attack, gentle decay
+                attack = 0.01
+                attack_samples = int(attack * sample_rate)
+                envelope = np.ones(len(samples))
+                envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
+                envelope[attack_samples:] = np.exp(-2 * (t[attack_samples:] - attack) / (duration - attack))
+                samples *= envelope
+                
+                # Very light bit crushing for texture
+                samples = bit_crush(samples, bits=12)
+                
+                # Soft clipping for warmth
+                samples = soft_clip(samples, threshold=0.8)
+                
+                # Convert to audio
+                samples = (samples * 16000).astype(np.int16)  # Lower volume for pleasantness
+                stereo_samples = np.column_stack((samples, samples))
+                self.sounds[f"{char}_normal"] = pygame.sndarray.make_sound(stereo_samples)
+                self.sounds[f"{char}_normal"].set_volume(0.25)
+                
+                # LOW PITCH (++) - Warm bass tone
+                freq = base_freq * 0.5
+                t = np.arange(0, int(0.2 * sample_rate)) / sample_rate
+                
+                # Fuller bass sound with subharmonics
+                samples = np.sin(2 * np.pi * freq * t) * 0.6
+                samples += np.sin(2 * np.pi * freq * 2 * t) * 0.2  # Octave
+                samples += np.sin(2 * np.pi * freq * 0.5 * t) * 0.2  # Sub bass
+                
+                # Smooth envelope
+                envelope = np.exp(-1.5 * t / t[-1])
+                envelope[:int(0.02 * sample_rate)] = np.linspace(0, 1, int(0.02 * sample_rate))
+                samples *= envelope
+                
+                # Gentle processing
+                samples = bit_crush(samples, bits=10)
+                samples = soft_clip(samples, threshold=0.9)
+                
+                samples = (samples * 18000).astype(np.int16)
+                stereo_samples = np.column_stack((samples, samples))
+                self.sounds[f"{char}_low"] = pygame.sndarray.make_sound(stereo_samples)
+                self.sounds[f"{char}_low"].set_volume(0.3)
+                
+                # HIGH PITCH (--) - Bright, sparkly tone
+                freq = base_freq * 2
+                t = np.arange(0, int(0.08 * sample_rate)) / sample_rate
+                
+                # Bell-like tone with harmonics
+                samples = np.sin(2 * np.pi * freq * t) * 0.4
+                samples += np.sin(2 * np.pi * freq * 2 * t) * 0.3
+                samples += np.sin(2 * np.pi * freq * 3 * t) * 0.2
+                samples += np.sin(2 * np.pi * freq * 4 * t) * 0.1
+                
+                # Light FM for shimmer
+                mod = 0.5 * np.sin(2 * np.pi * freq * 2.5 * t)
+                samples += np.sin(2 * np.pi * freq * t + mod) * 0.2
+                
+                # Quick, bright envelope
+                envelope = np.exp(-5 * t / t[-1])
+                envelope[:int(0.005 * sample_rate)] = np.linspace(0, 1, int(0.005 * sample_rate))
+                samples *= envelope
+                
+                # Minimal processing to keep clarity
+                samples = bit_crush(samples, bits=14)  # Very light crushing
+                
+                samples = (samples * 14000).astype(np.int16)
+                stereo_samples = np.column_stack((samples, samples))
+                self.sounds[f"{char}_high"] = pygame.sndarray.make_sound(stereo_samples)
+                self.sounds[f"{char}_high"].set_volume(0.2)
+                
+            print(f"✅ Musical hyperpop synthesis ready! {len(sound_chars)} × 3 octaves = {len(sound_chars)*3} melodic tones!")
+        except Exception as e:
+            print(f"❌ Sound system failed: {e}")
+            import traceback
+            traceback.print_exc()
+            self.sounds = {}
         # Cymatics system
         self.cymatic_circles = []
         self.current_pitch = 'normal'  # ADD THIS - tracks current pitch mode
-        try:
-           
-        
-            # EXPANDED SOUND PALETTE - 24 base frequencies (no number conflicts!)
-            sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
-            
-            # Generate frequencies across wider spectrum (100Hz to 2000Hz)
-            for i, char in enumerate(sound_chars):
-                # Exponential frequency distribution for more musical range
-                base_freq = 100 * (2 ** (i / 6.0))  # Doubles every 6 notes for wider range
-                
-                # Normal pitch
-                freq = base_freq
-                samples = np.sin(2 * np.pi * freq * np.arange(0, 0.05 * 22050) / 22050) * 0.3
-                sound_data = (samples * 32767).astype(np.int16)
-                sound_data = np.repeat(sound_data.reshape(-1, 1), 2, axis=1)  # Make stereo
-                self.sounds[f"{char}_normal"] = pygame.sndarray.make_sound(sound_data)
-                self.sounds[f"{char}_normal"].set_volume(0.3)
-                
-                # Low pitch (++) - one octave down
-                freq = base_freq * 0.5
-                samples = np.sin(2 * np.pi * freq * np.arange(0, 0.05 * 22050) / 22050) * 0.3
-                sound_data = (samples * 32767).astype(np.int16)
-                sound_data = np.repeat(sound_data.reshape(-1, 1), 2, axis=1)
-                self.sounds[f"{char}_low"] = pygame.sndarray.make_sound(sound_data)
-                self.sounds[f"{char}_low"].set_volume(0.3)
-                
-                # High pitch (--) - one octave up
-                freq = base_freq * 2
-                samples = np.sin(2 * np.pi * freq * np.arange(0, 0.05 * 22050) / 22050) * 0.3
-                sound_data = (samples * 32767).astype(np.int16)
-                sound_data = np.repeat(sound_data.reshape(-1, 1), 2, axis=1)
-                self.sounds[f"{char}_high"] = pygame.sndarray.make_sound(sound_data)
-                self.sounds[f"{char}_high"].set_volume(0.3)
-                
-            print(f"✅ Sound system ready with {len(sound_chars)} tones × 3 octaves = {len(sound_chars)*3} total sounds!")
-        except:
-            print("❌ Sound system failed - continuing without audio")
-            self.sounds = {}
+     
             
         # LLAVA VISION SYSTEM - ADD THIS ENTIRE BLOCK HERE
         print("8c. Initializing vision system...")
@@ -4475,6 +4557,32 @@ Output movement/color codes:"""
         actions_taken = []
         pixels_drawn = 0
         pixels_by_color = {}
+        # Helper function to play sounds and trigger cymatics
+        def play_sound_and_cymatics(char):
+            if char in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\':
+                sound_key = f"{char}_{self.current_pitch}"
+                if sound_key in self.sounds:
+                    self.sounds[sound_key].play()
+                    
+                    # Add cymatic circle for visualization
+                    sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
+                    if char in sound_chars:
+                        char_index = sound_chars.index(char)
+                        base_freq = 100 * (2 ** (char_index / 6.0))
+                        
+                        if self.current_pitch == 'low':
+                            freq = base_freq * 0.5
+                        elif self.current_pitch == 'high':
+                            freq = base_freq * 2
+                        else:
+                            freq = base_freq
+                        
+                        self.cymatic_circles.append({
+                            'x': self.canvas_rect.x + int(self.x * self.display_scale),
+                            'y': self.canvas_rect.y + int(self.y * self.display_scale),
+                            'frequency': freq,
+                            'birth_time': time.time()
+                        })
         
         # NEW: Process ONE action at a time with immediate feedback
         if self.immediate_feedback_mode and not self.turbo_mode:
@@ -4514,10 +4622,23 @@ Output movement/color codes:"""
                 # Process single character operations
                 char = ops[i]
                 
-                # Skip sounds and special characters for now in immediate mode
+                # Process sounds and special characters
                 if char in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\':
-                    i += 1
-                    continue
+                    # Check for pitch modifiers first
+                    if i + 1 < len(ops) and ops[i:i+2] == '++':
+                        self.current_pitch = 'low'
+                        i += 2
+                        continue
+                    elif i + 1 < len(ops) and ops[i:i+2] == '--':
+                        self.current_pitch = 'high'
+                        i += 2
+                        continue
+                    else:
+                        # Play the sound
+                        play_sound_and_cymatics(char)
+                        actions_taken.append(char)
+                        i += 1
+                        continue
                 
                 # Process movement/pen commands
                 if char in op_map:
@@ -4555,13 +4676,57 @@ Output movement/color codes:"""
                 
                 i += 1
         else:
-            # ORIGINAL BATCH MODE - your existing execution code goes here
-            # (Keep all the original batch processing code as-is)
-            movement_batch = []
+            # ORIGINAL BATCH MODE - process all operations at once
             i = 0
             while i < len(ops):
-                # [Original batch processing code remains here unchanged]
-                # [This is where your existing execution loop code goes]
+                # Check for pitch modifiers first
+                if i + 1 < len(ops) and ops[i:i+2] == '++':
+                    self.current_pitch = 'low'
+                    i += 2
+                    continue
+                elif i + 1 < len(ops) and ops[i:i+2] == '--':
+                    self.current_pitch = 'high'
+                    i += 2
+                    continue
+                
+                # Get current character
+                char = ops[i]
+                
+                # Check for sound characters
+                if char in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\':
+                    play_sound_and_cymatics(char)
+                    actions_taken.append(char)
+                    i += 1
+                    continue
+                
+                # Check for color words
+                found_color = False
+                for color in self.palette.keys():
+                    if ops[i:].startswith(color):
+                        self.set_color(color)
+                        actions_taken.append(f"color:{color}")
+                        self.turn_colors_used.add(color)
+                        i += len(color)
+                        found_color = True
+                        break
+                
+                if found_color:
+                    continue
+                
+                # Process movement/pen commands
+                if char in op_map:
+                    before_x, before_y = self.x, self.y
+                    op_map[char]()
+                    actions_taken.append(char)
+                    
+                    # Track pixels if drawing
+                    if self.is_drawing and char in '0123' and (self.x, self.y) != (before_x, before_y):
+                        pixels_drawn += 15
+                        color_key = self.current_color_name
+                        if color_key not in pixels_by_color:
+                            pixels_by_color[color_key] = 0
+                        pixels_by_color[color_key] += 15
+                
                 i += 1
         
         # Show summary of actions
@@ -7610,7 +7775,7 @@ I autonomously choose to: [/INST]"""
             try:
                 self.audio_stream = self.audio.open(
                     format=pyaudio.paInt16,
-                    channels=1,
+                    channels=2,
                     rate=22050,  # Lower sample rate for simplicity
                     input=True,
                     frames_per_buffer=1024
