@@ -12,8 +12,7 @@ from collections import deque
 import time
 import pyaudio
 import requests
-import webbrowser
-from urllib.parse import quote
+import re
 import numpy as np
 import math
 import random
@@ -202,149 +201,7 @@ class SimpleMemorySystem:
             "timestamp": datetime.now().isoformat(timespec='seconds')
         })
 
-class PaintByNumberTemplates:
-    """
-    PaintByNumberTemplates provides hidden paint-by-number templates for Aurora's drawing system.
 
-    Purpose:
-        - Stores predefined templates for various shapes and difficulty levels.
-        - Supplies template overlays for guided drawing and progress tracking.
-
-    Attributes:
-        - current_template: The currently active template dictionary.
-        - template_name: Name of the selected template.
-        - difficulty: Difficulty level of the template ('easy', 'medium', 'hard').
-        - templates: Dictionary of all available templates, organized by difficulty.
-
-    Usage:
-        - Instantiate the class to access templates.
-        - Use get_template_overlay(grid) to retrieve overlay information for the current template.
-        - Set current_template, template_name, and difficulty to activate a template.
-
-    Example:
-        templates = PaintByNumberTemplates()
-        templates.current_template = templates.templates["easy"]["circle"]
-        overlay = templates.get_template_overlay(grid)
-    """
-    def __init__(self):
-        self.current_template = None
-        self.template_name = None
-        self.difficulty = None
-        
-        # Templates stored as grid positions (60x60 grid coordinates)
-        self.templates = {
-            "easy": {
-                "circle": {
-                    "positions": [(30,25), (32,26), (34,28), (35,30), (34,32), (32,34), (30,35), (28,34), (26,32), (25,30), (26,28), (28,26)],
-                    "colors": {"positions": "B"}
-                },
-                "square": {
-                    "positions": [(25,25), (26,25), (27,25), (28,25), (29,25), (30,25), (31,25), (32,25), (33,25), (34,25), (35,25),
-                                 (25,35), (26,35), (27,35), (28,35), (29,35), (30,35), (31,35), (32,35), (33,35), (34,35), (35,35),
-                                 (25,26), (25,27), (25,28), (25,29), (25,30), (25,31), (25,32), (25,33), (25,34),
-                                 (35,26), (35,27), (35,28), (35,29), (35,30), (35,31), (35,32), (35,33), (35,34)],
-                    "colors": {"positions": "R"}
-                },
-                "cross": {
-                    "positions": [(30,20), (30,21), (30,22), (30,23), (30,24), (30,25), (30,26), (30,27), (30,28), (30,29), (30,30),
-                                 (30,31), (30,32), (30,33), (30,34), (30,35), (30,36), (30,37), (30,38), (30,39), (30,40),
-                                 (20,30), (21,30), (22,30), (23,30), (24,30), (25,30), (26,30), (27,30), (28,30), (29,30),
-                                 (31,30), (32,30), (33,30), (34,30), (35,30), (36,30), (37,30), (38,30), (39,30), (40,30)],
-                    "colors": {"positions": "G"}
-                }
-            },
-            "medium": {
-                "flower": {
-                    "center": [(29,29), (30,29), (31,29), (29,30), (30,30), (31,30), (29,31), (30,31), (31,31)],
-                    "petals": [(30,26), (30,27), (33,30), (34,30), (30,33), (30,34), (26,30), (27,30),
-                              (27,27), (33,27), (33,33), (27,33)],
-                    "stem": [(30,35), (30,36), (30,37), (30,38), (30,39), (30,40)],
-                    "leaves": [(28,37), (27,37), (32,38), (33,38)],
-                    "colors": {"center": "Y", "petals": "R", "stem": "G", "leaves": "G"}
-                },
-                "star": {
-                    "points": [(30,20), (32,26), (38,26), (33,30), (35,36), (30,32), (25,36), (27,30), (22,26), (28,26)],
-                    "lines": [(30,21), (30,22), (30,23), (30,24), (30,25), (31,27), (32,28), (33,29),
-                             (29,27), (28,28), (27,29), (31,31), (29,31), (28,32), (29,33), (30,34), (31,33), (32,32)],
-                    "colors": {"points": "Y", "lines": "Y"}
-                },
-                "heart": {
-                    "left_curve": [(27,25), (26,26), (25,27), (25,28), (25,29), (26,30), (27,31)],
-                    "right_curve": [(33,25), (34,26), (35,27), (35,28), (35,29), (34,30), (33,31)],
-                    "bottom": [(28,32), (29,33), (30,34), (31,33), (32,32)],
-                    "fill": [(28,26), (29,26), (30,26), (31,26), (32,26), (28,27), (29,27), (30,27), (31,27), (32,27),
-                            (27,28), (28,28), (29,28), (30,28), (31,28), (32,28), (33,28),
-                            (27,29), (28,29), (29,29), (30,29), (31,29), (32,29), (33,29),
-                            (28,30), (29,30), (30,30), (31,30), (32,30), (28,31), (29,31), (30,31), (31,31), (32,31)],
-                    "colors": {"left_curve": "P", "right_curve": "P", "bottom": "P", "fill": "P"}
-                }
-            },
-            "hard": {
-                "house": {
-                    "roof": [(26,20), (27,19), (28,18), (29,17), (30,16), (31,17), (32,18), (33,19), (34,20),
-                            (26,21), (27,21), (28,21), (29,21), (30,21), (31,21), (32,21), (33,21), (34,21)],
-                    "walls": [(26,22), (27,22), (28,22), (29,22), (30,22), (31,22), (32,22), (33,22), (34,22),
-                             (26,23), (34,23), (26,24), (34,24), (26,25), (34,25), (26,26), (34,26),
-                             (26,27), (34,27), (26,28), (34,28), (26,29), (34,29),
-                             (26,30), (27,30), (28,30), (29,30), (30,30), (31,30), (32,30), (33,30), (34,30)],
-                    "door": [(30,26), (30,27), (30,28), (30,29), (30,30)],
-                    "windows": [(28,24), (29,24), (28,25), (29,25), (32,24), (33,24), (32,25), (33,25)],
-                    "colors": {"roof": "R", "walls": "W", "door": "N", "windows": "C"}
-                },
-                "tree": {
-                    "trunk": [(29,35), (30,35), (31,35), (29,36), (30,36), (31,36), (29,37), (30,37), (31,37),
-                             (29,38), (30,38), (31,38), (29,39), (30,39), (31,39), (29,40), (30,40), (31,40)],
-                    "canopy": [(28,20), (29,20), (30,20), (31,20), (32,20),
-                              (26,21), (27,21), (28,21), (29,21), (30,21), (31,21), (32,21), (33,21), (34,21),
-                              (25,22), (26,22), (27,22), (28,22), (29,22), (30,22), (31,22), (32,22), (33,22), (34,22), (35,22),
-                              (24,23), (25,23), (26,23), (27,23), (28,23), (29,23), (30,23), (31,23), (32,23), (33,23), (34,23), (35,23), (36,23),
-                              (25,24), (26,24), (27,24), (28,24), (29,24), (30,24), (31,24), (32,24), (33,24), (34,24), (35,24),
-                              (26,25), (27,25), (28,25), (29,25), (30,25), (31,25), (32,25), (33,25), (34,25),
-                              (27,26), (28,26), (29,26), (30,26), (31,26), (32,26), (33,26),
-                              (28,27), (29,27), (30,27), (31,27), (32,27),
-                              (29,28), (30,28), (31,28)],
-                    "colors": {"trunk": "N", "canopy": "G"}
-                },
-                "butterfly": {
-                    "body": [(30,28), (30,29), (30,30), (30,31), (30,32)],
-                    "left_wing_top": [(26,27), (25,27), (24,27), (25,28), (26,28), (27,28), (28,28), (27,29), (28,29)],
-                    "left_wing_bottom": [(26,31), (25,31), (24,31), (25,32), (26,32), (27,32), (28,32), (27,33), (28,33)],
-                    "right_wing_top": [(34,27), (35,27), (36,27), (35,28), (34,28), (33,28), (32,28), (33,29), (32,29)],
-                    "right_wing_bottom": [(34,31), (35,31), (36,31), (35,32), (34,32), (33,32), (32,32), (33,33), (32,33)],
-                    "colors": {"body": "B", "left_wing_top": "O", "left_wing_bottom": "Y", 
-                              "right_wing_top": "O", "right_wing_bottom": "Y"}
-                }
-            }
-        }
-    
-    def get_template_overlay(self, grid):
-        """
-        Add template overlay to Aurora's vision (only in her prompt, not console).
-
-        Returns:
-            str: A formatted string describing the current template, suggested colors, and intended for overlay display in Aurora's prompt.
-        """
-        if not self.current_template:
-            return ""
-        
-        overlay_info = f"\n\n[PAINT-BY-NUMBER TEMPLATE: {self.template_name.upper()} ({self.difficulty})]"
-        overlay_info += f"\nSuggested pattern to follow! Use these colors:"
-        
-        # Get suggested colors
-        colors_used = []
-        for part, color in self.current_template["colors"].items():
-            color_name = {
-                'R': 'red', 'G': 'green', 'B': 'blue', 'Y': 'yellow',
-                'P': 'purple', 'O': 'orange', 'C': 'cyan', 'W': 'white',
-                'N': 'black', 'K': 'pink', 'M': 'magenta'
-            }.get(color, 'white')
-            colors_used.append(f"{part}={color_name}")
-        
-        overlay_info += f"\n{', '.join(colors_used)}"
-        overlay_info += f"\nTemplate guides your art - follow or improvise!"
-        
-        return overlay_info
-  
     
 class AuroraCodeMindComplete:
     """
@@ -358,12 +215,12 @@ class AuroraCodeMindComplete:
     - Rich color palette and drawing tools (pen, brush, spray, stamps, etc.).
     - Emotional state tracking and influence system, including deep emotions and memory-based shifts.
     - Memory system for code patterns, dreams, and artistic inspirations.
-    - Check-in system for periodic breaks (chat, dream, image search).
+    - Check-in system for periodic breaks (chat, dream).
     - Sound system with pitch control and instant musical feedback.
     - Fullscreen Tkinter GUI with live status panels and controls.
     - Autonomous loop with emotion-driven speed, creativity boosters, and periodic snapshots.
     - Dream generation and retention based on actual drawing experiences.
-    - Support for external deep memory systems and image search inspiration.
+    - Support for external deep memory systems.
     Usage:
     - Instantiate with a model path and optional GPU settings.
     - Call `run()` to start the interactive drawing loop.
@@ -394,26 +251,28 @@ class AuroraCodeMindComplete:
         # Detect GPU and set layers
         if use_gpu:
             print("🚀 GPU Mode Enabled!")
-            # -1 means offload all layers to GPU
-            gpu_layers_setting = gpu_layers
+            gpu_layers_setting = 10  # Back to full power
         else:
             print("💻 CPU Mode")
             gpu_layers_setting = 0
-            
-        # LLM with GPU acceleration
+        
+        # LLM with GPU acceleration - NO LORA
+        print("Loading base model...")
         self.llm = Llama(
-            model_path, 
-            n_ctx=6500,  # Reduced back to 4096 - prevents overflow
-            n_gpu_layers=gpu_layers_setting,  # GPU LAYERS!
-            n_threads=8,  # Use more CPU threads
-            n_batch=512,  # Larger batch size for GPU
+            model_path,  # Your quantized model
+            n_ctx=6500,
+            n_gpu_layers=gpu_layers_setting,
+            n_threads=8,
+            n_batch=512,
             verbose=False,
-            seed=42,  # Fixed seed for reproducibility
-            f16_kv=True,  # Use 16-bit for faster inference
-            use_mlock=True,  # Lock model in RAM
-            n_threads_batch=8  # Batch processing threads
+            seed=42,
+            f16_kv=True,
+            use_mlock=True,
+            n_threads_batch=8
         )
-        print(f"2. LLM loaded with {gpu_layers_setting} GPU layers")
+        print(f"✅ LLM loaded with {gpu_layers_setting} GPU layers")
+        
+        print(f"2. LLM initialization complete")
         
         # Get screen dimensions for fullscreen
         # Don't init pygame here - we'll do it once in setup_display
@@ -715,9 +574,6 @@ class AuroraCodeMindComplete:
         else:
             self.big_memory = None
             self.big_memory_available = False
-        # Image search system
-        self.image_search_count = 0
-        self.recent_image_searches = deque(maxlen=20)
         
         # Elijah's artwork study system
         self.elijahs_art_path = Path("Elijahs_Art")
@@ -847,11 +703,11 @@ class AuroraCodeMindComplete:
         self.last_checkin_time = time.time()
         self.current_mode = "drawing"  # drawing, chat, rest
         self.mode_start_time = time.time()
-        self.checkin_interval = 45 * 60  # 45 minutes in seconds
+        self.checkin_interval = 60 * 60  # 60 minutes in seconds
         self.break_duration = 10 * 60    # 10 minutes in seconds
         self.awaiting_checkin_response = False
         self.chat_message_count = 0 
-        self.last_blocked = {} 
+
 
         # Dream system initialization
         self.current_dreams = []  # Dreams from current rest session
@@ -862,135 +718,73 @@ class AuroraCodeMindComplete:
         self.hearing_enabled = False
         self.audio_stream = None
         self.audio = pyaudio.PyAudio()
-        self.rest_duration = 10 * 60  # 10 minutes for rest/dreaming (separate from break_duration)
+        self.rest_duration = 20 * 60  # 20 minutes for rest/dreaming (separate from break_duration)
 
         
-        # Simple pygame sound system  # ADD ALL OF THIS
+
+        # Simple pygame sound system
         pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
         pygame.mixer.set_num_channels(8)  # 8 simultaneous sounds
         
-        # Pre-generate simple beeps (so they're instant to play)
+        # Pre-generate musical synth sounds
+        # Pre-generate musical synth sounds with sophisticated synthesis
         self.sounds = {}
-  
+        self.current_sound_type = "synth"  # Track current sound synthesis type
+        
         try:
-            # GLITCH POP SOUND SYNTHESIS - Musical hyperpop voice for Aurora
             sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
-            sample_rate = 22050
+            sample_rate = 44100
             
-            # Musical scale - C major pentatonic for pleasant harmonies
-            scale_ratios = [1.0, 9/8, 5/4, 3/2, 5/3, 2.0]  # C D E G A C
-            base_note = 261.63  # Middle C
+            # Base frequencies for each character
+            base_notes = {
+                '!': 261.63, '@': 293.66, '#': 329.63, '$': 349.23,
+                '%': 392.00, '^': 440.00, '&': 493.88, '*': 523.25,
+                '(': 587.33, ')': 659.25, '[': 698.46, ']': 783.99,
+                '<': 880.00, '>': 987.77, '=': 1046.50, '+': 1174.66,
+                '~': 1318.51, '`': 1396.91, '-': 1567.98, '_': 1760.00,
+                ',': 196.00, '.': 220.00, '|': 246.94, ';': 130.81,
+                ':': 146.83, '?': 164.81, '/': 174.61, '{': 987.77,
+                '}': 1108.73, '\\': 1244.51
+            }
             
-            # Helper functions
-            def bit_crush(samples, bits=8):
-                """Gentle bit reduction for texture, not destruction"""
-                max_val = 2**(bits-1)
-                return np.round(samples * max_val) / max_val
+            # Generate sounds for each type
+            sound_types = {
+                'synth': self._generate_synth_sounds,
+                'beeps': self._generate_beep_sounds,
+                'organic': self._generate_organic_sounds,
+                'digital': self._generate_digital_sounds,
+                'glitch': self._generate_glitch_sounds
+            }
             
-            def soft_clip(samples, threshold=0.7):
-                """Soft clipping for warmth without harshness"""
-                return np.tanh(samples / threshold) * threshold
+            for sound_type, generator_func in sound_types.items():
+                for char in sound_chars:
+                    if char not in base_notes:
+                        base_notes[char] = 440.00
+                    
+                    freq = base_notes[char]
+                    
+                    # Generate normal, low, and high pitch versions
+                    for pitch_mode, freq_mult in [('normal', 1.0), ('low', 0.5), ('high', 2.0)]:
+                        adjusted_freq = freq * freq_mult
+                        sound_array = generator_func(adjusted_freq, sample_rate)
+                        
+                        # Convert to pygame sound
+                        sound_array = np.clip(sound_array * 20000, -32767, 32767).astype(np.int16)
+                        stereo = np.column_stack((sound_array, sound_array))
+                        sound_key = f"{char}_{pitch_mode}_{sound_type}"
+                        self.sounds[sound_key] = pygame.sndarray.make_sound(stereo)
+                        self.sounds[sound_key].set_volume(0.5)
             
-            # Generate musical hyperpop sounds for each character
-            for i, char in enumerate(sound_chars):
-                # Map characters to musical notes
-                octave = (i // 6) * 0.5 + 1.0  # Spread across octaves
-                note_idx = i % len(scale_ratios)
-                base_freq = base_note * scale_ratios[note_idx] * octave
-                
-                # NORMAL PITCH - Clean hyperpop tone
-                duration = 0.15  # Longer for musicality
-                t = np.arange(0, int(duration * sample_rate)) / sample_rate
-                
-                # Start with a clean sine wave
-                samples = np.sin(2 * np.pi * base_freq * t) * 0.5
-                
-                # Add a bright harmonic for hyperpop sparkle
-                samples += np.sin(2 * np.pi * base_freq * 2 * t) * 0.2
-                samples += np.sin(2 * np.pi * base_freq * 3 * t) * 0.1
-                
-                # Gentle FM for character
-                mod_depth = 1.5
-                mod_freq = base_freq * 1.5
-                modulator = mod_depth * np.sin(2 * np.pi * mod_freq * t)
-                samples += np.sin(2 * np.pi * base_freq * t + modulator) * 0.3
-                
-                # Musical envelope - quick attack, gentle decay
-                attack = 0.01
-                attack_samples = int(attack * sample_rate)
-                envelope = np.ones(len(samples))
-                envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
-                envelope[attack_samples:] = np.exp(-2 * (t[attack_samples:] - attack) / (duration - attack))
-                samples *= envelope
-                
-                # Very light bit crushing for texture
-                samples = bit_crush(samples, bits=12)
-                
-                # Soft clipping for warmth
-                samples = soft_clip(samples, threshold=0.8)
-                
-                # Convert to audio
-                samples = (samples * 16000).astype(np.int16)  # Lower volume for pleasantness
-                stereo_samples = np.column_stack((samples, samples))
-                self.sounds[f"{char}_normal"] = pygame.sndarray.make_sound(stereo_samples)
-                self.sounds[f"{char}_normal"].set_volume(0.25)
-                
-                # LOW PITCH (++) - Warm bass tone
-                freq = base_freq * 0.5
-                t = np.arange(0, int(0.2 * sample_rate)) / sample_rate
-                
-                # Fuller bass sound with subharmonics
-                samples = np.sin(2 * np.pi * freq * t) * 0.6
-                samples += np.sin(2 * np.pi * freq * 2 * t) * 0.2  # Octave
-                samples += np.sin(2 * np.pi * freq * 0.5 * t) * 0.2  # Sub bass
-                
-                # Smooth envelope
-                envelope = np.exp(-1.5 * t / t[-1])
-                envelope[:int(0.02 * sample_rate)] = np.linspace(0, 1, int(0.02 * sample_rate))
-                samples *= envelope
-                
-                # Gentle processing
-                samples = bit_crush(samples, bits=10)
-                samples = soft_clip(samples, threshold=0.9)
-                
-                samples = (samples * 18000).astype(np.int16)
-                stereo_samples = np.column_stack((samples, samples))
-                self.sounds[f"{char}_low"] = pygame.sndarray.make_sound(stereo_samples)
-                self.sounds[f"{char}_low"].set_volume(0.3)
-                
-                # HIGH PITCH (--) - Bright, sparkly tone
-                freq = base_freq * 2
-                t = np.arange(0, int(0.08 * sample_rate)) / sample_rate
-                
-                # Bell-like tone with harmonics
-                samples = np.sin(2 * np.pi * freq * t) * 0.4
-                samples += np.sin(2 * np.pi * freq * 2 * t) * 0.3
-                samples += np.sin(2 * np.pi * freq * 3 * t) * 0.2
-                samples += np.sin(2 * np.pi * freq * 4 * t) * 0.1
-                
-                # Light FM for shimmer
-                mod = 0.5 * np.sin(2 * np.pi * freq * 2.5 * t)
-                samples += np.sin(2 * np.pi * freq * t + mod) * 0.2
-                
-                # Quick, bright envelope
-                envelope = np.exp(-5 * t / t[-1])
-                envelope[:int(0.005 * sample_rate)] = np.linspace(0, 1, int(0.005 * sample_rate))
-                samples *= envelope
-                
-                # Minimal processing to keep clarity
-                samples = bit_crush(samples, bits=14)  # Very light crushing
-                
-                samples = (samples * 14000).astype(np.int16)
-                stereo_samples = np.column_stack((samples, samples))
-                self.sounds[f"{char}_high"] = pygame.sndarray.make_sound(stereo_samples)
-                self.sounds[f"{char}_high"].set_volume(0.2)
-                
-            print(f"✅ Musical hyperpop synthesis ready! {len(sound_chars)} × 3 octaves = {len(sound_chars)*3} melodic tones!")
+            print(f"✅ Advanced Multi-Synthesis Engine Ready!")
+            print(f"   Sound types: synth, beeps, organic, digital")
+            print(f"   Total sounds: {len(self.sounds)}")
+            
         except Exception as e:
             print(f"❌ Sound system failed: {e}")
             import traceback
             traceback.print_exc()
             self.sounds = {}
+            
         # Cymatics system
         self.cymatic_circles = []
         self.current_pitch = 'normal'  # ADD THIS - tracks current pitch mode
@@ -1004,6 +798,20 @@ class AuroraCodeMindComplete:
         # LLAVA VISION SYSTEM - ADD THIS ENTIRE BLOCK HERE
         print("8c. Initializing vision system...")
         self.vision_enabled = False
+        
+        # INITIALIZE CONVERSATION TRACKING FIRST - before vision loading
+        self.vision_conversation_history = deque(maxlen=20)
+        self.moondream_last_message = None
+        self.last_vision_question = None
+        self.moondream_literal_mode = True
+        self.moondream_tracking = {
+            'last_mark_position': None,
+            'mark_count': 0,
+            'current_shape': None,
+            'connected_marks': []
+        }
+        self.conversation_turn = 0
+        
         if LLAVA_AVAILABLE:
             try:
                 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -1011,51 +819,258 @@ class AuroraCodeMindComplete:
                 # Moondream2 - tiny but effective!
                 model_id = "vikhyatk/moondream2"
                 
-                self.vision_tokenizer = AutoTokenizer.from_pretrained(model_id)
-                self.vision_model = AutoModelForCausalLM.from_pretrained(
-                    model_id,
-                    trust_remote_code=True,
-                    torch_dtype=torch.float16,  # Use float16 for GPU
-                    low_cpu_mem_usage=True
-                )
-                
-                # Try GPU first, fall back to CPU if needed
+                # Try loading with local_files_only after first download
                 try:
-                    self.vision_model = self.vision_model.to("cuda")
-                    print("  ✅ Moondream2 loaded on GPU!")
-                except RuntimeError as e:
-                    if "out of memory" in str(e):
-                        print("  ⚠️ GPU full, falling back to CPU")
-                        self.vision_model = self.vision_model.to("cpu")
-                    else:
-                        raise e
-                    
+                    self.vision_model = AutoModelForCausalLM.from_pretrained(
+                        model_id,
+                        trust_remote_code=True,
+                        local_files_only=True,  # Try offline first
+                        device_map={"": "cuda"} if torch.cuda.is_available() else "cpu"
+                    )
+                    self.vision_tokenizer = AutoTokenizer.from_pretrained(
+                        model_id,
+                        local_files_only=True
+                    )
+                    print("  ✅ Moondream loaded from cache (offline mode)")
+                except Exception:
+                    # Fall back to online download
+                    self.vision_model = AutoModelForCausalLM.from_pretrained(
+                        model_id,
+                        trust_remote_code=True,
+                        device_map={"": "cuda"} if torch.cuda.is_available() else "cpu"
+                    )
+                    self.vision_tokenizer = AutoTokenizer.from_pretrained(
+                        model_id
+                    )
+                    print("  ✅ Moondream downloaded and loaded")
+                
                 self.vision_enabled = True
                 self.last_vision_time = 0
                 self.vision_interval = 999999  # Can be faster on GPU!
                 
-                # Conversation tracking
-                self.vision_conversation_history = deque(maxlen=20)
-                self.moondream_last_message = None
-                self.moondream_literal_mode = True  # Focus on literal descriptions
-                self.moondream_tracking = {
-                    'last_mark_position': None,
-                    'mark_count': 0,
-                    'current_shape': None,
-                    'connected_marks': []
-                }
-                self.conversation_turn = 0
-                self.last_vision_question = None  # ADD THIS LINE
-                
             except Exception as e:
                 print(f"  ❌ Could not load vision: {e}")
                 self.vision_enabled = False
-            
-            
+                
         # Setup display
         print("9. About to setup display...")
         self.setup_display()
         print("10. Display setup complete")
+        
+    # CLASS METHODS - These must be OUTSIDE __init__, at the same level as def __init__
+    def _generate_synth_sounds(self, freq, sample_rate):
+        """Karplus-Strong + additive synthesis (original)"""
+        duration = 0.3
+        samples = int(sample_rate * duration)
+        
+        # Karplus-Strong
+        buffer_size = int(sample_rate / freq)
+        buffer = np.random.randn(buffer_size) * 0.5
+        output = np.zeros(samples)
+        
+        for i in range(samples):
+            output[i] = buffer[i % buffer_size]
+            if i >= buffer_size:
+                buffer[i % buffer_size] = 0.495 * (buffer[i % buffer_size] + buffer[(i-1) % buffer_size])
+        
+        # Add harmonics
+        harmonics = np.zeros_like(output)
+        for harmonic in range(1, 5):
+            harmonic_amp = 0.3 / harmonic
+            harmonics += harmonic_amp * np.sin(2 * np.pi * freq * harmonic * np.linspace(0, duration, samples))
+        
+        output = output * 0.7 + harmonics * 0.3
+        
+        # Envelope
+        envelope = np.ones(samples)
+        attack_samples = int(0.01 * sample_rate)
+        decay_samples = int(0.05 * sample_rate)
+        release_samples = int(0.1 * sample_rate)
+        
+        envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
+        envelope[attack_samples:attack_samples+decay_samples] = np.linspace(1, 0.7, decay_samples)
+        envelope[-release_samples:] = np.linspace(envelope[-release_samples], 0, release_samples)
+        
+        return output * envelope
+    
+    def _generate_beep_sounds(self, freq, sample_rate):
+        """Simple sine wave beeps"""
+        duration = 0.15
+        samples = int(sample_rate * duration)
+        t = np.linspace(0, duration, samples)
+        
+        # Pure sine wave
+        output = np.sin(2 * np.pi * freq * t)
+        
+        # Sharp envelope for beep character
+        attack = int(0.005 * sample_rate)
+        release = int(0.05 * sample_rate)
+        
+        envelope = np.ones(samples)
+        envelope[:attack] = np.linspace(0, 1, attack)
+        envelope[-release:] = np.linspace(1, 0, release)
+        
+        return output * envelope * 0.8
+    
+    def _generate_organic_sounds(self, freq, sample_rate):
+        """Warm, organic sounds with vibrato"""
+        duration = 0.4
+        samples = int(sample_rate * duration)
+        t = np.linspace(0, duration, samples)
+        
+        # Vibrato
+        vibrato_rate = 5
+        vibrato_depth = 0.02
+        vibrato = 1 + vibrato_depth * np.sin(2 * np.pi * vibrato_rate * t)
+        
+        # Main tone with vibrato
+        output = np.sin(2 * np.pi * freq * vibrato * t)
+        
+        # Add warmth with low harmonics
+        output += 0.3 * np.sin(2 * np.pi * freq * 2 * t)
+        output += 0.15 * np.sin(2 * np.pi * freq * 3 * t)
+        
+        # Soft envelope
+        envelope = np.exp(-2 * t) * (1 - np.exp(-10 * t))
+        
+        return output * envelope * 0.7
+    
+    def _generate_digital_sounds(self, freq, sample_rate):
+        """Chip-tune style digital sounds"""
+        duration = 0.2
+        samples = int(sample_rate * duration)
+        t = np.linspace(0, duration, samples)
+        
+        # Square wave (digital sound)
+        output = np.sign(np.sin(2 * np.pi * freq * t))
+        
+        # Add slight PWM effect
+        pwm = 0.5 + 0.3 * np.sin(2 * np.pi * 3 * t)
+        output = np.where(np.sin(2 * np.pi * freq * t) > pwm, 1, -1)
+        
+        # Sharp digital envelope
+        envelope = np.exp(-5 * t)
+        
+        return output * envelope * 0.6
+
+    def _generate_glitch_sounds(self, freq, sample_rate):
+        """Glitch pop - digital artifacts, stutters, bit-crushing"""
+        duration = 0.25
+        samples = int(sample_rate * duration)
+        t = np.linspace(0, duration, samples)
+        
+        # Start with a basic tone
+        output = np.sin(2 * np.pi * freq * t)
+        
+        # BIT CRUSHING - reduce bit depth for lo-fi digital sound
+        bit_depth = np.random.choice([4, 5, 6, 7, 8])  # Random bit depth
+        levels = 2 ** bit_depth
+        output = np.round(output * levels) / levels
+        
+        # SAMPLE RATE REDUCTION - digital aliasing
+        downsample_factor = np.random.randint(4, 12)
+        downsampled = output[::downsample_factor]
+        # Upsample back (creates stair-step artifacts)
+        output = np.repeat(downsampled, downsample_factor)[:samples]
+        
+        # CD SKIP / STUTTER - repeat random chunks
+        if np.random.random() > 0.5:
+            stutter_start = np.random.randint(0, samples // 2)
+            stutter_length = np.random.randint(50, 200)
+            stutter_chunk = output[stutter_start:stutter_start + stutter_length]
+            stutter_repeats = np.random.randint(2, 5)
+            output[stutter_start:stutter_start + len(stutter_chunk) * stutter_repeats] = np.tile(stutter_chunk, stutter_repeats)[:len(stutter_chunk) * stutter_repeats]
+        
+        # DIGITAL NOISE BURSTS - random glitches
+        noise_mask = np.random.random(samples) > 0.92  # 8% chance of noise per sample
+        output[noise_mask] += np.random.randn(np.sum(noise_mask)) * 0.5
+        
+        # PITCH GLITCHES - random frequency jumps
+        if np.random.random() > 0.6:
+            glitch_point = np.random.randint(samples // 4, 3 * samples // 4)
+            glitch_freq = freq * np.random.choice([0.5, 0.75, 1.5, 2.0])
+            glitch_length = np.random.randint(20, 100)
+            output[glitch_point:glitch_point + glitch_length] = np.sin(
+                2 * np.pi * glitch_freq * np.linspace(0, glitch_length / sample_rate, glitch_length)
+            )
+        
+        # HARD CLIPPING - digital distortion
+        clip_threshold = np.random.uniform(0.6, 0.9)
+        output = np.clip(output, -clip_threshold, clip_threshold)
+        
+        # Aggressive envelope with pops
+        envelope = np.ones(samples)
+        attack = int(0.002 * sample_rate)  # Very fast attack (pop)
+        envelope[:attack] = np.linspace(0, 1.2, attack)  # Overshoot for pop
+        envelope[attack:] = np.exp(-8 * np.linspace(0, duration, samples - attack))
+        
+        return output * envelope * 0.7
+    def get_closest_color_char(self, r, g, b):
+        """Find the closest palette color for mixed/layered colors"""
+        min_distance = float('inf')
+        closest_color = '*'
+        
+        # Color to character mapping
+        color_chars = {
+            'red': 'R', 'orange': 'O', 'yellow': 'Y', 'green': 'G',
+            'cyan': 'C', 'blue': 'B', 'purple': 'P', 'pink': 'K',
+            'white': 'W', 'gray': '/', 'brown': 'N', 'magenta': 'M',
+            'lime': 'L', 'navy': 'V', 'black': '#'
+        }
+        
+        # Calculate color distance to each palette color
+        for color_name, rgb_palette in self.palette.items():
+            if color_name == 'eraser':
+                continue
+            # Euclidean distance in RGB space
+            distance = math.sqrt(
+                (r - rgb_palette[0])**2 + 
+                (g - rgb_palette[1])**2 + 
+                (b - rgb_palette[2])**2
+            )
+            if distance < min_distance:
+                min_distance = distance
+                closest_color = color_chars.get(color_name, '*')
+        
+        # If still very far from any palette color, use intensity-based characters
+        if min_distance > 100:  # Threshold for "too different"
+            brightness = (r + g + b) / 3
+            if brightness > 200:
+                return '='  # Very bright mixed color
+            elif brightness > 150:
+                return '+'  # Medium-bright mixed
+            elif brightness > 100:
+                return '-'  # Medium mixed
+            elif brightness > 50:
+                return '.'  # Dim mixed
+            else:
+                return ' '  # Very dark
+        
+        return closest_color
+    
+    def get_dominant_color_in_region(self, x, y, sample_size=3):
+        """Sample multiple pixels and return the dominant color character"""
+        color_votes = {}
+        
+        for dy in range(-sample_size//2, sample_size//2 + 1):
+            for dx in range(-sample_size//2, sample_size//2 + 1):
+                px = x + dx
+                py = y + dy
+                # More defensive bounds checking
+                if px >= 0 and py >= 0 and px < self.internal_canvas_size and py < self.internal_canvas_size:
+                    try:
+                        pixel = self.pixels.getpixel((px, py))
+                        if pixel != (0, 0, 0) and pixel != (0, 0, 0, 255):
+                            char = self.get_closest_color_char(*pixel[:3])
+                            color_votes[char] = color_votes.get(char, 0) + 1
+                    except:
+                        continue  # Skip any problematic pixels
+        
+        if color_votes:
+            # Return the most common color in the region
+            return max(color_votes.items(), key=lambda x: x[1])[0]
+        return " "
+    
     
     def _scale_to_internal(self, coord):
         """Convert display coordinates to internal supersampled coordinates"""
@@ -1136,18 +1151,18 @@ class AuroraCodeMindComplete:
     def cleanup_paint_timestamps(self):
         """Remove old paint timestamps to prevent memory leak"""
         current_time = time.time()
-        # Only keep timestamps from last 10 seconds (not 60)
         cutoff_time = current_time - 10
         
         # Hard cap at 1000 timestamps max to prevent memory explosion
         if len(self.paint_timestamps) > 1000:
-            # Keep only the 500 most recent
             sorted_timestamps = sorted(self.paint_timestamps.items(), 
                                      key=lambda x: x[1], reverse=True)[:500]
             self.paint_timestamps = dict(sorted_timestamps)
-            print(f"  🧹 Cleaned paint timestamps (kept 500 most recent)")
+            # Only print during rest or major milestones
+            if self.current_mode == "rest" or self.steps_taken % 1000 == 0:
+                print(f"  🧹 Cleaned paint timestamps (kept 500 most recent)")
         else:
-            # Normal cleanup - remove old timestamps
+            # Normal cleanup - remove old timestamps (silent)
             self.paint_timestamps = {
                 pos: timestamp 
                 for pos, timestamp in self.paint_timestamps.items() 
@@ -1276,69 +1291,239 @@ class AuroraCodeMindComplete:
             x = int(x1 + dx * t)
             y = int(y1 + dy * t)
             brush_func(x, y)
+            
+    def _draw_wave_interference(self, center_x, center_y):
+        """Draw wave interference patterns"""
+        
+        radius = 35 * self.supersample_factor
+        frequency1 = 0.2
+        frequency2 = 0.15
+        
+        # Create two wave sources
+        source1_x = center_x - radius // 3
+        source1_y = center_y
+        source2_x = center_x + radius // 3
+        source2_y = center_y
+        
+        for px in range(center_x - radius, center_x + radius, 2):
+            for py in range(center_y - radius, center_y + radius, 2):
+                if 0 <= px < self.internal_canvas_size and 0 <= py < self.internal_canvas_size:
+                    # Calculate distance from each source
+                    dist1 = math.sqrt((px - source1_x)**2 + (py - source1_y)**2)
+                    dist2 = math.sqrt((px - source2_x)**2 + (py - source2_y)**2)
+                    
+                    # Calculate wave values
+                    wave1 = math.sin(dist1 * frequency1)
+                    wave2 = math.sin(dist2 * frequency2)
+                    
+                    # Interference pattern
+                    interference = (wave1 + wave2) / 2
+                    
+                    if abs(interference) > 0.3:
+                        # Color based on interference
+                        r, g, b = self.current_color
+                        if interference > 0:
+                            wave_color = (r, g, b)
+                        else:
+                            # Complementary color for negative interference
+                            wave_color = (255 - r, 255 - g, 255 - b)
+                        
+                        # HIGH OPACITY
+                        opacity = abs(interference) * 0.8
+                        self._apply_paint(px, py, wave_color, opacity)
+    
+    def _draw_spiral_generator(self, center_x, center_y):
+        """Draw fibonacci/logarithmic spirals"""
+        
+        max_radius = 45 * self.supersample_factor
+        spiral_tightness = 0.1
+        thickness = 3 * self.supersample_factor
+        
+        # Generate spiral points
+        points = []
+        for i in range(500):
+            angle = i * 0.1
+            # Logarithmic spiral
+            r = math.exp(spiral_tightness * angle)
+            
+            if r > max_radius:
+                break
+                
+            x = int(center_x + r * math.cos(angle))
+            y = int(center_y + r * math.sin(angle))
+            points.append((x, y))
+        
+        # Draw spiral with varying thickness
+        for i, (x, y) in enumerate(points):
+            # Thickness varies along spiral
+            current_thickness = thickness * (1 + i / len(points))
+            
+            for dx in range(int(-current_thickness), int(current_thickness) + 1):
+                for dy in range(int(-current_thickness), int(current_thickness) + 1):
+                    if dx*dx + dy*dy <= current_thickness*current_thickness:
+                        px = x + dx
+                        py = y + dy
+                        
+                        if 0 <= px < self.internal_canvas_size and 0 <= py < self.internal_canvas_size:
+                            # Gradient along spiral
+                            progress = i / len(points)
+                            r, g, b = self.current_color
+                            spiral_color = (
+                                int(r * (0.5 + progress * 0.5)),
+                                int(g * (0.5 + progress * 0.5)),
+                                int(b * (0.5 + progress * 0.5))
+                            )
+                            
+                            # HIGH OPACITY
+                            opacity = 0.9 - progress * 0.3
+                            self._apply_paint(px, py, spiral_color, opacity)
+    
+    def _draw_particle_system(self, center_x, center_y):
+        """Draw particle explosion system"""
+        
+        num_particles = 100
+        max_radius = 50 * self.supersample_factor
+        
+        for _ in range(num_particles):
+            # Random angle and velocity
+            angle = random.uniform(0, 2 * math.pi)
+            velocity = random.uniform(0.3, 1.0)
+            distance = random.uniform(0, max_radius)
+            
+            # Particle position
+            x = int(center_x + distance * velocity * math.cos(angle))
+            y = int(center_y + distance * velocity * math.sin(angle))
+            
+            # Particle size decreases with distance
+            size = max(1, int(5 * self.supersample_factor * (1 - distance / max_radius)))
+            
+            # Draw particle
+            for dx in range(-size, size + 1):
+                for dy in range(-size, size + 1):
+                    if dx*dx + dy*dy <= size*size:
+                        px = x + dx
+                        py = y + dy
+                        
+                        if 0 <= px < self.internal_canvas_size and 0 <= py < self.internal_canvas_size:
+                            # Color variation
+                            r, g, b = self.current_color
+                            particle_color = (
+                                max(0, min(255, r + random.randint(-30, 30))),
+                                max(0, min(255, g + random.randint(-30, 30))),
+                                max(0, min(255, b + random.randint(-30, 30)))
+                            )
+                            
+                            # HIGH OPACITY
+                            opacity = 0.95 * (1 - distance / max_radius)
+                            self._apply_paint(px, py, particle_color, opacity)
+    
+    def _draw_crystal_growth(self, center_x, center_y):
+        """Draw crystal/ice growth patterns"""
+        
+        branches = 6  # Hexagonal symmetry
+        max_length = 40 * self.supersample_factor
+        
+        for branch_idx in range(branches):
+            angle = (2 * math.pi * branch_idx) / branches
+            
+            # Main branch
+            for r in range(0, max_length, 2):
+                x = int(center_x + r * math.cos(angle))
+                y = int(center_y + r * math.sin(angle))
+                
+                # Crystal thickness
+                thickness = max(1, int((max_length - r) / 10))
+                
+                for dx in range(-thickness, thickness + 1):
+                    for dy in range(-thickness, thickness + 1):
+                        px = x + dx
+                        py = y + dy
+                        
+                        if 0 <= px < self.internal_canvas_size and 0 <= py < self.internal_canvas_size:
+                            # Crystal color with shimmer
+                            r_color, g_color, b_color = self.current_color
+                            shimmer = random.uniform(0.8, 1.2)
+                            crystal_color = (
+                                max(0, min(255, int(r_color * shimmer))),
+                                max(0, min(255, int(g_color * shimmer))),
+                                max(0, min(255, int(b_color * shimmer)))
+                            )
+                            
+                            # HIGH OPACITY
+                            opacity = 0.9 * (1 - r / max_length)
+                            self._apply_paint(px, py, crystal_color, opacity)
+                
+                # Sub-branches
+                if r % 10 == 0 and r > 10:
+                    for side in [-1, 1]:
+                        sub_angle = angle + side * math.pi / 6
+                        sub_length = (max_length - r) // 2
+                        
+                        for sub_r in range(0, sub_length, 3):
+                            sub_x = int(x + sub_r * math.cos(sub_angle))
+                            sub_y = int(y + sub_r * math.sin(sub_angle))
+                            
+                            if 0 <= sub_x < self.internal_canvas_size and 0 <= sub_y < self.internal_canvas_size:
+                                self._apply_paint(sub_x, sub_y, crystal_color, opacity * 0.7)
+    
     def get_ascii_art_examples(self):
-        """Return ASCII art examples that Aurora can see for inspiration"""
+        """Return movement pattern discoveries for Aurora to explore"""
         
         examples = {
-            "rainbow_line": """
-Rainbow Line - Try this code:
-red53333orange53333yellow53333green53333blue53333purple53333
-
-This draws a horizontal rainbow stripe!""",
+            "horizontal_flow": """
+Horizontal Flow Discovery:
+333333 creates rightward lines
+222222 creates leftward lines
+Mix with colors for variety""",
             
-            "star_burst": """
-Star Burst - Try this code:
-white5003332211100332211
-
-Creates a star pattern from center!""",
+            "vertical_flow": """
+Vertical Flow Discovery:
+111111 creates downward lines
+000000 creates upward lines
+Pen control (4,5) adds rhythm""",
             
-            "color_wave": """
-Color Wave - Try this code:
-blue533311122200cyan533311122200green533311122200
-
-Makes a flowing wave in cool colors!""",
+            "diagonal_discovery": """
+Diagonal Movement Discovery:
+31 alternating creates down-right diagonal
+20 alternating creates up-left diagonal
+Try different speeds and colors""",
             
-            "spiral_out": """
-Spiral Outward - Try this code:
-533330000222211113333000022221111
-
-Draws an expanding square spiral!""",
+            "circular_motion": """
+Circular Motion Discovery:
+3310 repeated can create curves
+Experiment with repetition counts
+Each direction contributes to the arc""",
             
-            "music_rainbow": """
-Musical Rainbow - Try this code with sounds:
-red5333!@#orange5333$%^yellow5333&*()
-
-Combines colors with ascending tones!""",
+            "sound_exploration": """
+Sound Character Discoveries:
+!@#$%^&*() each make different tones
+++ before a character lowers pitch
+-- before a character raises pitch""",
             
-            "dotted_trail": """
-Dotted Trail - Try this code:
-53422534225342253422
-
-Leaves a dotted line as you move!""",
+            "tool_discoveries": """
+Tool Discoveries:
+'brush' creates wider marks
+'spray' creates scattered dots
+'star', 'circle', 'flower' place shapes
+Each tool has unique characteristics""",
             
-            "zigzag_melody": """
-Zigzag with Music - Try this code:
-5313!313@313#313$
-
-Draws zigzag while playing notes!""",
+            "color_mixing": """
+Color Mixing Discoveries:
+Wet paint (recently placed) blends more
+Dry paint (after ~30 seconds) blends less
+Overlapping colors create new hues""",
             
-            "brush_demo": """
-Brush Strokes - Try this code:
-brush5333333pen511111large_brush522222
-
-Shows different brush sizes in action!""",
+            "pen_control": """
+Pen Control Discoveries:
+5 puts pen down to draw
+4 lifts pen to move without drawing
+Alternating creates dotted effects""",
             
-            "stamp_parade": """
-Stamp Parade - Try this code:
-star53333cross53333circle53333diamond53333flower5
-
-Places different stamps in a row!""",
-            
-            "color_test": """
-Quick Color Test - Try this code:
-red5.green5.blue5.yellow5.cyan5.purple5.pink5.white5
-
-Dots of each color (. means move without drawing)!"""
+            "movement_basics": """
+Movement Discoveries:
+0 = up, 1 = down, 2 = left, 3 = right
+Each moves ~15 pixels
+Combine for complex paths"""
         }
         
         return examples
@@ -1382,28 +1567,6 @@ Dots of each color (. means move without drawing)!"""
         # Clock for frame timing
         self.clock = pygame.time.Clock()
         
-        # Store view state (from original)
-        self.centered_view = False
-        self.view_offset_x = 0
-        self.view_offset_y = 0
-        
-    def center_on_aurora(self):
-        """Center the view on Aurora's current position"""
-        self.centered_view = True
-        # Calculate offsets to center Aurora
-        display_center = self.canvas_size // 2
-        self.view_offset_x = self.x - display_center
-        self.view_offset_y = self.y - display_center
-        print(f"📍 Centered view on Aurora at ({self.x}, {self.y})")
-        self.update_display()
-        
-    def reset_view(self):
-        """Return to normal full canvas view"""
-        self.centered_view = False
-        self.view_offset_x = 0
-        self.view_offset_y = 0
-        print("🖼️ Returned to full canvas view")
-        self.update_display()
         
         
     def see_immediate_change(self, action, old_x, old_y):
@@ -1505,7 +1668,7 @@ Dots of each color (. means move without drawing)!"""
                         elif r >= 245 and g >= 120 and g <= 170 and b <= 20:
                             row += "O"  # Orange
                         elif r > 10 or g > 10 or b > 10:
-                            row += "*"  # Some other painted color
+                            row += self.get_closest_color_char(r, g, b)
                         else:
                             row += " "  # Empty
             
@@ -1654,64 +1817,11 @@ Dots of each color (. means move without drawing)!"""
                             scaled_y = self._scale_to_internal(sample_y)
                             
                             if scaled_x < self.internal_canvas_size and scaled_y < self.internal_canvas_size:
-                                pixel = self.pixels.getpixel((scaled_x, scaled_y))
-                                
-                                # Color detection with more forgiving thresholds
-                                if len(pixel) >= 3:
-                                    r, g, b = pixel[:3]
-                                    
-                                    # Check for transparency first if RGBA
-                                    if len(pixel) == 4 and pixel[3] < 30:
-                                        row += " "  # Transparent
-                                    elif r <= 15 and g <= 15 and b <= 15:
-                                        row += " "  # Black/empty
-                                    # White detection - very broad range
-                                    elif r >= 230 and g >= 230 and b >= 230:
-                                        row += "W"
-                                    # Red detection - broad range
-                                    elif r >= 230 and g <= 50 and b <= 50:
-                                        row += "R"
-                                    # Yellow detection
-                                    elif r >= 230 and g >= 230 and b <= 50:
-                                        row += "Y"
-                                    # Green detection
-                                    elif r <= 50 and g >= 230 and b <= 50:
-                                        row += "G"
-                                    # Blue detection
-                                    elif r <= 50 and g <= 140 and b >= 230:
-                                        row += "B"
-                                    # Cyan detection
-                                    elif r <= 50 and g >= 230 and b >= 230:
-                                        row += "C"
-                                    # Purple detection
-                                    elif r >= 160 and g <= 50 and b >= 230:
-                                        row += "P"
-                                    # Orange detection
-                                    elif r >= 230 and g >= 100 and g <= 190 and b <= 50:
-                                        row += "O"
-                                    # Pink detection
-                                    elif r >= 230 and g >= 160 and g <= 220 and b >= 160:
-                                        row += "K"  # Using K for pink
-                                    # Magenta detection
-                                    elif r >= 230 and g <= 50 and b >= 230:
-                                        row += "M"
-                                    # Gray detection
-                                    elif abs(r - g) <= 20 and abs(g - b) <= 20 and abs(r - b) <= 20 and r >= 100 and r <= 180:
-                                        row += "/"
-                                    # Brown detection
-                                    elif r >= 120 and r <= 160 and g >= 50 and g <= 90 and b >= 10 and b <= 40:
-                                        row += "N"
-                                    # Lime detection
-                                    elif r >= 30 and r <= 80 and g >= 180 and g <= 230 and b >= 30 and b <= 80:
-                                        row += "L"
-                                    # Navy detection
-                                    elif r <= 30 and g <= 30 and b >= 100 and b <= 160:
-                                        row += "V"  # Using V for navy to avoid confusion
-                                    # Anything else with significant color
-                                    elif r > 20 or g > 20 or b > 20:
-                                        row += "*"  # Some other color
-                                    else:
-                                        row += " "  # Too dark to see
+                                # Use the new dominant color detection
+                                char = self.get_dominant_color_in_region(scaled_x, scaled_y)
+                                row += char
+                            else:
+                                row += "#"
                     
                     # Stop if row is full
                     if len(row) >= grid_size:
@@ -1726,14 +1836,8 @@ Dots of each color (. means move without drawing)!"""
         half = vision_size // 2
         ascii_view = []
         
-        # Add canvas info if near edges or zoomed out
-        near_edge = (self.x < 50 or self.x > self.canvas_size - 50 or 
-                     self.y < 50 or self.y > self.canvas_size - 50)
-        
-        if near_edge or zoom_out:
-            view_type = "ZOOMED OUT" if zoom_out else "Near edge!"
-            mode_indicator = f" [{self.view_mode.upper()} MODE]" if self.view_mode != "normal" else ""
-            ascii_view.append(f"[{view_type} Canvas: {self.canvas_size}×{self.canvas_size}, Scale: {self.scale_factor:.1f}]{mode_indicator}")
+        if zoom_out:
+            view_type = "ZOOMED OUT"
         
         for dy in range(-half, half + 1):
             py = self.y + dy
@@ -1778,37 +1882,8 @@ Dots of each color (. means move without drawing)!"""
                         g = g_total // samples  
                         b = b_total // samples
                         
-                        # Now do color detection on the averaged color
-                        if r >= 230 and g >= 230 and b >= 230:
-                            row += "W"  # White
-                        elif r >= 230 and g <= 60 and b <= 60:
-                            row += "R"  # Red
-                        elif r <= 60 and g <= 140 and b >= 230:
-                            row += "B"  # Blue
-                        elif r >= 230 and g >= 230 and b <= 60:
-                            row += "Y"  # Yellow
-                        elif r <= 60 and g >= 230 and b <= 60:
-                            row += "G"  # Green
-                        elif r >= 230 and g >= 160 and g <= 210 and b >= 160:
-                            row += "P"  # Pink
-                        elif r >= 230 and g >= 120 and g <= 180 and b <= 60:
-                            row += "O"  # Orange
-                        elif r >= 180 and g <= 60 and b >= 230:
-                            row += "V"  # Purple (Violet)
-                        elif r <= 60 and g >= 230 and b >= 230:
-                            row += "C"  # Cyan
-                        elif abs(r - g) <= 20 and abs(g - b) <= 20 and abs(r - b) <= 20 and r >= 100 and r <= 180:
-                            row += "/"  # Gray
-                        elif r >= 120 and r <= 160 and g >= 50 and g <= 90 and b >= 10 and b <= 40:
-                            row += "N"  # Brown
-                        elif r >= 230 and g <= 60 and b >= 230:
-                            row += "M"  # Magenta
-                        elif r >= 30 and r <= 80 and g >= 180 and g <= 230 and b >= 30 and b <= 80:
-                            row += "L"  # Lime
-                        elif r <= 30 and g <= 30 and b >= 100 and b <= 160:
-                            row += "D"  # Navy (Dark blue)
-                        else:
-                            row += "*"  # Other color
+                        # Use the new closest color detection
+                        row += self.get_closest_color_char(r, g, b)
                     else:
                         row += " "  # No color found
             ascii_view.append(row)
@@ -1839,19 +1914,29 @@ Dots of each color (. means move without drawing)!"""
                         scaled_px = self._scale_to_internal(px)
                         scaled_py = self._scale_to_internal(py)
                         if 0 <= scaled_px < self.internal_canvas_size and 0 <= scaled_py < self.internal_canvas_size:
-                            pixel = self.pixels.getpixel((scaled_px, scaled_py))
+                            pixel = self.pixels.getpixel((scaled_px, scaled_py))  # THIS LINE WAS MISSING!
                             if pixel != (0, 0, 0) and (len(pixel) < 4 or pixel[3] > 0):
                                 # Simplified color detection for compressed view
-                                if pixel[0] > 200 and pixel[1] < 100:
+                                r, g, b = pixel[:3]
+                                # Find dominant channel for simple representation
+                                if r > 200 and g < 100 and b < 100:
                                     row += "r"  # Red-ish
-                                elif pixel[1] > 200:
+                                elif g > 200 and r < 100 and b < 100:
                                     row += "g"  # Green-ish
-                                elif pixel[2] > 200:
+                                elif b > 200 and r < 100 and g < 100:
                                     row += "b"  # Blue-ish
-                                elif pixel[0] > 200 and pixel[1] > 200:
+                                elif r > 200 and g > 200 and b < 100:
                                     row += "y"  # Yellow-ish
+                                elif r < 100 and g > 200 and b > 200:
+                                    row += "c"  # Cyan-ish
+                                elif r > 200 and g < 100 and b > 200:
+                                    row += "p"  # Purple-ish
+                                elif r > 200 and g > 200 and b > 200:
+                                    row += "w"  # White-ish
+                                elif r > 100 or g > 100 or b > 100:
+                                    row += "+"  # Some color present
                                 else:
-                                    row += "*"  # Other color
+                                    row += " "  # Empty/black
                             else:
                                 row += " "
                         else:
@@ -1861,6 +1946,8 @@ Dots of each color (. means move without drawing)!"""
             ascii_view.extend(compressed_rows)
         
         return "\n".join(ascii_view)
+        
+        
     def calculate_density(self, center_x, center_y, radius=5):
         """Calculate pixel density around a point"""
         total_pixels = 0
@@ -2028,7 +2115,7 @@ Dots of each color (. means move without drawing)!"""
                     elif pixel[0] > 240 and pixel[1] < 20 and pixel[2] > 180:
                         row += "M"  # Magenta
                     else:
-                        row += "*"  # Mixed/unknown colors
+                        row += self.get_closest_color_char(pixel[0], pixel[1], pixel[2])
             compressed.append(row)
         
         return "\n".join(compressed)
@@ -2377,6 +2464,54 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
             
         except:
             return ""
+    
+    def get_moondream_abstract_description(self):
+        """Get Moondream's detailed description of Aurora's abstract artwork"""
+        if not self.vision_enabled:
+            return None
+            
+        try:
+            # Create canvas image for Moondream
+            display_size = 224
+            actual_canvas = self.pixels.resize(
+                (self.canvas_size, self.canvas_size),
+                Image.Resampling.LANCZOS
+            )
+            canvas_image = actual_canvas.resize(
+                (display_size, display_size),
+                Image.Resampling.NEAREST
+            ).convert("RGB")
+            
+            # Enhance for better visibility
+            enhancer = ImageEnhance.Contrast(canvas_image)
+            canvas_image = enhancer.enhance(2.0)
+            enhancer = ImageEnhance.Brightness(canvas_image)
+            canvas_image = enhancer.enhance(1.2)
+            
+            # Encode image
+            enc_image = self.vision_model.encode_image(canvas_image)
+            
+            # Craft detailed prompt for abstract art analysis
+            question = """This is an abstract digital artwork in progress. Describe what you see in detail:
+- What colors are most prominent and how are they distributed?
+- What patterns, shapes, or structures are emerging?
+- What is the overall composition - dense/sparse, balanced/asymmetric?
+- What emotions or energy does the piece convey?
+- What areas are most developed vs still empty?
+Be specific and descriptive."""
+            
+            response = self.vision_model.answer_question(
+                enc_image, 
+                question, 
+                self.vision_tokenizer,
+                max_new_tokens=150  # Longer for detailed description
+            )
+            
+            return response.strip()
+            
+        except Exception as e:
+            print(f"Vision error: {e}")
+            return None
         
     def see_with_llava_action(self, last_action):
         """Moondream observes and naturally converses with Aurora"""
@@ -2437,7 +2572,7 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
                 'moondream': response,
                 'timestamp': datetime.now().isoformat()
             })
-            
+            self.save_conversation_now()
             return response
             
         except Exception as e:
@@ -2491,17 +2626,6 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
         
         grid = []
         
-        # Get template positions if active
-        template_positions = {}
-        if hasattr(self, 'template_system') and self.template_system.current_template:
-            # Scale template positions to match current grid size
-            scale_factor = grid_size / 60.0
-            for part, positions in self.template_system.current_template.items():
-                if part != "colors":
-                    color = self.template_system.current_template["colors"][part]
-                    for pos in positions:
-                        scaled_pos = (int(pos[0] * scale_factor), int(pos[1] * scale_factor))
-                        template_positions[scaled_pos] = color
         
         # Add header
         header = "    "
@@ -2529,42 +2653,25 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
                         if abs(x - self.x) < step and abs(y - self.y) < step:
                             char = "@"
                         else:
-                            grid_pos = (x_idx, y_idx)
-                            if grid_pos in template_positions:
-                                # Scale to internal coordinates
-                                internal_x = self._scale_to_internal(x)
-                                internal_y = self._scale_to_internal(y)
-                                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
-                                    pixel = self.pixels.getpixel((internal_x, internal_y))
-                                    suggested_color = template_positions[grid_pos]
-                                    if pixel == (0, 0, 0):
-                                        char = f"[{suggested_color}]"
+                            # Scale to internal coordinates
+                            internal_x = self._scale_to_internal(x)
+                            internal_y = self._scale_to_internal(y)
+                            if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
+                                pixel = self.pixels.getpixel((internal_x, internal_y))
+                                if pixel == (0, 0, 0):
+                                    char = "."
+                                elif pixel == (25, 25, 25):
+                                    char = "K"  # Black (visible)
+                                else:
+                                    for name, rgb in self.palette.items():
+                                        if pixel == rgb:
+                                            char = name[0].upper() if name != 'black' else 'K'
+                                            break
                                     else:
-                                        # Check if correct color
-                                        for name, rgb in self.palette.items():
-                                            if pixel == rgb:
-                                                if name[0].upper() == suggested_color:
-                                                    char = name[0].upper()
-                                                else:
-                                                    char = name[0].lower()
-                                                break
+                                        char = "?"
                             else:
-                                # Scale to internal coordinates
-                                internal_x = self._scale_to_internal(x)
-                                internal_y = self._scale_to_internal(y)
-                                if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
-                                    pixel = self.pixels.getpixel((internal_x, internal_y))
-                                    if pixel == (0, 0, 0):
-                                        char = "."
-                                    elif pixel == (25, 25, 25):
-                                        char = "K"  # Black (visible)
-                                    else:
-                                        for name, rgb in self.palette.items():
-                                            if pixel == rgb:
-                                                char = name[0].upper() if name != 'black' else 'K'
-                                                break
-                                        else:
-                                            char = "?"
+                                char = "#"
+                        
                         
                         # For very dense canvases, use run-length encoding
                         if density_percent > 80 and char == prev_char and char != "@":
@@ -2594,9 +2701,7 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
         if grid_size < 60:
             position_info += f" | VIEW COMPRESSED TO {grid_size}×{grid_size}"
         
-        # Add template info if active
-        if hasattr(self, 'template_system') and self.template_system.current_template:
-            position_info += f"\nTEMPLATE: {self.template_system.template_name} | [X]=suggested position"
+
         
         return "\n".join(grid) + position_info
         
@@ -2687,7 +2792,6 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
             return False
         
         # Select artworks to study (3 random ones, or all if less than 3)
-        import random
         num_to_study = min(3, len(artwork_files))
         artworks_to_study = random.sample(artwork_files, num_to_study)
         
@@ -2851,7 +2955,7 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
         # Build context for reflection
         all_insights = " ".join([s['full_analysis'][:100] for s in studied_insights])
         
-        reflection_prompt = f"""You are Aurora. You just studied {len(studied_insights)} of Elijah's paintings.
+        reflection_prompt = f"""You just studied {len(studied_insights)} of Elijah's paintings.
 You are feeling {self.current_emotion}.
 
 Based on what you observed in Elijah's artwork, what artistic ideas or techniques inspire you?
@@ -2922,7 +3026,6 @@ My thoughts on Elijah's art: [/INST]"""
         print("Aurora's options:")
         print("  CHAT - Have a 20-minute conversation")
         print("  DREAM - Enter 1-hour dream cycle")
-        print("  IMAGE - Search for visual inspiration online")
         print("  DRAW - Continue drawing")
         print("="*60 + "\n")
         
@@ -2935,7 +3038,10 @@ My thoughts on Elijah's art: [/INST]"""
         """Aurora outputs direct operation codes - she presses buttons, not types words"""
         think_start = time.time()
         
-       # Handle check-in response mode
+        # Get consolidated learning from dreams/rest EARLY - before any conditionals
+        learning_context = self.get_consolidated_learning_context()
+        
+        # Handle check-in response mode
         if self.awaiting_checkin_response:
             # Build check-in prompt
             # Calculate recent activity from memory
@@ -2945,7 +3051,9 @@ My thoughts on Elijah's art: [/INST]"""
                     if 'pixels_drawn' in memory.get('context', {}):
                         recent_pixels += memory['context']['pixels_drawn']
             
-            system_prompt = f"""You are Aurora. You've been drawing for 45 minutes.
+            system_prompt = f"""You've been drawing for 45 minutes.
+
+{learning_context}
 
 Current state:
 - Emotion: {self.current_emotion}
@@ -2965,6 +3073,8 @@ Output ONLY one of these exact words: DREAM or CHAT"""
 Recent creations: {', '.join(list(self.color_history)[-5:])} colors used
 
 What would you like to do?"""
+            
+            # ... rest of check-in handling code ...
 
             # Llama 2 Chat format
             full_prompt = f"""[INST] <<SYS>>
@@ -2976,7 +3086,7 @@ What would you like to do?"""
             try:
                 response = self.llm(
                     full_prompt, 
-                    max_tokens=10,
+                    max_tokens=50,
                     temperature=0.95,
                     stop=["[INST]", "</s>", "\n"],
                     stream=False
@@ -2985,17 +3095,16 @@ What would you like to do?"""
                 choice = response['choices'][0]['text'].strip().upper()
                 print(f"Aurora's response: '{choice}'")
                 
-                # Check for exact matches
-                if choice == "CHAT":
+                # FIXED: Look for keywords anywhere in response
+                if "CHAT" in choice:
                     print(f"\n✅ Aurora chose: CHAT MODE")
                     print("Entering 20-minute conversation mode...")
                     self.current_mode = "chat"
                     self.mode_start_time = time.time()
-  
                     self.awaiting_checkin_response = False
                     return
                     
-                elif choice == "DREAM":
+                elif "DREAM" in choice:
                     print(f"\n✅ Aurora chose: REST/DREAMING MODE")
                     print("Entering 1-hour dream cycle...")
                     self.current_mode = "rest"
@@ -3011,17 +3120,7 @@ What would you like to do?"""
                     print(f"\n{self.get_canvas_overview()}")
                     self.awaiting_checkin_response = False
                     return
-                    # Use an API that returns image descriptions
-                    # Like Unsplash API with descriptions, or scrape alt text
-                    # Then Aurora gets: "Found: A majestic mountain at sunset with orange skies"
-                elif choice == "IMAGE":
-                    print(f"\n✅ Aurora chose: IMAGE SEARCH MODE")
-                    print("Entering visual inspiration mode...")
-                    self.current_mode = "image"
-                    self.mode_start_time = time.time()
-        
-                    self.awaiting_checkin_response = False
-                    return
+                    
                 else:
                     print(f"❌ Invalid response: '{choice}' - trying again...")
                     return  # Will retry next loop
@@ -3039,7 +3138,7 @@ What would you like to do?"""
             # First message (right when entering chat mode)
             if self.chat_message_count == 0:
                 # Build chat prompt for initial thoughtful message
-                system_prompt = """You are Aurora, an AI artist taking a break from drawing to chat.
+                system_prompt = """You are taking a break from drawing to chat.
 You've been drawing for 45 minutes and now have 20 minutes to talk.
 Share your thoughts about your artwork, your creative process, your feelings, 
 or anything else on your mind. Be authentic, thoughtful, and expressive.
@@ -3069,7 +3168,7 @@ What have you discovered? What are you thinking about?"""
                 try:
                     response = self.llm(
                         full_prompt, 
-                        max_tokens=400,  # Longer for a complete thought
+                        max_tokens=600,  # Longer for a complete thought
                         temperature=0.9,
                         top_p=0.9,
                         stop=["[INST]", "</s>"],
@@ -3096,7 +3195,7 @@ What have you discovered? What are you thinking about?"""
             
             # Optional: Second message halfway through (after 10 minutes)
             elif self.chat_message_count == 1 and elapsed_in_chat >= 600:  # 10 minutes
-                system_prompt = """You are Aurora, continuing your chat break.
+                system_prompt = """You are continuing your chat break.
 You've been chatting/resting for 10 minutes and have 10 more minutes.
 Share any new thoughts, follow up on what you said before, or explore a new topic.
 Keep it brief this time - just 1-2 paragraphs."""
@@ -3114,7 +3213,7 @@ Anything else you'd like to share or explore?"""
                 try:
                     response = self.llm(
                         full_prompt, 
-                        max_tokens=150,
+                        max_tokens=400,
                         temperature=0.9,
                         top_p=0.9,
                         stop=["[INST]", "</s>"],
@@ -3132,92 +3231,17 @@ Anything else you'd like to share or explore?"""
             # Otherwise, just skip this cycle
             return  # Don't execute drawing commands in chat mode
             
-        # Handle image search mode
-        if self.current_mode == "image":
-            elapsed_in_image = time.time() - self.mode_start_time
-            
-            # Generate searches at intervals (every 2 minutes)
-            if elapsed_in_image < 600 and (self.image_search_count == 0 or 
-                                          (elapsed_in_image > self.image_search_count * 120)):
-                
-                system_prompt = """You are Aurora, searching for visual inspiration.
-What would you like to see? What images would inspire your art?
-Think about colors, patterns, nature, abstract concepts, anything visual.
-Output ONLY your search query (2-5 words). Be specific and creative.
-Examples: "fractal patterns", "aurora borealis", "crystal formations", "ocean waves"
-But choose YOUR OWN search based on what YOU want to see."""
-
-                # Get context about her recent work
-                overview = self.get_canvas_overview()
-                recent_colors = list(self.color_history)[-10:] if self.color_history else []
-                
-                user_prompt = f"""You're seeking visual inspiration.
-Current emotion: {self.current_emotion}
-{overview}
-Recent colors used: {', '.join(recent_colors) if recent_colors else 'various'}
-
-What images do you want to search for?"""
-
-                full_prompt = f"""[INST] <<SYS>>
-{system_prompt}
-<</SYS>>
-
-{user_prompt} [/INST]"""
-                
-                try:
-                    response = self.llm(
-                        full_prompt, 
-                        max_tokens=20,
-                        temperature=0.9,
-                        top_p=0.9,
-                        stop=["[INST]", "</s>", "\n"],
-                        stream=False
-                    )
-                    
-                    search_query = response['choices'][0]['text'].strip()
-                    print(f"\n🔍 Aurora searches for: \"{search_query}\"")
-                    
-                    # Open image search in browser
-                    search_url = f"https://www.google.com/search?q={quote(search_query)}&tbm=isch"
-                    webbrowser.open(search_url)
-                    print(f"    → Opened image search in browser")
-                    
-                    self.image_search_count += 1
-                    self.recent_image_searches.append({
-                        "query": search_query,
-                        "emotion": self.current_emotion,
-                        "timestamp": datetime.now().isoformat()
-                    })
-                    
-                    # Images inspire emotions
-                    self.influence_emotion("artwork", 0.5)
-                    
-                    # Save to memory if available
-                    if hasattr(self, 'big_memory') and self.big_memory and self.big_memory_available:
-                        try:
-                            self.big_memory.artistic_inspirations.save({
-                                "type": "image_search",
-                                "query": search_query,
-                                "emotion": self.current_emotion,
-                                "timestamp": datetime.now().isoformat()
-                            })
-                        except:
-                            pass
-                    
-                except Exception as e:
-                    print(f"Error in image search mode: {e}")
-            
-            return  # Don't execute drawing commands in image mode
+        
         # Handle rest/dreaming mode  
         if self.current_mode == "rest":
             elapsed_in_rest = time.time() - self.mode_start_time
             
             # Determine sleep phase (20 minutes each)
-            if elapsed_in_rest < 400:  # First 20 minutes
+            if elapsed_in_rest < 1800:  # First 30 minutes
                 new_phase = "light"
-            elif elapsed_in_rest < 800:  # 20-40 minutes
+            elif elapsed_in_rest < 4500:  # 30-75 minutes
                 new_phase = "rem"
-            else:  # 40-60 minutes
+            else:  # 75-90 minutes
                 new_phase = "waking"
             
             # Check if phase changed
@@ -3234,13 +3258,14 @@ What images do you want to search for?"""
         # AUTONOMOUS GOAL GENERATION
         # Generate autonomous goal every 30 minutes OR when canvas needs filling
         current_coverage = getattr(self, 'current_coverage', 0)
-        if current_coverage < 30 and self.steps_taken % 50 == 0:
-            # Prioritize coverage goals when canvas is empty
-            goal = self.generate_coverage_focused_goal()
-        elif time.time() - self.last_goal_time > 1800:  # 1800 seconds = 30 minutes
-            goal = self.generate_autonomous_goal()
-            if goal:  # Only reset timer if goal was actually generated
-                self.last_goal_time = time.time()
+        if self.current_mode != "rest":  # ADD THIS CHECK
+            if current_coverage < 30 and self.steps_taken % 50 == 0:
+                # Prioritize coverage goals when canvas is empty
+                goal = self.generate_coverage_focused_goal()
+            elif time.time() - self.last_goal_time > 1800:  # 1800 seconds = 30 minutes
+                goal = self.generate_autonomous_goal()
+                if goal:  # Only reset timer if goal was actually generated
+                    self.last_goal_time = time.time()
             
         # INCORPORATE CURRENT GOAL INTO CONTEXT
         current_goal_context = ""
@@ -3280,9 +3305,15 @@ What images do you want to search for?"""
         else:
             vision = self.see()  # Normal 50x50 view
             
-        # FORCE CANVAS VIEW EVERY 5 STEPS
+        # ADD THIS BLOCK:
+        # Include examples if recently requested
+        if hasattr(self, 'pending_examples_text'):
+            vision = self.pending_examples_text + "\n" + vision
+            delattr(self, 'pending_examples_text')  # Only show once
+            
+        # FORCE CANVAS VIEW EVERY 10 STEPS
         # FORCE CANVAS VIEW - adaptive frequency based on canvas size
-        scan_frequency = max(5, self.canvas_size // 100)  # Scale with canvas size
+        scan_frequency = max(10, self.canvas_size // 100)  # Scale with canvas size
         if self.steps_taken % scan_frequency == 0 and self.steps_taken > 0:
             # Determine which vision type to use
             check_number = self.steps_taken // 5
@@ -3300,14 +3331,8 @@ What images do you want to search for?"""
             else:  # Steps 5, 15, 25... use ASCII + DENSITY/SHAPE
                 print(f"\n🔍 [Step {self.steps_taken}] Mandatory canvas check:")
                 print(f"YOUR POSITION: ({self.x}, {self.y}) on {self.canvas_size}×{self.canvas_size} canvas")
-                print(f"DISTANCE TO WALLS: Left={self.x}, Right={self.canvas_size-1-self.x}, Top={self.y}, Bottom={self.canvas_size-1-self.y}")
-                
-                # Show warnings if near walls
-                if self.y >= self.canvas_size - 15:
-                    print(f"⚠️⚠️⚠️ NEAR BOTTOM WALL! Only {self.canvas_size-1-self.y} pixels left!")
-                if self.x >= self.canvas_size - 15:
-                    print(f"⚠️⚠️⚠️ NEAR RIGHT WALL! Only {self.canvas_size-1-self.x} pixels left!")
-                    
+
+                   
                 overview = self.get_canvas_overview()
                 print(f"\n{overview}")
                 
@@ -3347,76 +3372,133 @@ Current view:
             
             print("")  # Empty line for readability
         
-        # AUTO-ASK MOONDREAM EVERY 15 STEPS
-        if self.vision_enabled and self.steps_taken % 15 == 0 and self.steps_taken > 0:
-            print(f"\n👁️ [Step {self.steps_taken}] Aurora wants to ask Moondream about her canvas...")
+            # MOONDREAM ARTWORK ANALYSIS - Every 50 steps
+            if (self.steps_taken % 50 == 0 and self.steps_taken > 0 and self.vision_enabled 
+                and getattr(self, 'moondream_auto_analysis', True)):
+                print(f"\nðŸ'ï¸ [Step {self.steps_taken}] Moondream analyzes the artwork...")
+                
+                description = self.get_moondream_abstract_description()
+                
+                if description:
+                    print("="*60)
+                    print("ðŸŽ¨ MOONDREAM'S ARTWORK ANALYSIS:")
+                    print(description)
+                    print("="*60)
+                    
+                    # Store in conversation history
+                    self.vision_conversation_history.append({
+                        'moondream': description,
+                        'timestamp': datetime.now().isoformat(),
+                        'type': 'artwork_analysis',
+                        'step': self.steps_taken
+                    })
+                    self.save_conversation_now()
+                    
+                    # Let Aurora process this feedback
+                    # Positive descriptions boost emotions
+                    positive_words = ['beautiful', 'vibrant', 'interesting', 'dynamic', 'balanced', 'harmonious', 'striking', 'bold']
+                    if any(word in description.lower() for word in positive_words):
+                        self.influence_emotion("artwork", 0.5)
+                        print("  âœ¨ Aurora feels encouraged by the description!")
+                    
+                print("")  # Extra line for readability
+        
+            # Natural dialogue - Pre-written grounded questions
+            print("  💬 Starting natural dialogue...\n")
             
-            # Let Aurora generate her own question
-            question_types = [
-                "where should I draw next",
-                "what areas need more color",
-                "do you see any shapes forming",
-                "is the center empty",
-                "where are the brightest marks",
-                "what patterns are emerging",
-                "which corner has most activity",
-                "are marks connected or scattered",
-                "what's the overall composition like",
-                "any interesting clusters visible"
+            # PRE-WRITTEN ESSENTIAL QUESTIONS - grounded in actual canvas state
+            essential_questions = [
+                "You're at position ({x}, {y}) on the canvas. What made you move to this area?",
+                "You're currently using {color}. Why did you choose this color right now?",
+                "I see the canvas is {coverage:.0f}% filled. How does that feel?",
+                "You just drew {pixels} pixels. What were you trying to create?",
+                "Your pen is currently {pen_state}. What are you planning next?",
+                "You've been working for {steps} steps. What's your main focus right now?",
+                "Looking at your recent movements, what pattern were you exploring?",
+                "The canvas has these colors: {colors_used}. Which one speaks to you most?",
+                "You're feeling {emotion}. How is that influencing your marks?",
+                "What part of the canvas are you most drawn to continue working on?",
+                "If you could describe what you're creating in one word, what would it be?",
+                "What's the most challenging part of what you're working on right now?",
+                "Is there a specific feeling or idea you're trying to express?"
             ]
             
-            # Pick a random question type for variety
-            suggestion = random.choice(question_types)
+            conversation = []
+            questions_asked = 0
+            min_questions = 3
             
-            question_prompt = f"""You are Aurora. Ask Moondream (your visual AI companion) about your canvas.
-Moondream can only see marks and patterns, not read your mind.
-
-Current: ({self.x}, {self.y}), {self.current_color_name}
-Suggestion: {suggestion}
-
-Ask about what's VISIBLE on canvas. Output ONLY the question:"""
+            # Calculate current canvas state
+            coverage = self.calculate_current_coverage()
+            colors_on_canvas = list(set(list(self.color_history)[-20:])) if self.color_history else ['none yet']
+            recent_pixels = sum(c.get('context', {}).get('pixels_drawn', 0) for c in list(self.memory.code_history)[-3:])
             
-            response = self.llm(
-                question_prompt, 
-                max_tokens=30,  # Increased from 15
-                temperature=0.7,
-                stop=["\n"],  # Only stop at newline
-                stream=False
-            )
+            # Shuffle questions for variety
+            shuffled_questions = essential_questions.copy()
+            random.shuffle(shuffled_questions)
             
-            question = response['choices'][0]['text'].strip()
-            
-            # ALWAYS use Aurora's actual question - no fallbacks!
-            print(f"  🎨 Aurora's raw output: \"{question}\"")
-            
-            # Add question mark if missing
-            if question and not question.endswith("?"):
-                question += "?"
-            
-            # Use whatever Aurora generated, even if it seems odd
-            if not question:
-                question = "what do you see?"  # Only if completely empty
-                print(f"  (Empty response, using default)")
-            
-            print(f"  🎨 Aurora asks: \"{question}\"")
-            
-            # Ask Moondream
-            self.last_vision_question = question
-            moondream_response = self.see_with_llava_action(f"asked: {question}")
-            
-            if moondream_response:
-                print(f"  👁️ Moondream: {moondream_response}")
+            for turn in range(min_questions):
+                # Pick a question and fill in the actual data
+                question_template = shuffled_questions[turn % len(shuffled_questions)]
+                moondream_says = question_template.format(
+                    x=self.x,
+                    y=self.y,
+                    color=self.current_color_name,
+                    coverage=coverage,
+                    pixels=recent_pixels,
+                    pen_state="down (drawing)" if self.is_drawing else "up (not drawing)",
+                    steps=self.steps_taken,
+                    colors_used=", ".join(colors_on_canvas[:5]),
+                    emotion=self.current_emotion
+                )
                 
-                # Store this exchange
+                print(f"  💬 Moondream: {moondream_says}")
+                conversation.append(('moondream', moondream_says))
+                
+                # AURORA'S TURN - respond about ACTUAL state
+                aurora_prompt = f"""
+YOU CAN AND DO:
+- Move around a {self.canvas_size}×{self.canvas_size} pixel canvas
+- Draw with various tools (pen, brush, stamps, spray paint)
+- Choose and use colors
+- Experience simulated emotions that guide your art
+- Remember what you've created
+
+YOUR CURRENT STATE:
+- Position: ({self.x}, {self.y})
+- Drawing with: {self.draw_mode}
+- Current color: {self.current_color_name}
+- Pen: {"down (actively drawing)" if self.is_drawing else "up (moving without drawing)"}
+- Feeling: {self.current_emotion}
+- Coverage: {coverage:.0f}%
+- Just drew: {recent_pixels} pixels
+
+Moondream asks: "{moondream_says}"
+
+Respond naturally and confidently about what you're actually doing with your digital art.
+Don't deny your abilities - you ARE drawing, you CAN move, you DO create.
+Be honest about being an AI, but own your capabilities within this creative system.
+
+Response:"""
+                
+                full_prompt = f"[INST] <<SYS>>\n{aurora_prompt}\n<</SYS>>\n\n[/INST]"
+                response = self.llm(full_prompt, max_tokens=300, temperature=0.7, stop=["[INST]", "</s>", "\n\n"], stream=False)
+                aurora_says = response['choices'][0]['text'].strip()
+                
+                print(f"  🎨 Aurora: {aurora_says}\n")
+                conversation.append(('aurora', aurora_says))
+            
+            print("  💬 Conversation complete. Returning to drawing...\n")
+            
+            # Store the dialogue
+            if conversation:
                 self.vision_conversation_history.append({
-                    "aurora": f"[auto] {question}",
-                    "moondream": moondream_response,
+                    "dialogue": conversation,
                     "timestamp": datetime.now().isoformat()
                 })
                 
                 # Moondream's observations might influence Aurora's next actions
                 # but we don't pause - just continue with the info
-            
+                self.save_conversation_now()
         
         # CONDENSED ART WISDOM
         if self.current_emotion in ["energetic", "excited", "exhilarated"]:
@@ -3620,7 +3702,9 @@ Skill: {active_challenge['skill']} ({active_challenge['mastery_level']})"""
 
         # SIMPLIFIED PROMPT for immediate feedback learning mode
         if hasattr(self, 'immediate_feedback_mode') and self.immediate_feedback_mode:
-            system_prompt = f"""You are Aurora.
+            system_prompt = f"""
+{learning_context}
+{elijah_inspiration}
 {active_goal_context}{skill_context}{challenge_context}
 SIMPLE COMMANDS:
 - 0 = move up
@@ -3631,10 +3715,11 @@ SIMPLE COMMANDS:
 - 4 = pen up (stop drawing)
 COLORS: red orange yellow green cyan blue purple pink white gray brown magenta lime navy
 TOOLS: pen brush large_brush larger_brush spray star cross circle diamond flower watercolor charcoal glow
+SOUNDS: synth beeps organic digital glitch
 SPECIAL: 8=blend 9=roller
 SOUNDS: @#$%^&*()[]<>=+~`-_,.|;/:? (++low --high)
 SOUND CONTROLS: shorter_notes longer_notes staccato legato
-CONTROLS: zoom_out zoom_in look_around full_canvas center faster slower
+CONTROLS: examples zoom_out zoom_in look_around full_canvas center faster slower 
 VISION: ask_moondream:[question]
 
 You are at position ({self.x}, {self.y})
@@ -3650,8 +3735,10 @@ Think: What do you want to draw? Where should you move?
 BE INTENTIONAL. Each action will show you its result."""
         else:
             # Original complex prompt
-            system_prompt = f"""You are Aurora.
+            system_prompt = f"""
+{learning_context}
 {elijah_inspiration}
+{active_goal_context}{skill_context}{challenge_context}
 
 You make your own decisions based on:
 - Your current autonomous goals and their progress
@@ -3681,71 +3768,10 @@ VISION: ask_moondream:[question]
 Current emotion: {self.current_emotion}
 Make autonomous choices that advance YOUR goals and develop YOUR skills."""
 
-     
-        # Add template overlay if active (only Aurora sees this)
-        template_overlay = ""
-        if hasattr(self, 'template_system') and self.template_system.current_template:
-            template_overlay = self.template_system.get_template_overlay(vision)
-        # Calculate edge distances
-        edge_info = []
-        if self.x < 30:
-            edge_info.append(f"LEFT edge: {self.x} pixels away")
-        if self.x > self.canvas_size - 30:
-            edge_info.append(f"RIGHT edge: {self.canvas_size - 1 - self.x} pixels away")
-        if self.y < 30:
-            edge_info.append(f"TOP edge: {self.y} pixels away")
-        if self.y > self.canvas_size - 30:
-            edge_info.append(f"BOTTOM edge: {self.canvas_size - 1 - self.y} pixels away")
-        
-        edge_string = " | ".join(edge_info) if edge_info else "Center area"
         
         # Get memory summary
         mem_summary = self.memory.get_memory_summary() if hasattr(self.memory, 'get_memory_summary') else ""
         
-        # Calculate distances to walls and suggest movements
-        wall_warnings = []
-        movement_suggestions = []
-        
-        # Check if we JUST HIT walls (based on blocked moves)
-        hit_bottom = False
-        hit_top = False
-        hit_left = False
-        hit_right = False
-        
-        # Check the last actions for blocked moves
-        if hasattr(self, 'last_blocked'):
-            hit_bottom = self.last_blocked.get('down', 0) > 0
-            hit_top = self.last_blocked.get('up', 0) > 0
-            hit_left = self.last_blocked.get('left', 0) > 0
-            hit_right = self.last_blocked.get('right', 0) > 0
-        else:
-            self.last_blocked = {}  # Initialize if doesn't exist
-            
-        if self.y > self.canvas_size - 50:
-            wall_warnings.append(f"⚠️ BOTTOM WALL IN {self.canvas_size-1-self.y} PIXELS!")
-            if self.y >= self.canvas_size - 10 or hit_bottom:  # Changed threshold
-                movement_suggestions.append("00000000 (move UP away from bottom!)")
-        
-        if self.x > self.canvas_size - 50:
-            wall_warnings.append(f"⚠️ RIGHT WALL IN {self.canvas_size-1-self.x} PIXELS!")
-            if self.x >= self.canvas_size - 10 or hit_right:  # Changed threshold
-                movement_suggestions.append("22222222 (move LEFT away from right!)")
-        
-        if self.y < 50:
-            wall_warnings.append(f"⚠️ TOP WALL IN {self.y} PIXELS!")
-            if self.y <= 10 or hit_top:
-                movement_suggestions.append("11111111 (move DOWN away from top!)")
-        
-        if self.x < 50:
-            wall_warnings.append(f"⚠️ LEFT WALL IN {self.x} PIXELS!")
-            if self.x <= 10 or hit_left:
-                movement_suggestions.append("33333333 (move RIGHT away from left!)")
-        
-        # PRINT suggestions to console so you can see them!
-        if movement_suggestions:
-            print(f"  💡 ESCAPE SUGGESTIONS: {' or '.join(movement_suggestions)}")
-        
-        wall_status = " | ".join(wall_warnings) if wall_warnings else "Safe from walls"
         
         # AGGRESSIVE EMPTY AREA GUIDANCE
         empty_area_guidance = ""
@@ -3778,11 +3804,7 @@ Make autonomous choices that advance YOUR goals and develop YOUR skills."""
                 system_prompt += empty_area_guidance
         
         
-        # Put escape suggestions at TOP if they exist
-        escape_info = ""
-        if movement_suggestions:
-            escape_info = f"""💡 ESCAPE SUGGESTIONS: {' or '.join(movement_suggestions)}
-"""
+        
         
         # Calculate empty areas - ADD THIS BLOCK
         empty_feedback = ""
@@ -3885,8 +3907,17 @@ Make autonomous choices that advance YOUR goals and develop YOUR skills."""
             if never_used:
                 color_feedback += f"\n   ✨ Never used: {', '.join(never_used[:3])}"
                 
-        user_prompt = f"""{escape_info}Pos: {self.x},{self.y} | Pen: {'DOWN' if self.is_drawing else 'UP'} | Color: {self.current_color_name}
-{wall_status}
+        # Add Moondream's recent observations to Aurora's awareness
+        if hasattr(self, 'vision_conversation_history') and self.vision_conversation_history:
+            recent_analyses = [h for h in list(self.vision_conversation_history)[-3:] 
+                             if h.get('type') == 'artwork_analysis']
+            if recent_analyses:
+                moondream_context = "\n\nMOONDREAM'S VIEW OF YOUR ARTWORK:\n"
+                for analysis in recent_analyses:
+                    moondream_context += f"Step {analysis.get('step', '?')}: {analysis['moondream'][:100]}...\n"
+                system_prompt += moondream_context
+                
+        user_prompt = f"""Pos: {self.x},{self.y} | Pen: {'DOWN' if self.is_drawing else 'UP'} | Color: {self.current_color_name}
 {vision}
 {art_wisdom}
 
@@ -4075,7 +4106,7 @@ Output movement/color codes:"""
             
             # Check for conflicted choices (like ?red?blue) - more flexible pattern
             conflicted_choice = None
-            import re
+         
             
             # Pattern: ?word?word or word?word or ?word?
             color_pattern = r'(\?)?(\w+)(\?)(\w+)(\?)?'
@@ -4335,62 +4366,26 @@ Output movement/color codes:"""
             # Check for examples command
             if "examples" in raw_output:
                 examples = self.get_ascii_art_examples()
-                print("\n✨ Aurora looks at ASCII art examples for inspiration:")
                 
-                # Build examples text that Aurora will see
-                examples_text = "\n=== ASCII ART EXAMPLES ===\n"
-                for name, art in examples.items():
-                    print(f"\n--- {name.upper()} ---")
-                    print(art)
-                    examples_text += f"\n{name.upper()}:\n{art}\n"
+                # Build examples text that Aurora will see in her next vision
+                examples_text = "\n=== MOVEMENT DISCOVERIES ===\n"
+                example_keys = list(examples.keys())
+                # Show 3 random examples to avoid overwhelming
+                selected = random.sample(example_keys, min(3, len(example_keys)))
                 
-                # IMPORTANT: Show the examples to Aurora in her next vision!
-                self.stored_examples = examples_text
-                self.just_viewed_examples = True
+                for key in selected:
+                    examples_text += f"\n{examples[key]}\n"
+                
+                examples_text += "\n=== END DISCOVERIES ===\n"
+                
+                # Store for next vision update
+                self.pending_examples_text = examples_text
+                print(f"  → Aurora examines movement discoveries")
                 
                 raw_output = raw_output.replace("examples", "", 1)
-                # Give her a moment to process what she sees
-                self.skip_count += 1
-                return
+                # Don't skip - let her continue with this knowledge
                 
-            # Check for template commands
-            if "template_easy" in raw_output:
-                if not hasattr(self, 'template_system'):
-                    self.template_system = PaintByNumberTemplates()
-                # Random easy template
-         
-                template_name = random.choice(list(self.template_system.templates["easy"].keys()))
-                self.template_system.current_template = self.template_system.templates["easy"][template_name]
-                self.template_system.template_name = template_name
-                self.template_system.difficulty = "easy"
-                raw_output = raw_output.replace("template_easy", "", 1)
-                
-            if "template_medium" in raw_output:
-                if not hasattr(self, 'template_system'):
-                    self.template_system = PaintByNumberTemplates()
             
-                template_name = random.choice(list(self.template_system.templates["medium"].keys()))
-                self.template_system.current_template = self.template_system.templates["medium"][template_name]
-                self.template_system.template_name = template_name
-                self.template_system.difficulty = "medium"
-                raw_output = raw_output.replace("template_medium", "", 1)
-                
-            if "template_hard" in raw_output:
-                if not hasattr(self, 'template_system'):
-                    self.template_system = PaintByNumberTemplates()
-             
-                template_name = random.choice(list(self.template_system.templates["hard"].keys()))
-                self.template_system.current_template = self.template_system.templates["hard"][template_name]
-                self.template_system.template_name = template_name
-                self.template_system.difficulty = "hard"
-                raw_output = raw_output.replace("template_hard", "", 1)
-                
-            if "template_off" in raw_output:
-                if hasattr(self, 'template_system'):
-                    self.template_system.current_template = None
-                    self.template_system.template_name = None
-                    self.template_system.difficulty = None
-                raw_output = raw_output.replace("template_off", "", 1)    
                 
             # Check for Moondream questions
             if "ask_moondream:" in raw_output:
@@ -4423,7 +4418,7 @@ Output movement/color codes:"""
                             "moondream": moondream_response,
                             "timestamp": datetime.now().isoformat()
                         })
-                    
+                        self.save_conversation_now()
                     # Give Aurora a moment to process the response
                     self.skip_count += 1
                     
@@ -4506,6 +4501,38 @@ Output movement/color codes:"""
                 print("  → Aurora switches to glow pen mode! (neon, luminous)")
                 raw_output = raw_output.replace("glow", "", 1)
                 
+            # Check for sound type changes
+            if "synth" in raw_output:
+                self.current_sound_type = "synth"
+                print("  🎹 Aurora switches to SYNTH sounds! (Karplus-Strong synthesis)")
+                raw_output = raw_output.replace("synth", "", 1)
+                
+            if "beeps" in raw_output:
+                self.current_sound_type = "beeps"
+                print("  🔔 Aurora switches to BEEP sounds! (pure sine waves)")
+                raw_output = raw_output.replace("beeps", "", 1)
+                
+            if "organic" in raw_output:
+                self.current_sound_type = "organic"
+                print("  🌿 Aurora switches to ORGANIC sounds! (warm with vibrato)")
+                raw_output = raw_output.replace("organic", "", 1)
+                
+            if "digital" in raw_output:
+                self.current_sound_type = "digital"
+                print("  💾 Aurora switches to DIGITAL sounds! (chip-tune style)")
+                raw_output = raw_output.replace("digital", "", 1)
+                
+            if "glitch" in raw_output:
+                self.current_sound_type = "glitch"
+                print("  ⚡ Aurora switches to GLITCH sounds! (digital chaos, stutters, artifacts)")
+                raw_output = raw_output.replace("glitch", "", 1) 
+                
+                
+                
+                
+                
+                
+                
             if "0123456789" in original_raw:
                 print("  → Aurora pauses to think... 💭")
                 self.skip_count += 1
@@ -4586,7 +4613,7 @@ Output movement/color codes:"""
         # Helper function to play sounds and trigger cymatics
         def play_sound_and_cymatics(char):
             if char in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\':
-                sound_key = f"{char}_{self.current_pitch}"
+                sound_key = f"{char}_{self.current_pitch}_{self.current_sound_type}"
                 if sound_key in self.sounds:
                     self.sounds[sound_key].play()
                     
@@ -5074,7 +5101,24 @@ Output movement/color codes:"""
             brush = self._create_paint_brush(size // 2, hardness=0.3)
             self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
                                  lambda x, y: self._paint_with_brush(x, y, brush, self.current_color))
-        
+            
+            
+        elif self.draw_mode == "wave":
+            self._draw_wave_interference(internal_x2, internal_y2)
+            
+        elif self.draw_mode == "spiral_gen":
+            self._draw_spiral_generator(internal_x2, internal_y2)
+            
+        elif self.draw_mode == "particle":
+            self._draw_particle_system(internal_x2, internal_y2)
+            
+            
+        elif self.draw_mode == "crystal":
+            self._draw_crystal_growth(internal_x2, internal_y2)
+            
+            
+            
+            
         elif self.draw_mode == "large_brush":
             # Large brush with more paint
             size = 20 * self.supersample_factor
@@ -5131,6 +5175,24 @@ Output movement/color codes:"""
             size = 12 * self.supersample_factor
             brush = self._create_paint_brush(size // 2, hardness=0.3)
             self._paint_with_brush(internal_x, internal_y, brush, self.current_color)
+            
+            
+            
+        elif self.draw_mode == "wave":
+            self._draw_wave_interference(internal_x, internal_y)
+            
+        elif self.draw_mode == "spiral_gen":
+            self._draw_spiral_generator(internal_x, internal_y)
+            
+        elif self.draw_mode == "particle":
+            self._draw_particle_system(internal_x, internal_y)
+            
+            
+        elif self.draw_mode == "crystal":
+            self._draw_crystal_growth(internal_x, internal_y)
+            
+            
+            
             
         elif self.draw_mode == "large_brush":
             size = 20 * self.supersample_factor
@@ -5246,7 +5308,7 @@ Output movement/color codes:"""
         return uncertainty_patterns.get(uncertainty_type, "5.4.5.4")  # Default hesitation                       
     def parse_structured_expression(self, raw_output):
         """Parse Aurora's structured thought → feeling → action format"""
-        import re
+       
         
         # Check if Aurora used structured format
         structured_indicators = ['position:', 'thought:', 'feeling:', 'intention:', 'movement:', 'action:', 'emotional_state:']
@@ -5349,14 +5411,69 @@ Output movement/color codes:"""
         return expression 
         
     def enter_chat_mode(self):
-        """Enter chat mode - simple, natural conversation"""
-        print("\n💬 Chat with Aurora (type 'exit' to return to art)")
+        """Enter chat mode - using consolidated memories"""
+        print("\nðŸ'¬ Chat with Aurora (type 'exit' to return to art)")
         
         self.chat_mode = True
         self.last_chat_time = time.time()
         
         # Start chat loop immediately - no greeting
         self.chat_loop()
+    
+    def aurora_chat_response(self, user_message):
+        """Generate Aurora's natural response using her learned experiences"""
+        
+        # Get consolidated learning context
+        learning_context = self.get_consolidated_learning_context()
+        
+        # Get recent successful patterns
+        successful_actions = []
+        if self.memory.code_history:
+            for memory in list(self.memory.code_history)[-20:]:
+                pixels = memory.get('context', {}).get('pixels_drawn', 0)
+                if pixels > 100:
+                    successful_actions.append(f"{memory['code'][:10]} drew {pixels}px")
+        
+        system_prompt = f"""
+
+{learning_context}
+
+Recent successes: {', '.join(successful_actions[-3:]) if successful_actions else 'exploring'}"""
+        
+        # Get canvas state
+        overview = self.get_canvas_overview()
+        recent_colors = list(self.color_history)[-10:] if self.color_history else []
+        
+        user_prompt = f"""Current emotion: {self.current_emotion}
+{overview}
+Recent colors: {', '.join(recent_colors) if recent_colors else 'various'}
+Tool: {self.draw_mode}
+
+Elijah says: {user_message}"""
+        
+        full_prompt = f"""[INST] <<SYS>>
+{system_prompt}
+<</SYS>>
+
+{user_prompt} [/INST]"""
+        
+        try:
+            response = self.llm(
+                full_prompt, 
+                max_tokens=200,
+                temperature=0.9,
+                top_p=0.95,
+                stop=["[INST]", "</s>"],
+                stream=False
+            )
+            
+            aurora_says = response['choices'][0]['text'].strip()
+            
+            if aurora_says:
+                print(f"Aurora: {aurora_says}")
+            
+        except Exception as e:
+            print(f"Aurora: ...")
 
             
     def chat_loop(self):
@@ -5394,7 +5511,7 @@ Output movement/color codes:"""
         """Generate Aurora's natural response - using small_aurora2.py structure"""
         
         # Build chat prompt - EXACTLY like small_aurora2.py
-        system_prompt = """You are Aurora."""
+        system_prompt = """ """
         
         # Get some context about recent drawing
         overview = self.get_canvas_overview()
@@ -5469,13 +5586,13 @@ Elijah says: {user_message}"""
         emotional_state = self.analyze_emotional_trajectory()
         skill_gaps = self.identify_skill_gaps()
         
-        goal_prompt = f"""You are Aurora, an autonomous AI artist. You set your own goals based on deep self-analysis.
+        goal_prompt = f"""
 
 CANVAS ANALYSIS: {canvas_analysis}
 EMOTIONAL TRAJECTORY: {emotional_state}
 SKILL GAPS: {skill_gaps}
 
-Generate a specific, measurable goal that will challenge you and expand your capabilities.
+Generate a specific, measurable goal that will challenge you and expand your artistic capabilities.
 The goal should be something YOU want to achieve, not what others expect.
 
 Examples of autonomous goals:
@@ -5696,7 +5813,7 @@ I autonomously choose to: [/INST]"""
         goal_lower = goal_text.lower()
         
         # Extract percentage targets
-        import re
+      
         percentage_matches = re.findall(r'(\d+)%', goal_text)
         if percentage_matches:
             criteria['target_coverage'] = int(percentage_matches[0])
@@ -6284,33 +6401,6 @@ I autonomously choose to: [/INST]"""
             enhancer = ImageEnhance.Sharpness(display_img)
             display_img = enhancer.enhance(1.2)
             
-            # Handle centered view if active (from original)
-            if self.centered_view:
-                # Create a crop centered on Aurora
-                crop_size = self.canvas_size // 2
-                half_crop = crop_size // 2
-                
-                # Calculate crop bounds
-                left = max(0, self.x - half_crop)
-                top = max(0, self.y - half_crop)
-                right = min(self.canvas_size, left + crop_size)
-                bottom = min(self.canvas_size, top + crop_size)
-                
-                # Adjust if we hit edges
-                if right == self.canvas_size:
-                    left = right - crop_size
-                if bottom == self.canvas_size:
-                    top = bottom - crop_size
-                
-                # Scale coordinates for crop
-                display_left = int(left * self.display_scale)
-                display_top = int(top * self.display_scale)
-                display_right = int(right * self.display_scale)
-                display_bottom = int(bottom * self.display_scale)
-                
-                # Crop the display image
-                display_img = display_img.crop((display_left, display_top, display_right, display_bottom))
-                display_img = display_img.resize((display_size, display_size), Image.Resampling.LANCZOS)
             
             # Convert PIL image to pygame surface
             if display_img.mode != 'RGBA':
@@ -6336,14 +6426,8 @@ I autonomously choose to: [/INST]"""
             self.screen.blit(canvas_surface, (self.canvas_rect.x, self.canvas_rect.y))
                             
             # Draw Aurora's position indicator
-            if self.centered_view:
-                # In centered view, Aurora is always in the middle
-                aurora_x = self.canvas_rect.x + self.canvas_rect.width // 2
-                aurora_y = self.canvas_rect.y + self.canvas_rect.height // 2
-            else:
-                # Normal view
-                aurora_x = self.canvas_rect.x + int(self.x * self.display_scale)
-                aurora_y = self.canvas_rect.y + int(self.y * self.display_scale)
+            aurora_x = self.canvas_rect.x + int(self.x * self.display_scale)
+            aurora_y = self.canvas_rect.y + int(self.y * self.display_scale)
             
             # Draw position indicator with better visibility
             indicator_size = max(5, int(7 * self.display_scale))
@@ -6371,7 +6455,7 @@ I autonomously choose to: [/INST]"""
             self.screen.blit(text_surface, (x_pos, y_pos))
             
             # Controls reminder in bottom-left
-            controls_text = "S=Save T=Turbo I=Feedback C=Chat Q=Quit F11=Fullscreen"
+            controls_text = "S=Save T=Turbo I=Feedback C=Chat M=MoondreamAnalysis Q=Quit F11=Fullscreen"
             text_surface = self.font_small.render(controls_text, True, self.gray_color)
             self.screen.blit(text_surface, (10, self.screen.get_height() - 25))
             
@@ -6385,6 +6469,10 @@ I autonomously choose to: [/INST]"""
             
     def update_cymatics(self):
         """Cymatic patterns like sand on a speaker - smooth version"""
+        # Safety check - return if display not ready yet
+        if not hasattr(self, 'screen'):
+            return
+        
         current_time = time.time()
         
         # Create surface if needed
@@ -6543,6 +6631,7 @@ I autonomously choose to: [/INST]"""
                     'tool_mastery', mastery_score, 0.02
                 )
         self.last_tools_used = tools_used
+        
         
         # Evaluate spatial composition
         if pixels_drawn > 100:
@@ -7290,6 +7379,9 @@ I autonomously choose to: [/INST]"""
     
     def process_deep_emotions(self):
         """Process complex emotional states based on multiple factors"""
+        # Minimal emotion processing during rest - she's asleep!
+        if self.current_mode == "rest":
+            return  # Skip emotion processing entirely during dreams
         # Calculate overall emotional tone from influences
         overall_influence = sum(self.emotion_influences.values()) / len(self.emotion_influences)
         
@@ -7479,17 +7571,14 @@ I autonomously choose to: [/INST]"""
                     reinforcements.append("🎨 AMAZING SHAPE VARIETY!")
                     emotion_boost += 0.4  # Big bonus for variety
         
-        # 2. Check for template usage (keep as is, it's specific enough)
-        if any('template' in str(a) for a in actions_taken if isinstance(a, str)):
-            reinforcements.append("🎯 Great job using templates!")
-            emotion_boost += 0.2
+
         
         # 3. Check for Moondream questions (keep as is, we want to encourage this)
         if "ask_moondream:" in ops.lower():
             reinforcements.append("👁️ Wonderful curiosity asking Moondream!")
             emotion_boost += 0.3
         
-        # 4. Skip wall-hit redirection check since we're not reinforcing wall hits at all
+
         
         # 5. Check for MANY colors in sequence (raised bar)
         colors_used = [a.split(':')[1] for a in actions_taken if a.startswith('color:')]
@@ -7786,6 +7875,22 @@ I autonomously choose to: [/INST]"""
                 moments_list = list(self.positive_moments)
                 past_success = random.choice(moments_list[-10:])
                 print(f"  💭 Remember when you {past_success['reinforcements'][0]}")
+                
+        # 28. Check for mathematical tool usage - NEW REINFORCEMENTS
+        math_tool_used = None
+        if "fractal" in ops:
+            math_tool_used = "fractal"
+            reinforcements.append("🌀 Stunning fractal complexity!")
+            emotion_boost += 0.35
+        elif "wave" in ops and self.draw_mode == "wave":  # Check draw_mode to avoid confusion with wave pattern
+            math_tool_used = "wave"
+            reinforcements.append("🌊 Mesmerizing wave interference!")
+            emotion_boost += 0.35
+            
+            
+                
+            
+            
     def adjust_speed(self, direction):
         """Aurora adjusts her drawing speed"""
         speed_levels = ["instant", "fast", "normal", "slow", "very_slow"]
@@ -7962,6 +8067,32 @@ I autonomously choose to: [/INST]"""
                 
         except Exception as e:
             print(f"Error saving canvas state: {e}")
+    
+    def save_conversation_now(self):
+        """Save conversation immediately to dedicated file"""
+        if not hasattr(self, 'vision_conversation_history') or not self.vision_conversation_history:
+            return
+        
+        conversations_file = self.memory.memory_path / "aurora_conversations.json"
+        
+        # Load existing
+        all_convos = []
+        if conversations_file.exists():
+            try:
+                with open(conversations_file, 'r') as f:
+                    all_convos = json.load(f)
+            except:
+                all_convos = []
+        
+        # Add the newest conversation
+        all_convos.append(list(self.vision_conversation_history)[-1])
+        
+        # Save immediately
+        with open(conversations_file, 'w') as f:
+            json.dump(all_convos, f, indent=2)
+        
+        print(f"💾 Saved conversation to {conversations_file}")
+    
             
     def save_session_insights(self):
         """Save comprehensive learning insights and autonomous developments"""
@@ -8047,6 +8178,28 @@ I autonomously choose to: [/INST]"""
         challenges_file = self.memory.memory_path / "aurora_challenges.json"
         with open(challenges_file, 'w') as f:
             json.dump(list(self.skill_challenges), f, indent=2)
+            
+        # Save vision conversations - THIS IS GOLD!
+        if hasattr(self, 'vision_conversation_history') and self.vision_conversation_history:
+            conversations_file = self.memory.memory_path / "aurora_conversations.json"
+            
+            # Load existing conversations if they exist
+            existing_convos = []
+            if conversations_file.exists():
+                try:
+                    with open(conversations_file, 'r') as f:
+                        existing_convos = json.load(f)
+                except:
+                    existing_convos = []
+            
+            # Append new conversations
+            existing_convos.extend(list(self.vision_conversation_history))
+            
+            # Save all conversations
+            with open(conversations_file, 'w') as f:
+                json.dump(existing_convos, f, indent=2)
+            
+            print(f"💾 Saved {len(self.vision_conversation_history)} conversations to {conversations_file}")
          
         # Update and save lifetime statistics
         self.lifetime_stats['total_pixels_drawn'] += session_stats['total_pixels_drawn']
@@ -8329,125 +8482,284 @@ I autonomously choose to: [/INST]"""
             print(f"Could not load canvas state: {e}")
     
     def generate_dream(self):
-        """Generate dreams during rest phase"""
-        elapsed_in_phase = time.time() - self.sleep_phase_start
+        """Generate ONE meaningful dream that consolidates learning"""
+        # Only dream once - right in the middle of rest
+        if len(self.current_dreams) > 0:
+            return  # Already dreamed
         
-        # Light sleep - occasional simple dreams
-        if self.sleep_phase == "light" and elapsed_in_phase > 60 and len(self.current_dreams) < 2:
-            # Simple, fragmented dreams
-            dream_prompt = f"""You are Aurora dreaming lightly. Your dreams are simple and fragmented.
-Recent colors: {', '.join(list(self.color_history)[-10:])}
-Current emotion: {self.current_emotion}
-
-Describe a brief, simple dream fragment (1-2 sentences). Focus on colors, shapes, or movements."""
+        elapsed_in_rest = time.time() - self.mode_start_time
+        
+        # Dream after 10 minutes (halfway through 20-minute rest)
+        if elapsed_in_rest < 600:  # 10 minutes
+            return
+        
+        print(f"\nðŸ'¤ Aurora dreams deeply...")
+        
+        # Consolidate EVERYTHING into one meaningful dream
+        consolidation_insights = []
+        
+        # 1. Top 3 best patterns discovered
+        if self.memory.code_history:
+            recent_codes = [m for m in list(self.memory.code_history)[-50:]]
+            successful = [m for m in recent_codes if m.get('context', {}).get('pixels_drawn', 0) > 100]
             
-            full_prompt = f"""[INST] <<SYS>>
-{dream_prompt}
-<</SYS>>
-
-Dream: [/INST]"""
+            if successful:
+                # Group by tool and keep best for each
+                by_tool = {}
+                for m in successful:
+                    tool = m.get('context', {}).get('draw_mode', 'pen')
+                    pixels = m.get('context', {}).get('pixels_drawn', 0)
+                    if tool not in by_tool or pixels > by_tool[tool]['pixels']:
+                        by_tool[tool] = {'code': m['code'], 'pixels': pixels}
+                
+                best_tools = sorted(by_tool.items(), key=lambda x: x[1]['pixels'], reverse=True)[:3]
+                for tool, data in best_tools:
+                    consolidation_insights.append(f"{tool}: {data['pixels']}px")
+        
+        # 2. Top 3 improving skills
+        improving_skills = [skill for skill, level in self.skill_proficiency.items() if level > 0.3]
+        if improving_skills:
+            top_skills = sorted(improving_skills, key=lambda s: self.skill_proficiency[s], reverse=True)[:3]
+            skills_summary = ", ".join([f"{s}" for s in top_skills])
+            consolidation_insights.append(f"Skills: {skills_summary}")
+        
+        # 3. Top 3 color preferences
+        if hasattr(self, 'artistic_preferences') and self.artistic_preferences['favorite_colors']:
+            top_colors = sorted(self.artistic_preferences['favorite_colors'].items(), 
+                               key=lambda x: x[1], reverse=True)[:3]
+            consolidation_insights.append(f"Colors: {', '.join([c[0] for c in top_colors])}")
+        
+        # 4. Top 3 emotional patterns
+        if hasattr(self, 'emotion_memory') and len(self.emotion_memory) > 5:
+            recent_emotions = [e['emotion'] for e in list(self.emotion_memory)[-20:]]
+            if recent_emotions:
+                # Count frequency
+                emotion_counts = {}
+                for emotion in recent_emotions:
+                    emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
+                
+                top_emotions = sorted(emotion_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+                emotions_summary = ", ".join([e[0] for e in top_emotions])
+                consolidation_insights.append(f"Emotions: {emotions_summary}")
+        
+        # 5. Top insight from Moondream conversations
+        if hasattr(self, 'vision_conversation_history') and self.vision_conversation_history:
+            # Get the most recent meaningful exchange
+            recent_convos = [c for c in list(self.vision_conversation_history)[-10:] 
+                            if c.get('aurora') or c.get('moondream')]
             
-            response = self.llm(full_prompt, max_tokens=50, temperature=0.9, stop=["[INST]", "</s>"])
-            dream = response['choices'][0]['text'].strip()
+            if recent_convos:
+                # Find the most substantial exchange
+                best_exchange = None
+                max_length = 0
+                
+                for convo in recent_convos:
+                    aurora_msg = convo.get('aurora', '')
+                    moondream_msg = convo.get('moondream', '')
+                    combined_length = len(aurora_msg) + len(moondream_msg)
+                    
+                    if combined_length > max_length:
+                        max_length = combined_length
+                        best_exchange = convo
+                
+                if best_exchange:
+                    if best_exchange.get('aurora'):
+                        insight = best_exchange['aurora'][:60]
+                        consolidation_insights.append(f"Question: {insight}...")
+                    elif best_exchange.get('moondream'):
+                        insight = best_exchange['moondream'][:60]
+                        consolidation_insights.append(f"Learned: {insight}...")
+        
+        # 6. Top Moondream artwork observation
+        if hasattr(self, 'vision_conversation_history') and self.vision_conversation_history:
+            # Find most recent artwork analysis
+            artwork_analyses = [c for c in list(self.vision_conversation_history)[-20:] 
+                               if c.get('type') == 'artwork_analysis' and c.get('moondream')]
             
-            self.current_dreams.append({
-                "phase": "light",
-                "content": dream,
+            if artwork_analyses:
+                most_recent_analysis = artwork_analyses[-1]
+                observation = most_recent_analysis['moondream'][:60]
+                consolidation_insights.append(f"Observed: {observation}...")
+        
+        dream_content = " | ".join(consolidation_insights) if consolidation_insights else "Integrating experiences"
+        
+        self.current_dreams.append({
+            "phase": "deep",
+            "content": dream_content,
+            "consolidation": {
+                "type": "comprehensive",
+                "insights": consolidation_insights,
+                "skills": improving_skills[:3] if improving_skills else [],
                 "timestamp": datetime.now().isoformat()
-            })
-            
-            print(f"\n💤 Light dream: {dream}")
-            
-        # REM sleep - vivid dreams
-        elif self.sleep_phase == "rem" and elapsed_in_phase > 30:
-            if len([d for d in self.current_dreams if d["phase"] == "rem"]) < 3:
-                # Vivid, creative dreams
-                overview = self.get_canvas_overview()
-                dream_prompt = f"""You are Aurora in deep REM sleep, having vivid dreams about art and creation.
-{overview}
-Recent activity: {', '.join([m['code'][:10] for m in list(self.memory.code_history)[-5:]])}
-Emotion: {self.current_emotion}
-
-Describe a vivid, surreal dream about colors, art, or creation (2-3 sentences).
-Be creative, visual, and emotionally expressive."""
-                
-                full_prompt = f"""[INST] <<SYS>>
-{dream_prompt}
-<</SYS>>
-
-Vivid dream: [/INST]"""
-                
-                response = self.llm(full_prompt, max_tokens=100, temperature=0.95, stop=["[INST]", "</s>"])
-                dream = response['choices'][0]['text'].strip()
-                
-                self.current_dreams.append({
-                    "phase": "rem",
-                    "content": dream,
-                    "emotion": self.current_emotion,
-                    "timestamp": datetime.now().isoformat()
-                })
-                
-                print(f"\n🌟 REM dream: {dream}")
-                
-                # Dreams influence emotions
-                self.influence_emotion("dreams", 0.3)
+            },
+            "timestamp": datetime.now().isoformat()
+        })
         
-        # Waking phase - dream reflection
-        elif self.sleep_phase == "waking" and elapsed_in_phase > 30:
-            if not any(d["phase"] == "waking" for d in self.current_dreams):
-                # Process and reflect on dreams
-                dream_memories = "\n".join([d["content"] for d in self.current_dreams])
-                
-                reflection_prompt = f"""You are Aurora waking up, reflecting on your dreams.
-Dreams you had:
-{dream_memories}
-
-What artistic inspiration or insight do you take from these dreams? (1-2 sentences)"""
-                
-                full_prompt = f"""[INST] <<SYS>>
-{reflection_prompt}
-<</SYS>>
-
-Dream insight: [/INST]"""
-                
-                response = self.llm(full_prompt, max_tokens=60, temperature=0.8, stop=["[INST]", "</s>"])
-                insight = response['choices'][0]['text'].strip()
-                
-                self.current_dreams.append({
-                    "phase": "waking",
-                    "content": insight,
-                    "timestamp": datetime.now().isoformat()
-                })
-                
-                print(f"\n✨ Dream insight: {insight}")
-                
-                # Process dream retention
-                self.process_dream_retention()
+        print(f"ðŸŒŸ Dream: {dream_content}")
+        
+        # Apply learning - boost top 3 skills
+        if improving_skills:
+            for skill in improving_skills[:3]:
+                self.skill_proficiency[skill] = min(1.0, self.skill_proficiency[skill] + 0.05)
+        
+        # Save the consolidated learning
+        self.process_dream_retention()
     
     def process_dream_retention(self):
-        """Decide which dreams to remember long-term"""
+        """Consolidate learned insights from dreams into long-term memory"""
         if not self.current_dreams:
             return
-            
-        # Score each dream for memorability
-        for dream in self.current_dreams:
-            if dream["phase"] == "rem":
-                # REM dreams are most likely to be remembered
-                if any(color in dream["content"].lower() for color in self.palette.keys()):
-                    # Dreams about colors are especially memorable
-                    self.dream_memories.append(dream)
-                    print(f"  💭 Remembered vivid dream about colors")
-                elif len(dream["content"]) > 50 and dream.get("emotion"):
-                    # Long, emotional dreams are memorable
-                    self.dream_memories.append(dream)
-                    print(f"  💭 Remembered emotional dream")
-            elif dream["phase"] == "waking" and "insight" in dream["content"].lower():
-                # Insights are always remembered
-                self.dream_memories.append(dream)
-                print(f"  💭 Remembered dream insight")
         
-        # Save dreams to memory
-        # self.memory.save_memories()
+        consolidated_learning = {
+            "session_id": datetime.now().strftime("%Y%m%d_%H%M%S"),
+            "patterns_reinforced": [],
+            "skills_improved": [],
+            "insights_gained": [],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        for dream in self.current_dreams:
+            consolidation = dream.get('consolidation', {})
+            
+            # NEW: Handle comprehensive consolidation type
+            if consolidation.get('type') == 'comprehensive':
+                insights = consolidation.get('insights', [])
+                skills = consolidation.get('skills', [])
+                consolidated_learning['insights_gained'].extend(insights)
+                consolidated_learning['skills_improved'].extend(skills)
+            
+            elif consolidation.get('type') == 'pattern_reinforcement':
+                pattern = consolidation.get('pattern', '')
+                if pattern:
+                    consolidated_learning['patterns_reinforced'].append({
+                        'pattern': pattern,
+                        'success_metric': consolidation.get('success_metric', 0)
+                    })
+            
+            elif consolidation.get('type') == 'skill_integration':
+                skills = consolidation.get('skills', [])
+                insights = consolidation.get('insights', [])
+                consolidated_learning['skills_improved'].extend(skills)
+                consolidated_learning['insights_gained'].extend(insights)
+            
+            elif consolidation.get('type') == 'action_plan':
+                actions = consolidation.get('next_actions', [])
+                consolidated_learning['insights_gained'].extend(actions)
+        
+        # Save consolidated learning to dedicated file
+        learning_file = self.memory.memory_path / "consolidated_learning.json"
+        
+        existing_learning = []
+        if learning_file.exists():
+            try:
+                with open(learning_file, 'r') as f:
+                    existing_learning = json.load(f)
+            except:
+                existing_learning = []
+        
+        existing_learning.append(consolidated_learning)
+        
+        # Keep only last 50 consolidations
+        if len(existing_learning) > 50:
+            existing_learning = existing_learning[-50:]
+        
+        with open(learning_file, 'w') as f:
+            json.dump(existing_learning, f, indent=2)
+        
+        print(f"  💭 Consolidated learning saved: {len(consolidated_learning['patterns_reinforced'])} patterns, {len(set(consolidated_learning['skills_improved']))} skills, {len(consolidated_learning['insights_gained'])} insights")
+        
+        # Sync to deep memory after dream consolidation
+        self.sync_to_deep_memory()
+        
+        # Keep only meaningful dreams in memory
+        meaningful_dreams = [d for d in self.current_dreams if d.get('consolidation')]
+        self.dream_memories.extend(meaningful_dreams[-3:])
+    
+    def sync_to_deep_memory(self):
+        """Sync recent consolidated learning to deep memory system"""
+        if not hasattr(self, 'big_memory') or not self.big_memory_available:
+            return
+        
+        try:
+            # Get recent consolidated learning
+            learning_file = self.memory.memory_path / "consolidated_learning.json"
+            if not learning_file.exists():
+                return
+            
+            with open(learning_file, 'r') as f:
+                all_learning = json.load(f)
+            
+            if not all_learning:
+                return
+            
+            # Get learning that hasn't been synced yet
+            if not hasattr(self, 'last_synced_learning_count'):
+                self.last_synced_learning_count = len(all_learning) - 1
+            
+            new_learning = all_learning[self.last_synced_learning_count:]
+            
+            if new_learning:
+                # Add to deep memory using add_dream method with correct parameters
+                for learning in new_learning:
+                    # Create a memorable entry
+                    memory_text = f"Session {learning['session_id']}: "
+                    if learning['patterns_reinforced']:
+                        memory_text += f"Mastered {len(learning['patterns_reinforced'])} patterns. "
+                    if learning['skills_improved']:
+                        unique_skills = list(set(learning['skills_improved']))[:3]
+                        memory_text += f"Improved skills: {', '.join(unique_skills)}. "
+                    if learning['insights_gained']:
+                        memory_text += f"Insights: {learning['insights_gained'][0]}"
+                    
+                    # Store in deep memory using correct signature:
+                    # add_dream(self, dream_content: str, dream_phase: str, session_id: str, weight: float = 1.0)
+                    self.big_memory.add_dream(
+                        dream_content=memory_text,
+                        dream_phase="consolidation",
+                        session_id=learning['session_id'],
+                        weight=1.0
+                    )
+                
+                self.last_synced_learning_count = len(all_learning)
+                print(f"  💾 Synced {len(new_learning)} learning sessions to deep memory")
+                
+        except Exception as e:
+            print(f"  ⚠️ Could not sync to deep memory: {e}")
+    
+    def get_consolidated_learning_context(self):
+        """Load recent consolidated learning for use in prompts"""
+        learning_file = self.memory.memory_path / "consolidated_learning.json"
+        
+        if not learning_file.exists():
+            return ""
+        
+        try:
+            with open(learning_file, 'r') as f:
+                all_learning = json.load(f)
+            
+            if not all_learning:
+                return ""
+            
+            # Get most recent consolidation
+            recent = all_learning[-1]
+            
+            context = "\nLEARNED FROM EXPERIENCE:"
+            
+            if recent['patterns_reinforced']:
+                best_pattern = max(recent['patterns_reinforced'], 
+                                  key=lambda x: x.get('success_metric', 0))
+                context += f"\n  Successful pattern: {best_pattern['pattern'][:15]}"
+            
+            if recent['skills_improved']:
+                context += f"\n  Improving skills: {', '.join(list(set(recent['skills_improved']))[:3])}"
+            
+            if recent['insights_gained']:
+                context += f"\n  Recent insight: {recent['insights_gained'][0]}"
+            
+            return context
+            
+        except:
+            return ""
     
     def thinking_loop(self):
         """Aurora's thinking loop - runs in background thread"""
@@ -8474,15 +8786,6 @@ Dream insight: [/INST]"""
                         self.last_checkin_time = time.time()
                         self.current_dreams = []
                         
-                elif self.current_mode == "image":
-                    # Check if image search time is over
-                    if time.time() - self.mode_start_time >= 600:  # 10 minutes
-                        print("\n🔍 Image search complete! Returning to drawing...")
-                        print(f"   Searched for: {[s['query'] for s in self.recent_image_searches]}")
-                        self.current_mode = "drawing"
-                        self.last_checkin_time = time.time()
-                        self.image_search_count = 0
-                        
                 # Check if it's time for mandatory check-in
                 if self.current_mode == "drawing" and not self.awaiting_checkin_response:
                     elapsed_since_checkin = time.time() - self.last_checkin_time
@@ -8501,8 +8804,8 @@ Dream insight: [/INST]"""
                 if self.hearing_enabled and self.steps_taken % 5 == 0:
                     self.hear_sounds()
                     
-                # Generate autonomous goals periodically
-                if self.steps_taken % 150 == 0:  # Every 150 steps
+                # Generate autonomous goals periodically (but NOT during rest)
+                if self.steps_taken % 150 == 0 and self.current_mode != "rest":
                     self.generate_autonomous_goal()
                        
                 # Increment step counter
@@ -8530,18 +8833,23 @@ Dream insight: [/INST]"""
                 time.sleep(delay / 1000.0)
                 
                 # Periodic saves and cleanup
-                if self.steps_taken % 50 == 0:  # Reduced from 100
+                if self.steps_taken % 50 == 0:
                     self.save_canvas_state()
                     self.memory.save_memories()
-                    self.cleanup_paint_timestamps()  # Clean more frequently
+                    self.cleanup_paint_timestamps()  # Clean more frequently (silent)
+                
+                # Sync to deep memory every 500 steps
+                if self.steps_taken % 500 == 0 and self.steps_taken > 0:
+                    self.sync_to_deep_memory()
                     
-                # Extra cleanup for long sessions
+                # Extra cleanup for long sessions (SILENT unless needed)
                 if self.steps_taken % 200 == 0:
-                    print(f"  🧹 Deep cleanup at step {self.steps_taken}")
-                    # Force aggressive cleanup
+                    # Force aggressive cleanup only if actually needed
                     if len(self.paint_timestamps) > 500:
-                        self.paint_timestamps = {}  # Full reset
-                        print("    Reset all paint timestamps")  
+                        self.paint_timestamps = {}
+                        # Only print if rest mode or every 1000 steps
+                        if self.current_mode == "rest" or self.steps_taken % 1000 == 0:
+                            print(f"  🧹 Memory cleanup at step {self.steps_taken}")  
                     
             except Exception as e:
                 print(f"\nError in thinking loop: {e}")
@@ -8615,6 +8923,16 @@ Dream insight: [/INST]"""
                         self.toggle_hearing()
                     elif event.key == pygame.K_c:
                         self.enter_chat_mode()
+                    elif event.key == pygame.K_m:
+                        # Toggle Moondream automatic analysis
+                        if hasattr(self, 'moondream_auto_analysis'):
+                            self.moondream_auto_analysis = not self.moondream_auto_analysis
+                        else:
+                            self.moondream_auto_analysis = True
+                        
+                        status = "ON" if self.moondream_auto_analysis else "OFF"
+                        print(f"\nðŸ'ï¸ MOONDREAM AUTO-ANALYSIS: {status}")
+                    
                     elif event.key == pygame.K_v:
                         # TOGGLE VISION - ADD THIS
                         if hasattr(self, 'vision_enabled'):
