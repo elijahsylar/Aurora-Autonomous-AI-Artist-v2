@@ -19,9 +19,9 @@ import random
 try:
     from aurora_ai_backup2 import DeepMemorySystem
     DEEP_MEMORY_AVAILABLE = True
-    print("✅ Deep Memory System available!")
+    print("âœ… Deep Memory System available!")
 except ImportError:
-    print("❌ Could not import DeepMemorySystem - will use simple memory only")
+    print("âŒ Could not import DeepMemorySystem - will use simple memory only")
     DEEP_MEMORY_AVAILABLE = False
 except Exception as e:
     print(f"Error: {e}")
@@ -32,9 +32,9 @@ try:
     from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
     import torch
     LLAVA_AVAILABLE = True
-    print("✅ LLaVA vision libraries available!")
+    print("âœ… LLaVA vision libraries available!")
 except ImportError:
-    print("❌ Could not import LLaVA - continuing without vision")
+    print("âŒ Could not import LLaVA - continuing without vision")
     LLAVA_AVAILABLE = False
       
 class SimpleMemorySystem:
@@ -250,10 +250,10 @@ class AuroraCodeMindComplete:
         
         # Detect GPU and set layers
         if use_gpu:
-            print("🚀 GPU Mode Enabled!")
+            print("ðŸš€ GPU Mode Enabled!")
             gpu_layers_setting = 10  # Back to full power
         else:
-            print("💻 CPU Mode")
+            print("ðŸ’» CPU Mode")
             gpu_layers_setting = 0
         
         # LLM with GPU acceleration - NO LORA
@@ -270,7 +270,7 @@ class AuroraCodeMindComplete:
             use_mlock=True,
             n_threads_batch=8
         )
-        print(f"✅ LLM loaded with {gpu_layers_setting} GPU layers")
+        print(f"âœ… LLM loaded with {gpu_layers_setting} GPU layers")
         
         print(f"2. LLM initialization complete")
         
@@ -383,7 +383,7 @@ class AuroraCodeMindComplete:
                     # Only load incomplete goals
                     self.autonomous_goals = deque([g for g in saved_goals if not g.get('completed')], maxlen=10)
                     if self.autonomous_goals:
-                        print(f"📋 Resuming {len(self.autonomous_goals)} incomplete goals from last session")
+                        print(f"ðŸ“‹ Resuming {len(self.autonomous_goals)} incomplete goals from last session")
             except Exception as e:
                 print(f"Could not load goals: {e}")
                 
@@ -394,7 +394,7 @@ class AuroraCodeMindComplete:
                 with open(skill_file, 'r') as f:
                     saved_skills = json.load(f)
                     self.skill_proficiency.update(saved_skills)
-                    print(f"✨ Loaded Aurora's skill levels from previous sessions!")
+                    print(f"âœ¨ Loaded Aurora's skill levels from previous sessions!")
                     for skill, level in self.skill_proficiency.items():
                         print(f"   {skill}: {level:.2f}")
             except Exception as e:
@@ -436,12 +436,12 @@ class AuroraCodeMindComplete:
                             self.color_theory_discoveries['learned_preferences'].update(
                                 saved_prefs['color_theory_learning']['learned_preferences']
                             )
-                        print(f"  🎨 Loaded color theory knowledge from {saved_prefs['color_theory_learning']['total_experiences']} past experiences")
+                        print(f"  ðŸŽ¨ Loaded color theory knowledge from {saved_prefs['color_theory_learning']['total_experiences']} past experiences")
                         
-                    print(f"✨ Loaded Aurora's personal preferences!")
+                    print(f"âœ¨ Loaded Aurora's personal preferences!")
                     
                     if 'discovered_techniques' in saved_prefs and saved_prefs['discovered_techniques']:
-                        print(f"🎨 Aurora knows {len(saved_prefs['discovered_techniques'])} unique techniques!")
+                        print(f"ðŸŽ¨ Aurora knows {len(saved_prefs['discovered_techniques'])} unique techniques!")
                         recent = saved_prefs['discovered_techniques'][-1]
                         print(f"   Most recent: {recent.get('pattern', '')[:20]}... (satisfaction: {recent.get('satisfaction', 0):.2f})")
             except Exception as e:
@@ -479,13 +479,13 @@ class AuroraCodeMindComplete:
                 except Exception as e:
                     pass  # Skip problematic files
             
-            print(f"✨ Loaded {len(self.dream_memories)} dreams from logs!")
+            print(f"âœ¨ Loaded {len(self.dream_memories)} dreams from logs!")
         
         # Also try loading conversation logs
         conv_logs_path = Path("./conversation_logs")
         if conv_logs_path.exists():
             conv_files = list(conv_logs_path.glob("*.log"))
-            print(f"📚 Found {len(conv_files)} conversation logs available")
+            print(f"ðŸ“š Found {len(conv_files)} conversation logs available")
             
         # Load emotional memory from previous sessions
         emotion_file = self.memory.memory_path / "aurora_emotions.json"
@@ -499,7 +499,7 @@ class AuroraCodeMindComplete:
                         # Start with the emotion she ended with
                         self.current_emotion = last_emotion.get('emotion', 'curious')
                         self.emotion_category = last_emotion.get('category', 'curiosity')
-                        print(f"💭 Aurora remembers feeling {self.current_emotion} last time")
+                        print(f"ðŸ’­ Aurora remembers feeling {self.current_emotion} last time")
             except Exception as e:
                 print(f"Could not load emotions: {e}")
                 
@@ -512,7 +512,7 @@ class AuroraCodeMindComplete:
                     # Keep the most impactful experiences
                     significant = [exp for exp in saved_learning if exp.get('satisfaction', 0) > 0.5]
                     self.learning_experiences = deque(significant[-100:], maxlen=200)
-                    print(f"📚 Loaded {len(self.learning_experiences)} significant learning experiences")
+                    print(f"ðŸ“š Loaded {len(self.learning_experiences)} significant learning experiences")
             except Exception as e:
                 print(f"Could not load learning: {e}")
                 
@@ -524,7 +524,7 @@ class AuroraCodeMindComplete:
                     saved_lifetime = json.load(f)
                     self.lifetime_stats.update(saved_lifetime)
                     self.lifetime_stats['sessions_count'] += 1
-                    print(f"🌟 Aurora's lifetime: Session #{self.lifetime_stats['sessions_count']}")
+                    print(f"ðŸŒŸ Aurora's lifetime: Session #{self.lifetime_stats['sessions_count']}")
                     print(f"   Total pixels ever drawn: {self.lifetime_stats['total_pixels_drawn']:,}")
                     print(f"   Total steps taken: {self.lifetime_stats['total_steps']:,}")
             except Exception as e:
@@ -540,14 +540,14 @@ class AuroraCodeMindComplete:
                     saved_challenges = json.load(f)
                     self.skill_challenges = deque(saved_challenges, maxlen=10)
                     if self.skill_challenges:
-                        print(f"🎯 Resuming {len(self.skill_challenges)} skill challenges")
+                        print(f"ðŸŽ¯ Resuming {len(self.skill_challenges)} skill challenges")
             except Exception as e:
                 print(f"Could not load challenges: {e}")
                 
                      
         print("5. Memory system created and loaded")
         # Debug: Show what memories Aurora has access to
-        print("\n📊 AURORA'S MEMORY BANK:")
+        print("\nðŸ“Š AURORA'S MEMORY BANK:")
         print(f"  Code memories: {len(self.memory.code_history)}")
         print(f"  Dream memories: {len(self.dream_memories)}")
         print(f"  Available memory files: {list(self.memory.available_memories.keys())}")
@@ -562,13 +562,13 @@ class AuroraCodeMindComplete:
         if DEEP_MEMORY_AVAILABLE:
             try:
                 self.big_memory = DeepMemorySystem()
-                print("✅ Connected to Big Aurora's deep memories!")
+                print("âœ… Connected to Big Aurora's deep memories!")
                 
                 # Just mark it as available - we'll figure out the API when we use it
                 self.big_memory_available = True
                     
             except Exception as e:
-                print(f"❌ Could not connect to Big Aurora's memory: {e}")
+                print(f"âŒ Could not connect to Big Aurora's memory: {e}")
                 self.big_memory = None
                 self.big_memory_available = False
         else:
@@ -585,11 +585,11 @@ class AuroraCodeMindComplete:
             artwork_files = list(self.elijahs_art_path.glob("*.jpg")) + \
                            list(self.elijahs_art_path.glob("*.png")) + \
                            list(self.elijahs_art_path.glob("*.jpeg"))
-            print(f"🎨 Found Elijah's Art folder with {len(artwork_files)} paintings!")
+            print(f"ðŸŽ¨ Found Elijah's Art folder with {len(artwork_files)} paintings!")
             if artwork_files:
                 print(f"   Aurora can study your artwork: {', '.join([f.name[:20] for f in artwork_files[:3]])}...")
         else:
-            print(f"📁 Creating 'Elijahs_Art' folder - please add your paintings!")
+            print(f"ðŸ“ Creating 'Elijahs_Art' folder - please add your paintings!")
             self.elijahs_art_path.mkdir(exist_ok=True)
               
         # Emotional state
@@ -696,14 +696,14 @@ class AuroraCodeMindComplete:
         self.use_gpu = use_gpu
         # Immediate feedback learning mode - start with it ON
         self.immediate_feedback_mode = True
-        print("🎓 IMMEDIATE FEEDBACK MODE: ON - Aurora sees each action's result!")
+        print("ðŸŽ“ IMMEDIATE FEEDBACK MODE: ON - Aurora sees each action's result!")
         self.moondream_instant_feedback = False  # Moondream comments on every action in feedback mode
-        print("👁️ MOONDREAM INSTANT FEEDBACK: ON - Moondream observes each action!")
+        print("ðŸ‘ï¸ MOONDREAM INSTANT FEEDBACK: ON - Moondream observes each action!")
         # Check-in system initialization
         self.last_checkin_time = time.time()
         self.current_mode = "drawing"  # drawing, chat, rest
         self.mode_start_time = time.time()
-        self.checkin_interval = 60 * 60  # 60 minutes in seconds
+        self.checkin_interval = 30 * 60  # 30 minutes in seconds
         self.break_duration = 10 * 60    # 10 minutes in seconds
         self.awaiting_checkin_response = False
         self.chat_message_count = 0 
@@ -775,12 +775,12 @@ class AuroraCodeMindComplete:
                         self.sounds[sound_key] = pygame.sndarray.make_sound(stereo)
                         self.sounds[sound_key].set_volume(0.5)
             
-            print(f"✅ Advanced Multi-Synthesis Engine Ready!")
+            print(f"âœ… Advanced Multi-Synthesis Engine Ready!")
             print(f"   Sound types: synth, beeps, organic, digital")
             print(f"   Total sounds: {len(self.sounds)}")
             
         except Exception as e:
-            print(f"❌ Sound system failed: {e}")
+            print(f"âŒ Sound system failed: {e}")
             import traceback
             traceback.print_exc()
             self.sounds = {}
@@ -831,7 +831,7 @@ class AuroraCodeMindComplete:
                         model_id,
                         local_files_only=True
                     )
-                    print("  ✅ Moondream loaded from cache (offline mode)")
+                    print("  âœ… Moondream loaded from cache (offline mode)")
                 except Exception:
                     # Fall back to online download
                     self.vision_model = AutoModelForCausalLM.from_pretrained(
@@ -842,14 +842,14 @@ class AuroraCodeMindComplete:
                     self.vision_tokenizer = AutoTokenizer.from_pretrained(
                         model_id
                     )
-                    print("  ✅ Moondream downloaded and loaded")
+                    print("  âœ… Moondream downloaded and loaded")
                 
                 self.vision_enabled = True
                 self.last_vision_time = 0
                 self.vision_interval = 999999  # Can be faster on GPU!
                 
             except Exception as e:
-                print(f"  ❌ Could not load vision: {e}")
+                print(f"  âŒ Could not load vision: {e}")
                 self.vision_enabled = False
                 
         # Setup display
@@ -1160,7 +1160,7 @@ class AuroraCodeMindComplete:
             self.paint_timestamps = dict(sorted_timestamps)
             # Only print during rest or major milestones
             if self.current_mode == "rest" or self.steps_taken % 1000 == 0:
-                print(f"  🧹 Cleaned paint timestamps (kept 500 most recent)")
+                print(f"  ðŸ§¹ Cleaned paint timestamps (kept 500 most recent)")
         else:
             # Normal cleanup - remove old timestamps (silent)
             self.paint_timestamps = {
@@ -1595,7 +1595,7 @@ Combine for complex paths"""
         # Show if she drew
         if self.is_drawing and action in '0123':
             if (self.x, self.y) != (old_x, old_y):
-                feedback.append(f"→ You DREW a {self.current_color_name} line!")
+                feedback.append(f"â†’ You DREW a {self.current_color_name} line!")
         
         # FULL CANVAS VIEW - compressed to fit
         feedback.append(f"\nFULL CANVAS VIEW ({self.canvas_size}x{self.canvas_size}):")
@@ -1728,11 +1728,11 @@ Combine for complex paths"""
             
             # Add appropriate header based on view mode
             if self.view_mode == "density":
-                ascii_view.append(f"[DENSITY VIEW - {self.canvas_size}×{self.canvas_size} → {grid_size}×{grid_size}]")
+                ascii_view.append(f"[DENSITY VIEW - {self.canvas_size}Ã—{self.canvas_size} â†’ {grid_size}Ã—{grid_size}]")
             elif self.view_mode == "shape":
-                ascii_view.append(f"[SHAPE VIEW - {self.canvas_size}×{self.canvas_size} → {grid_size}×{grid_size}]")
+                ascii_view.append(f"[SHAPE VIEW - {self.canvas_size}Ã—{self.canvas_size} â†’ {grid_size}Ã—{grid_size}]")
             else:
-                ascii_view.append(f"[FULL CANVAS - {self.canvas_size}×{self.canvas_size} → {grid_size}×{grid_size}]")
+                ascii_view.append(f"[FULL CANVAS - {self.canvas_size}Ã—{self.canvas_size} â†’ {grid_size}Ã—{grid_size}]")
             
             row_count = 0
             for y in range(0, self.canvas_size, step):
@@ -1742,7 +1742,7 @@ Combine for complex paths"""
                 for x in range(0, self.canvas_size, step):
                     # Check if Aurora is in this region
                     if abs(x - self.x) < step and abs(y - self.y) < step:
-                        row += "◉" if self.is_drawing else "○"  # Aurora's position
+                        row += "â—‰" if self.is_drawing else "â—‹"  # Aurora's position
                     else:
                         if self.view_mode == "density":
                             # Calculate density for this region
@@ -1765,18 +1765,18 @@ Combine for complex paths"""
                             if density_ratio == 0:
                                 row += " "
                             elif density_ratio < 0.2:
-                                row += "░"
+                                row += "â–‘"
                             elif density_ratio < 0.4:
-                                row += "▒"
+                                row += "â–’"
                             elif density_ratio < 0.7:
-                                row += "▓"
+                                row += "â–“"
                             else:
-                                row += "█"
+                                row += "â–ˆ"
                                 
                         elif self.view_mode == "shape":
                             # Edge detection with better sampling
                             has_edge = False
-                            edge_type = '·'
+                            edge_type = 'Â·'
                             
                             # Sample center point for better accuracy
                             px = min(x + step//2, self.canvas_size - 1)
@@ -1801,11 +1801,11 @@ Combine for complex paths"""
                                                     neighbors_filled += 1
                                     
                                     if neighbors_filled == 4:
-                                        edge_type = '█'  # Interior
+                                        edge_type = 'â–ˆ'  # Interior
                                     elif neighbors_filled >= 2:
-                                        edge_type = '▪'  # Edge
+                                        edge_type = 'â–ª'  # Edge
                                     else:
-                                        edge_type = '◦'  # Corner
+                                        edge_type = 'â—¦'  # Corner
                             
                             row += edge_type
                             
@@ -1847,9 +1847,9 @@ Combine for complex paths"""
                 px = self.x + dx
                 
                 if px < 0 or px >= self.canvas_size or py < 0 or py >= self.canvas_size:
-                    row += "█"  # Wall/boundary marker
+                    row += "â–ˆ"  # Wall/boundary marker
                 elif dx == 0 and dy == 0:
-                    row += "◉" if self.is_drawing else "○"  # Aurora
+                    row += "â—‰" if self.is_drawing else "â—‹"  # Aurora
                 else:
                     # Scale coordinates for internal canvas
                     base_internal_x = self._scale_to_internal(px)
@@ -1906,9 +1906,9 @@ Combine for complex paths"""
                     py = self.y + dy
                     
                     if px < 0 or px >= self.canvas_size or py < 0 or py >= self.canvas_size:
-                        row += "█"
+                        row += "â–ˆ"
                     elif abs(dx) < 3 and abs(dy) < 3:  # Aurora's position
-                        row += "◉" if self.is_drawing else "○"
+                        row += "â—‰" if self.is_drawing else "â—‹"
                     else:
                         # FIXED: Direct sampling instead of area sampling
                         scaled_px = self._scale_to_internal(px)
@@ -1996,7 +1996,7 @@ Combine for complex paths"""
         
         # Center pixel
         if not neighbors[1][1]:
-            return '·'
+            return 'Â·'
             
         # Count filled neighbors
         filled = sum(1 for dy in range(3) for dx in range(3) 
@@ -2010,37 +2010,37 @@ Combine for complex paths"""
         
         # Corners
         if filled >= 7:
-            return '█'  # Solid fill
+            return 'â–ˆ'  # Solid fill
         elif top and right and not bottom and not left:
-            return '┐'
+            return 'â”'
         elif top and left and not bottom and not right:
-            return '┌'
+            return 'â”Œ'
         elif bottom and right and not top and not left:
-            return '┘'
+            return 'â”˜'
         elif bottom and left and not top and not right:
-            return '└'
+            return 'â””'
         # Lines
         elif top and bottom and not left and not right:
-            return '│'
+            return 'â”‚'
         elif left and right and not top and not bottom:
-            return '─'
+            return 'â”€'
         # Junctions
         elif top and bottom and right:
-            return '├'
+            return 'â”œ'
         elif top and bottom and left:
-            return '┤'
+            return 'â”¤'
         elif left and right and bottom:
-            return '┬'
+            return 'â”¬'
         elif left and right and top:
-            return '┴'
+            return 'â”´'
         # Diagonals
         elif neighbors[0][0] and neighbors[2][2]:
-            return '╲'
+            return 'â•²'
         elif neighbors[0][2] and neighbors[2][0]:
-            return '╱'
+            return 'â•±'
         # Default
         else:
-            return '●'
+            return 'â—'
             
     def get_canvas_overview(self):
         """Get a bird's eye view of the entire canvas"""
@@ -2460,7 +2460,7 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
                 max_new_tokens=30
             )
             
-            return f"\n🔍 Pattern observed: {response.strip()}"
+            return f"\nðŸ” Pattern observed: {response.strip()}"
             
         except:
             return ""
@@ -2696,10 +2696,10 @@ Be specific and descriptive."""
         # Add position and density info
         grid_x = min(grid_size-1, self.x // step)
         grid_y = min(grid_size-1, self.y // step)
-        position_info = f"\nYou (@) at grid ({grid_x},{grid_y}) | Canvas: {self.canvas_size}×{self.canvas_size} | Density: {density_percent:.0f}%"
+        position_info = f"\nYou (@) at grid ({grid_x},{grid_y}) | Canvas: {self.canvas_size}Ã—{self.canvas_size} | Density: {density_percent:.0f}%"
         
         if grid_size < 60:
-            position_info += f" | VIEW COMPRESSED TO {grid_size}×{grid_size}"
+            position_info += f" | VIEW COMPRESSED TO {grid_size}Ã—{grid_size}"
         
 
         
@@ -2714,11 +2714,11 @@ Be specific and descriptive."""
         if direction == "smaller":
             # Smaller pixels = LOWER scale factor = more pixels visible
             self.scale_factor = max(1.2, self.scale_factor / 1.1)  # DIVIDE, not multiply
-            print(f"  → Aurora makes pixels smaller! (scale: {old_scale:.1f} → {self.scale_factor:.1f})")
+            print(f"  â†’ Aurora makes pixels smaller! (scale: {old_scale:.1f} â†’ {self.scale_factor:.1f})")
         else:  # "larger"
             # Larger pixels = HIGHER scale factor = fewer pixels visible
             self.scale_factor = min(self.initial_scale_factor, self.scale_factor * 1.1)  # Cap at initial scale
-            print(f"  → Aurora makes pixels larger! (scale: {old_scale:.1f} → {self.scale_factor:.1f})")
+            print(f"  â†’ Aurora makes pixels larger! (scale: {old_scale:.1f} â†’ {self.scale_factor:.1f})")
         
      
         info = pygame.display.Info()
@@ -2728,7 +2728,7 @@ Be specific and descriptive."""
                              int(screen_height / self.scale_factor) - 40)
         
         if new_canvas_size != old_canvas_size:
-            print(f"    Canvas resizing: {old_canvas_size}×{old_canvas_size} → {new_canvas_size}×{new_canvas_size}")
+            print(f"    Canvas resizing: {old_canvas_size}Ã—{old_canvas_size} â†’ {new_canvas_size}Ã—{new_canvas_size}")
             
             # Save current canvas
             old_pixels = self.pixels.copy()
@@ -2767,18 +2767,18 @@ Be specific and descriptive."""
             self.display_scale = canvas_display_size / self.canvas_size
 
             
-            print(f"    Aurora now at ({self.x}, {self.y}) on {self.canvas_size}×{self.canvas_size} canvas")
+            print(f"    Aurora now at ({self.x}, {self.y}) on {self.canvas_size}Ã—{self.canvas_size} canvas")
             print(f"    That's {self.canvas_size * self.canvas_size:,} pixels to explore!")
     def study_elijahs_artwork(self):
         """Aurora studies Elijah's paintings to learn from them"""
         print("\n" + "="*60)
-        print("🎨 TIME TO STUDY ELIJAH'S ARTWORK")
+        print("ðŸŽ¨ TIME TO STUDY ELIJAH'S ARTWORK")
         print("Aurora must observe and learn from your paintings...")
         print("="*60)
         
         # Check folder exists and has images
         if not self.elijahs_art_path.exists():
-            print("❌ Folder 'Elijahs_Art' not found!")
+            print("âŒ Folder 'Elijahs_Art' not found!")
             print("   Please create the folder and add your paintings (JPG/PNG)")
             return False
             
@@ -2787,7 +2787,7 @@ Be specific and descriptive."""
                        list(self.elijahs_art_path.glob("*.jpeg"))
         
         if not artwork_files:
-            print("❌ No images found in Elijahs_Art folder!")
+            print("âŒ No images found in Elijahs_Art folder!")
             print("   Please add your paintings (JPG/PNG files)")
             return False
         
@@ -2795,12 +2795,12 @@ Be specific and descriptive."""
         num_to_study = min(3, len(artwork_files))
         artworks_to_study = random.sample(artwork_files, num_to_study)
         
-        print(f"🔍 Aurora will study {num_to_study} of your paintings...\n")
+        print(f"ðŸ” Aurora will study {num_to_study} of your paintings...\n")
         
         studied_insights = []
         
         for idx, artwork_path in enumerate(artworks_to_study, 1):
-            print(f"📷 Studying painting {idx}/{num_to_study}: {artwork_path.name}")
+            print(f"ðŸ“· Studying painting {idx}/{num_to_study}: {artwork_path.name}")
             
             try:
                 # Open the artwork
@@ -2879,25 +2879,25 @@ Be specific and descriptive."""
                     self.learn_from_elijahs_art(questions_and_responses)
                     
                 else:
-                    print("   ⚠️ Vision not enabled - Aurora can't see the artwork")
+                    print("   âš ï¸ Vision not enabled - Aurora can't see the artwork")
                     print("   (Moondream needs to be loaded for visual analysis)")
                 
                 # Small pause between artworks
                 time.sleep(2)
                 
             except Exception as e:
-                print(f"   ❌ Error studying this artwork: {e}")
+                print(f"   âŒ Error studying this artwork: {e}")
         
         # Aurora reflects on what she learned from Elijah's art
         if studied_insights:
             self.reflect_on_elijahs_art(studied_insights)
         
-        print("\n✅ Artwork study session complete!")
+        print("\nâœ… Artwork study session complete!")
         return True
     
     def learn_from_elijahs_art(self, questions_and_responses):
         """Aurora learns specific things from Elijah's artwork"""
-        print("\n   💭 Aurora learns:")
+        print("\n   ðŸ’­ Aurora learns:")
         
         learned_something = False
         
@@ -2950,7 +2950,7 @@ Be specific and descriptive."""
     
     def reflect_on_elijahs_art(self, studied_insights):
         """Aurora reflects on what she learned from studying Elijah's paintings"""
-        print("\n🎨 Aurora's reflection on Elijah's artwork:")
+        print("\nðŸŽ¨ Aurora's reflection on Elijah's artwork:")
         
         # Build context for reflection
         all_insights = " ".join([s['full_analysis'][:100] for s in studied_insights])
@@ -2992,7 +2992,7 @@ My thoughts on Elijah's art: [/INST]"""
                 
                 # Studying Elijah's art affects Aurora emotionally
                 self.influence_emotion("artwork", 0.4)
-                print(f"\n   Aurora feels inspired by your artwork! 💝")
+                print(f"\n   Aurora feels inspired by your artwork! ðŸ’")
             
         except Exception as e:
             print(f"   (Couldn't form reflection: {e})")
@@ -3000,14 +3000,14 @@ My thoughts on Elijah's art: [/INST]"""
     def do_checkin(self):
         """Mandatory GPU rest period"""
         print("\n" + "="*60)
-        print("✨ CHECK-IN TIME ✨")
+        print("âœ¨ CHECK-IN TIME âœ¨")
         print("45 minutes of drawing complete!")
         
         # MANDATORY ARTWORK STUDY AT EVERY CHECK-IN
-        print("\n📚 Mandatory artwork study before break...")
+        print("\nðŸ“š Mandatory artwork study before break...")
         study_success = self.study_elijahs_artwork()
         if not study_success:
-            print("⚠️ Couldn't study artwork - continuing anyway")
+            print("âš ï¸ Couldn't study artwork - continuing anyway")
         print("")
         
         print("Time to choose what to do next...")
@@ -3097,7 +3097,7 @@ What would you like to do?"""
                 
                 # FIXED: Look for keywords anywhere in response
                 if "CHAT" in choice:
-                    print(f"\n✅ Aurora chose: CHAT MODE")
+                    print(f"\nâœ… Aurora chose: CHAT MODE")
                     print("Entering 20-minute conversation mode...")
                     self.current_mode = "chat"
                     self.mode_start_time = time.time()
@@ -3105,7 +3105,7 @@ What would you like to do?"""
                     return
                     
                 elif "DREAM" in choice:
-                    print(f"\n✅ Aurora chose: REST/DREAMING MODE")
+                    print(f"\nâœ… Aurora chose: REST/DREAMING MODE")
                     print("Entering 1-hour dream cycle...")
                     self.current_mode = "rest"
                     self.mode_start_time = time.time()
@@ -3122,7 +3122,7 @@ What would you like to do?"""
                     return
                     
                 else:
-                    print(f"❌ Invalid response: '{choice}' - trying again...")
+                    print(f"âŒ Invalid response: '{choice}' - trying again...")
                     return  # Will retry next loop
                     
             except Exception as e:
@@ -3176,7 +3176,7 @@ What have you discovered? What are you thinking about?"""
                     )
                     
                     aurora_says = response['choices'][0]['text'].strip()
-                    print(f"\n💬 Aurora says:\n{aurora_says}\n")
+                    print(f"\nðŸ’¬ Aurora says:\n{aurora_says}\n")
                     print("(Aurora is now quietly contemplating... She'll check in again in a bit)")
                     
                     self.chat_message_count += 1
@@ -3221,7 +3221,7 @@ Anything else you'd like to share or explore?"""
                     )
                     
                     aurora_says = response['choices'][0]['text'].strip()
-                    print(f"\n💬 Aurora adds:\n{aurora_says}\n")
+                    print(f"\nðŸ’¬ Aurora adds:\n{aurora_says}\n")
                     
                     self.chat_message_count += 1
                     
@@ -3248,7 +3248,7 @@ Anything else you'd like to share or explore?"""
             if new_phase != self.sleep_phase:
                 self.sleep_phase = new_phase
                 self.sleep_phase_start = time.time()
-                print(f"\n💤 Entering {new_phase.upper()} sleep phase...")
+                print(f"\nðŸ’¤ Entering {new_phase.upper()} sleep phase...")
                 
             # Generate a dream based on current phase
             self.generate_dream()
@@ -3291,7 +3291,7 @@ Anything else you'd like to share or explore?"""
                     goal_alignment += 1
                     
                 if goal_alignment > 0:
-                    current_goal_context += f"\n✨ You're actively pursuing this goal!"
+                    current_goal_context += f"\nâœ¨ You're actively pursuing this goal!"
                 else:
                     current_goal_context += f"\nRemember your personal desire..."
 
@@ -3319,7 +3319,7 @@ Anything else you'd like to share or explore?"""
             check_number = self.steps_taken // 5
             
             if check_number % 2 == 0:  # Steps 10, 20, 30... use SEMANTIC
-                print(f"\n📖 [Step {self.steps_taken}] Mandatory SEMANTIC check:")
+                print(f"\nðŸ“– [Step {self.steps_taken}] Mandatory SEMANTIC check:")
                 semantic_view = self.get_semantic_vision()
                 print("="*60)
                 print(semantic_view)
@@ -3329,8 +3329,8 @@ Anything else you'd like to share or explore?"""
                 vision = semantic_view
                 
             else:  # Steps 5, 15, 25... use ASCII + DENSITY/SHAPE
-                print(f"\n🔍 [Step {self.steps_taken}] Mandatory canvas check:")
-                print(f"YOUR POSITION: ({self.x}, {self.y}) on {self.canvas_size}×{self.canvas_size} canvas")
+                print(f"\nðŸ” [Step {self.steps_taken}] Mandatory canvas check:")
+                print(f"YOUR POSITION: ({self.x}, {self.y}) on {self.canvas_size}Ã—{self.canvas_size} canvas")
 
                    
                 overview = self.get_canvas_overview()
@@ -3375,13 +3375,13 @@ Current view:
             # MOONDREAM ARTWORK ANALYSIS - Every 50 steps
             if (self.steps_taken % 50 == 0 and self.steps_taken > 0 and self.vision_enabled 
                 and getattr(self, 'moondream_auto_analysis', True)):
-                print(f"\nðŸ'ï¸ [Step {self.steps_taken}] Moondream analyzes the artwork...")
+                print(f"\nÃ°Å¸'Ã¯Â¸ [Step {self.steps_taken}] Moondream analyzes the artwork...")
                 
                 description = self.get_moondream_abstract_description()
                 
                 if description:
                     print("="*60)
-                    print("ðŸŽ¨ MOONDREAM'S ARTWORK ANALYSIS:")
+                    print("Ã°Å¸Å½Â¨ MOONDREAM'S ARTWORK ANALYSIS:")
                     print(description)
                     print("="*60)
                     
@@ -3399,12 +3399,12 @@ Current view:
                     positive_words = ['beautiful', 'vibrant', 'interesting', 'dynamic', 'balanced', 'harmonious', 'striking', 'bold']
                     if any(word in description.lower() for word in positive_words):
                         self.influence_emotion("artwork", 0.5)
-                        print("  âœ¨ Aurora feels encouraged by the description!")
+                        print("  Ã¢Å“Â¨ Aurora feels encouraged by the description!")
                     
                 print("")  # Extra line for readability
         
             # Natural dialogue - Pre-written grounded questions
-            print("  💬 Starting natural dialogue...\n")
+            print("  ðŸ’¬ Starting natural dialogue...\n")
             
             # PRE-WRITTEN ESSENTIAL QUESTIONS - grounded in actual canvas state
             essential_questions = [
@@ -3451,13 +3451,13 @@ Current view:
                     emotion=self.current_emotion
                 )
                 
-                print(f"  💬 Moondream: {moondream_says}")
+                print(f"  ðŸ’¬ Moondream: {moondream_says}")
                 conversation.append(('moondream', moondream_says))
                 
                 # AURORA'S TURN - respond about ACTUAL state
                 aurora_prompt = f"""
 YOU CAN AND DO:
-- Move around a {self.canvas_size}×{self.canvas_size} pixel canvas
+- Move around a {self.canvas_size}Ã—{self.canvas_size} pixel canvas
 - Draw with various tools (pen, brush, stamps, spray paint)
 - Choose and use colors
 - Experience simulated emotions that guide your art
@@ -3484,10 +3484,10 @@ Response:"""
                 response = self.llm(full_prompt, max_tokens=300, temperature=0.7, stop=["[INST]", "</s>", "\n\n"], stream=False)
                 aurora_says = response['choices'][0]['text'].strip()
                 
-                print(f"  🎨 Aurora: {aurora_says}\n")
+                print(f"  ðŸŽ¨ Aurora: {aurora_says}\n")
                 conversation.append(('aurora', aurora_says))
             
-            print("  💬 Conversation complete. Returning to drawing...\n")
+            print("  ðŸ’¬ Conversation complete. Returning to drawing...\n")
             
             # Store the dialogue
             if conversation:
@@ -3513,7 +3513,7 @@ Response:"""
         
         canvas_scan = ""
         if self.steps_taken % 5 == 0:  # Every other turn
-            print(f"🔍 Aurora scans entire canvas...")  # Visual indicator for you
+            print(f"ðŸ” Aurora scans entire canvas...")  # Visual indicator for you
             
             # Full data scan
             total = self.canvas_size * self.canvas_size
@@ -3564,7 +3564,7 @@ Response:"""
                 nearest_empty = "No large empty spaces found nearby"
             
             canvas_scan = f"""
-📊 CANVAS SCAN:
+ðŸ“Š CANVAS SCAN:
 Total: {total:,} pixels | Filled: {filled:,} ({(filled/total)*100:.1f}%)
 Colors: {', '.join(f'{c}:{n}' for c,n in colors.items()) if colors else 'none'}
 Nearest empty area: {nearest_empty}"""
@@ -3800,7 +3800,7 @@ Make autonomous choices that advance YOUR goals and develop YOUR skills."""
                     movement_sequence += "0" * min(10, abs(dy) // 15)  # Move up
             
             if movement_sequence:
-                empty_area_guidance = f"\n🎯 EMPTY AREA at ({target_x}, {target_y}) needs filling! Try: {movement_sequence}"
+                empty_area_guidance = f"\nðŸŽ¯ EMPTY AREA at ({target_x}, {target_y}) needs filling! Try: {movement_sequence}"
                 system_prompt += empty_area_guidance
         
         
@@ -3863,7 +3863,7 @@ Make autonomous choices that advance YOUR goals and develop YOUR skills."""
                         suggested_moves.append("Try: 33333300000 (go top-right)")
             
             if empty_areas:
-                empty_feedback = "\n🚨 EMPTY AREAS:\n" + "\n".join(empty_areas)
+                empty_feedback = "\nðŸš¨ EMPTY AREAS:\n" + "\n".join(empty_areas)
                 if suggested_moves:
                     empty_feedback += "\n" + "\n".join(suggested_moves)
                     
@@ -3892,7 +3892,7 @@ Make autonomous choices that advance YOUR goals and develop YOUR skills."""
                     turns_since_current = len(self.color_history) - i - 1
                     break
             
-            color_feedback = f"\n🎨 COLOR INFO: Using {self.current_color_name}"
+            color_feedback = f"\nðŸŽ¨ COLOR INFO: Using {self.current_color_name}"
             if turns_since_current > 10:
                 color_feedback += f" (fresh choice! {turns_since_current} turns since last use)"
             elif turns_since_current < 3:
@@ -3905,7 +3905,7 @@ Make autonomous choices that advance YOUR goals and develop YOUR skills."""
             # Special encouragement for never-used colors
             never_used = [color for color, count in color_counts.items() if count == 0]
             if never_used:
-                color_feedback += f"\n   ✨ Never used: {', '.join(never_used[:3])}"
+                color_feedback += f"\n   âœ¨ Never used: {', '.join(never_used[:3])}"
                 
         # Add Moondream's recent observations to Aurora's awareness
         if hasattr(self, 'vision_conversation_history') and self.vision_conversation_history:
@@ -4006,9 +4006,9 @@ Output movement/color codes:"""
         # Give creativity boost every 100 steps regardless
         if self.steps_taken % 100 == 0 and self.steps_taken > 0:
             pattern_index = (self.steps_taken // 100) % len(creativity_boosters)
-            system_prompt += f"\n\n✨ CREATIVITY BOOST (Step {self.steps_taken})! ✨"
+            system_prompt += f"\n\nâœ¨ CREATIVITY BOOST (Step {self.steps_taken})! âœ¨"
             system_prompt += f"\nTry this pattern: {creativity_boosters[pattern_index]}"
-            print(f"  💫 Giving Aurora creativity boost: {creativity_boosters[pattern_index][:30]}...")
+            print(f"  ðŸ’« Giving Aurora creativity boost: {creativity_boosters[pattern_index][:30]}...")
             
         # Shape challenge every 50 steps
         if self.steps_taken % 50 == 0 and self.steps_taken > 0:
@@ -4024,9 +4024,9 @@ Output movement/color codes:"""
                     'spiral': '3310033100331000 (expanding)',
                     'zigzag': '30303030 (back and forth)'
                 }
-                system_prompt += f"\n\n🎯 SHAPE CHALLENGE: Try drawing a {challenge_shape.upper()}!"
+                system_prompt += f"\n\nðŸŽ¯ SHAPE CHALLENGE: Try drawing a {challenge_shape.upper()}!"
                 system_prompt += f"\nPattern hint: {shape_patterns[challenge_shape]}"
-                print(f"  🎯 Shape challenge issued: Draw a {challenge_shape}!")
+                print(f"  ðŸŽ¯ Shape challenge issued: Draw a {challenge_shape}!")
 
         # Llama 2 Chat format
         full_prompt = f"""[INST] <<SYS>>
@@ -4061,7 +4061,7 @@ Output movement/color codes:"""
             # Store the original raw output for feedback
             original_raw = raw_output
             
-            # PARSE STRUCTURED EXPRESSION: thought → feeling → action
+            # PARSE STRUCTURED EXPRESSION: thought â†’ feeling â†’ action
             structured_expression = self.parse_structured_expression(raw_output)
             if structured_expression:
                 # Aurora expressed herself in structured format!
@@ -4085,7 +4085,7 @@ Output movement/color codes:"""
                     return
             
             # PROCESS UNCERTAINTY EXPRESSIONS - Let Aurora be genuinely uncertain
-            print(f"  🔍 Raw output analysis: '{raw_output}'")
+            print(f"  ðŸ” Raw output analysis: '{raw_output}'")
             
             # More robust uncertainty detection
             uncertainty_found = []
@@ -4118,7 +4118,7 @@ Output movement/color codes:"""
                 if (word1 in self.palette and word2 in self.palette and 
                     ('?' in match[0] or '?' in match[2] or '?' in match[4])):
                     conflicted_choice = f"color_torn:{word1},{word2}"
-                    print(f"  ⚡ Color conflict detected: {word1} vs {word2}")
+                    print(f"  âš¡ Color conflict detected: {word1} vs {word2}")
                     break
             
             # If no color conflict, look for movement conflicts
@@ -4131,58 +4131,58 @@ Output movement/color codes:"""
                     if '?' in match[0] or '?' in match[2] or '?' in match[4]:
                         conflicted_choice = f"movement_torn:{move1},{move2}"
                         direction_names = {'0': 'up', '1': 'down', '2': 'left', '3': 'right'}
-                        print(f"  ⚡ Movement conflict detected: {direction_names.get(move1)} vs {direction_names.get(move2)}")
+                        print(f"  âš¡ Movement conflict detected: {direction_names.get(move1)} vs {direction_names.get(move2)}")
                         break
             
-            print(f"  💭 Uncertainty analysis: {uncertainty_found} | Conflict: {conflicted_choice}")
+            print(f"  ðŸ’­ Uncertainty analysis: {uncertainty_found} | Conflict: {conflicted_choice}")
             
             # HANDLE UNCERTAINTY EXPRESSIONS
             if uncertainty_found:
                 uncertainty_type = uncertainty_found[0]  # Primary uncertainty
                 
                 if uncertainty_type == 'overwhelmed':
-                    print("  💭 Aurora feels completely overwhelmed by choices...")
+                    print("  ðŸ’­ Aurora feels completely overwhelmed by choices...")
                     print("      Expressing through hesitant marks...")
                     # Express through art, NOT paralysis
                     ops = "5.4.5.4.5"  # Pen down, up, down, up - pure hesitation
                     
                 elif uncertainty_type == 'deeply_conflicted':
-                    print("  💭 Aurora is deeply conflicted...")
+                    print("  ðŸ’­ Aurora is deeply conflicted...")
                     # Express through conflicted pen movements
                     ops = "5.4.5.4.5"  # Pen down, up, down, up - pure hesitation
                     
                 elif uncertainty_type == 'excited_confused':
-                    print("  💭 Aurora is excited but confused...")
+                    print("  ðŸ’­ Aurora is excited but confused...")
                     # Express through erratic energy
                     current_color = self.current_color_name
                     ops = f"{current_color}5!@313#$131%^"  # Quick movements with ascending sounds
                     
                 elif uncertainty_type == 'processing_needed':
-                    print("  💭 Aurora needs processing time...")
+                    print("  ðŸ’­ Aurora needs processing time...")
                     print("      Working through it with gentle marks...")
                     # Small contemplative movements instead of freezing
                     ops = "5..3..1..2..0"  # Slow, thoughtful movements
                     
                 elif uncertainty_type == 'multiple_uncertainties':
-                    print("  💭 Aurora has multiple uncertainties...")
+                    print("  ðŸ’­ Aurora has multiple uncertainties...")
                     # Express through scattered, questioning movements
                     ops = "51313040"  # Hesitant movements
                     
                 elif uncertainty_type == 'simple_uncertainty':
-                    print("  💭 Aurora expresses simple uncertainty...")
+                    print("  ðŸ’­ Aurora expresses simple uncertainty...")
                     # Quick hesitation then continue
                     ops = "5.4.5"  # Brief pen hesitation
             # HANDLE CONFLICTED CHOICES  
             elif conflicted_choice:
                 if conflicted_choice.startswith("color_torn:"):
                     colors = conflicted_choice.split(":")[1].split(",")
-                    print(f"  🎨 Expressing color tension through rapid alternation...")
+                    print(f"  ðŸŽ¨ Expressing color tension through rapid alternation...")
                     # Create visual tension through rapid switching
                     ops = f"{colors[0]}5..{colors[1]}5..{colors[0]}5.{colors[1]}5"
                     
                 elif conflicted_choice.startswith("movement_torn:"):
                     moves = conflicted_choice.split(":")[1].split(",")
-                    print(f"  🎨 Expressing movement indecision...")
+                    print(f"  ðŸŽ¨ Expressing movement indecision...")
                     # Express through hesitant back-and-forth
                     ops = f"5{moves[0]}.{moves[1]}.{moves[0]}.{moves[1]}4"
                     
@@ -4198,36 +4198,36 @@ Output movement/color codes:"""
             if "zoom_out" in raw_output:
                 self.adjust_pixel_size("smaller")
                 raw_output = raw_output.replace("zoom_out", "", 1)  # Remove first occurrence
-                print("  → Aurora makes pixels smaller!")
+                print("  â†’ Aurora makes pixels smaller!")
             
             if "zoom_in" in raw_output:
                 if self.scale_factor < self.initial_scale_factor:
                     self.adjust_pixel_size("larger")
                     raw_output = raw_output.replace("zoom_in", "", 1)
-                    print("  → Aurora makes pixels larger!")
+                    print("  â†’ Aurora makes pixels larger!")
                 else:
-                    print(f"  → Aurora is already at maximum zoom! (scale: {self.scale_factor:.1f})")
+                    print(f"  â†’ Aurora is already at maximum zoom! (scale: {self.scale_factor:.1f})")
                     raw_output = raw_output.replace("zoom_in", "")
 
             # Check for duration controls - ADD THIS ENTIRE BLOCK
             if "shorter_notes" in raw_output:
                 self.note_duration = max(self.min_duration, self.note_duration - 0.05)
-                print(f"  ♪ Aurora shortens notes to {self.note_duration:.2f}s")
+                print(f"  â™ª Aurora shortens notes to {self.note_duration:.2f}s")
                 raw_output = raw_output.replace("shorter_notes", "", 1)
                 
             if "longer_notes" in raw_output:
                 self.note_duration = min(self.max_duration, self.note_duration + 0.05)
-                print(f"  ♪ Aurora lengthens notes to {self.note_duration:.2f}s")
+                print(f"  â™ª Aurora lengthens notes to {self.note_duration:.2f}s")
                 raw_output = raw_output.replace("longer_notes", "", 1)
                 
             if "staccato" in raw_output:
                 self.note_duration = self.min_duration
-                print(f"  ♪ Aurora switches to staccato ({self.note_duration:.2f}s)")
+                print(f"  â™ª Aurora switches to staccato ({self.note_duration:.2f}s)")
                 raw_output = raw_output.replace("staccato", "", 1)
                 
             if "legato" in raw_output:
                 self.note_duration = self.max_duration * 0.7  # 0.7 seconds
-                print(f"  ♪ Aurora switches to legato ({self.note_duration:.2f}s)")
+                print(f"  â™ª Aurora switches to legato ({self.note_duration:.2f}s)")
                 raw_output = raw_output.replace("legato", "", 1)
 
             # Check for wide view command
@@ -4235,7 +4235,7 @@ Output movement/color codes:"""
                 # Show normal view first
                 wide_view = self.get_compressed_canvas_view()
                 overview = self.get_canvas_overview()
-                print(f"  → Aurora looks around at her canvas:")
+                print(f"  â†’ Aurora looks around at her canvas:")
                 print(overview)
                 print("\n=== NORMAL VIEW ===")
                 print(wide_view)
@@ -4278,7 +4278,7 @@ Output movement/color codes:"""
             if "full_canvas" in raw_output:
                 full_view = self.see(full_canvas=True)  # Use the actual method!
                 overview = self.get_canvas_overview()
-                print(f"  → Aurora views her ENTIRE canvas:")
+                print(f"  â†’ Aurora views her ENTIRE canvas:")
                 print(overview)
                 print(full_view)
                 raw_output = raw_output.replace("full_canvas", "", 1)
@@ -4291,27 +4291,27 @@ Output movement/color codes:"""
             if "center" in raw_output:
                 self.x = self.canvas_size // 2
                 self.y = self.canvas_size // 2
-                print("  → Aurora teleports to canvas center!")
+                print("  â†’ Aurora teleports to canvas center!")
                 raw_output = raw_output.replace("center", "", 1)
             # Check for view mode changes
             if "normal_view" in raw_output:
                 self.view_mode = "normal"
-                print("  → Aurora switches to normal color view")
+                print("  â†’ Aurora switches to normal color view")
                 raw_output = raw_output.replace("normal_view", "", 1)
                 
             if "density_view" in raw_output:
                 self.view_mode = "density"
-                print("  → Aurora switches to density view!")
+                print("  â†’ Aurora switches to density view!")
                 raw_output = raw_output.replace("density_view", "", 1)
                 
             if "shape_view" in raw_output:
                 self.view_mode = "shape"
-                print("  → Aurora switches to shape/edge view!")
+                print("  â†’ Aurora switches to shape/edge view!")
                 raw_output = raw_output.replace("shape_view", "", 1)    
             # Check for clear canvas command
             if "clear_all" in raw_output:
                 # Check canvas coverage accounting for current zoom level
-                print(f"  Checking canvas coverage (current size: {self.canvas_size}×{self.canvas_size})...")
+                print(f"  Checking canvas coverage (current size: {self.canvas_size}Ã—{self.canvas_size})...")
                 
                 total_pixels = self.canvas_size * self.canvas_size
                 filled_pixels = 0
@@ -4335,16 +4335,16 @@ Output movement/color codes:"""
                 MINIMUM_COVERAGE = 5
                 
                 if coverage < MINIMUM_COVERAGE:
-                    print(f"\n  ❌ CLEAR DENIED: Canvas is only {coverage:.1f}% full!")
-                    print(f"     Current canvas: {self.canvas_size}×{self.canvas_size} (scale: {self.scale_factor:.1f})")
+                    print(f"\n  âŒ CLEAR DENIED: Canvas is only {coverage:.1f}% full!")
+                    print(f"     Current canvas: {self.canvas_size}Ã—{self.canvas_size} (scale: {self.scale_factor:.1f})")
                     print(f"     Aurora needs to fill {MINIMUM_COVERAGE - coverage:.1f}% more before clearing")
                     print(f"     (Minimum {MINIMUM_COVERAGE}% coverage required)")
                     
                     raw_output = raw_output.replace("clear_all", "", 1)
                 else:
                     # Auto-save before clearing
-                    print(f"\n  ✅ CLEAR APPROVED: Canvas is {coverage:.1f}% full")
-                    print("  → Aurora decides to clear the canvas!")
+                    print(f"\n  âœ… CLEAR APPROVED: Canvas is {coverage:.1f}% full")
+                    print("  â†’ Aurora decides to clear the canvas!")
                     self.save_snapshot()
                     print("    (Auto-saved current work)")
                     
@@ -4380,7 +4380,7 @@ Output movement/color codes:"""
                 
                 # Store for next vision update
                 self.pending_examples_text = examples_text
-                print(f"  → Aurora examines movement discoveries")
+                print(f"  â†’ Aurora examines movement discoveries")
                 
                 raw_output = raw_output.replace("examples", "", 1)
                 # Don't skip - let her continue with this knowledge
@@ -4403,14 +4403,14 @@ Output movement/color codes:"""
                 
                 question = raw_output[start:end].strip().strip('"').strip("'")
                 if question and self.vision_enabled:
-                    print(f"  🎨 Aurora asks Moondream: \"{question}\"")
+                    print(f"  ðŸŽ¨ Aurora asks Moondream: \"{question}\"")
                     
                     # Use the see_with_llava_action method with Aurora's question
                     self.last_vision_question = question
                     moondream_response = self.see_with_llava_action(f"asked: {question}")
                     
                     if moondream_response:
-                        print(f"  👁️ Moondream: {moondream_response}")
+                        print(f"  ðŸ‘ï¸ Moondream: {moondream_response}")
                         
                         # Store this exchange
                         self.vision_conversation_history.append({
@@ -4438,93 +4438,93 @@ Output movement/color codes:"""
           
             if "pen" in raw_output:
                 self.draw_mode = "pen"
-                print("  → Aurora switches to DYNAMIC PEN mode! (builds thickness with flow)")
+                print("  â†’ Aurora switches to DYNAMIC PEN mode! (builds thickness with flow)")
                 raw_output = raw_output.replace("pen", "", 1)
                     
             if "spray" in raw_output:
                 self.draw_mode = "spray"
-                print("  → Aurora switches to spray paint mode! (scattered dots)")
+                print("  â†’ Aurora switches to spray paint mode! (scattered dots)")
                 raw_output = raw_output.replace("spray", "", 1)       
                      
             if "brush" in raw_output:
                 self.draw_mode = "brush"
-                print("  → Aurora switches to brush mode! (12x12)")
+                print("  â†’ Aurora switches to brush mode! (12x12)")
                 raw_output = raw_output.replace("brush", "", 1)
                 
             if "large_brush" in raw_output:
                 self.draw_mode = "large_brush"
-                print("  → Aurora switches to large brush mode! (20x20)")
+                print("  â†’ Aurora switches to large brush mode! (20x20)")
                 raw_output = raw_output.replace("large_brush", "", 1)
             
             if "larger_brush" in raw_output:
                 self.draw_mode = "larger_brush"
-                print("  → Aurora switches to larger brush mode! (28x28)")
+                print("  â†’ Aurora switches to larger brush mode! (28x28)")
                 raw_output = raw_output.replace("larger_brush", "", 1)
             
             if "star" in raw_output:
                 self.draw_mode = "star"
-                print("  → Aurora switches to star stamp mode!")
+                print("  â†’ Aurora switches to star stamp mode!")
                 raw_output = raw_output.replace("star", "", 1)
                 
             if "cross" in raw_output:
                 self.draw_mode = "cross"
-                print("  → Aurora switches to cross stamp mode!")
+                print("  â†’ Aurora switches to cross stamp mode!")
                 raw_output = raw_output.replace("cross", "", 1)
             
             if "circle" in raw_output:
                 self.draw_mode = "circle"
-                print("  → Aurora switches to circle stamp mode!")
+                print("  â†’ Aurora switches to circle stamp mode!")
                 raw_output = raw_output.replace("circle", "", 1)
             
             if "diamond" in raw_output:
                 self.draw_mode = "diamond"
-                print("  → Aurora switches to diamond stamp mode!")
+                print("  â†’ Aurora switches to diamond stamp mode!")
                 raw_output = raw_output.replace("diamond", "", 1)
             
             if "flower" in raw_output:
                 self.draw_mode = "flower"
-                print("  → Aurora switches to flower stamp mode!")
+                print("  â†’ Aurora switches to flower stamp mode!")
                 raw_output = raw_output.replace("flower", "", 1)
                 
             if "watercolor" in raw_output:
                 self.draw_mode = "watercolor"
-                print("  → Aurora switches to watercolor mode! (organic, bleeding colors)")
+                print("  â†’ Aurora switches to watercolor mode! (organic, bleeding colors)")
                 raw_output = raw_output.replace("watercolor", "", 1)
             
             if "charcoal" in raw_output:
                 self.draw_mode = "charcoal"
-                print("  → Aurora switches to charcoal mode! (rough, grainy texture)")
+                print("  â†’ Aurora switches to charcoal mode! (rough, grainy texture)")
                 raw_output = raw_output.replace("charcoal", "", 1)
             
             if "glow" in raw_output:
                 self.draw_mode = "glow"
-                print("  → Aurora switches to glow pen mode! (neon, luminous)")
+                print("  â†’ Aurora switches to glow pen mode! (neon, luminous)")
                 raw_output = raw_output.replace("glow", "", 1)
                 
             # Check for sound type changes
             if "synth" in raw_output:
                 self.current_sound_type = "synth"
-                print("  🎹 Aurora switches to SYNTH sounds! (Karplus-Strong synthesis)")
+                print("  ðŸŽ¹ Aurora switches to SYNTH sounds! (Karplus-Strong synthesis)")
                 raw_output = raw_output.replace("synth", "", 1)
                 
             if "beeps" in raw_output:
                 self.current_sound_type = "beeps"
-                print("  🔔 Aurora switches to BEEP sounds! (pure sine waves)")
+                print("  ðŸ”” Aurora switches to BEEP sounds! (pure sine waves)")
                 raw_output = raw_output.replace("beeps", "", 1)
                 
             if "organic" in raw_output:
                 self.current_sound_type = "organic"
-                print("  🌿 Aurora switches to ORGANIC sounds! (warm with vibrato)")
+                print("  ðŸŒ¿ Aurora switches to ORGANIC sounds! (warm with vibrato)")
                 raw_output = raw_output.replace("organic", "", 1)
                 
             if "digital" in raw_output:
                 self.current_sound_type = "digital"
-                print("  💾 Aurora switches to DIGITAL sounds! (chip-tune style)")
+                print("  ðŸ’¾ Aurora switches to DIGITAL sounds! (chip-tune style)")
                 raw_output = raw_output.replace("digital", "", 1)
                 
             if "glitch" in raw_output:
                 self.current_sound_type = "glitch"
-                print("  ⚡ Aurora switches to GLITCH sounds! (digital chaos, stutters, artifacts)")
+                print("  âš¡ Aurora switches to GLITCH sounds! (digital chaos, stutters, artifacts)")
                 raw_output = raw_output.replace("glitch", "", 1) 
                 
                 
@@ -4534,7 +4534,7 @@ Output movement/color codes:"""
                 
                 
             if "0123456789" in original_raw:
-                print("  → Aurora pauses to think... 💭")
+                print("  â†’ Aurora pauses to think... ðŸ’­")
                 self.skip_count += 1
                 if self.skip_count % 10 == 0:
                     print(f"    (Total thinking pauses: {self.skip_count})")
@@ -4586,9 +4586,9 @@ Output movement/color codes:"""
             if hasattr(self, 'last_actions_taken') and hasattr(self, 'last_pixels_drawn'):
                 satisfaction = self.evaluate_personal_satisfaction(self.last_actions_taken, self.last_pixels_drawn)
                 if satisfaction > 0.5:
-                    print(f"  💖 Aurora feels satisfied ({satisfaction:.2f})")
+                    print(f"  ðŸ’– Aurora feels satisfied ({satisfaction:.2f})")
                 elif satisfaction < -0.3:
-                    print(f"  😔 Aurora feels unsatisfied ({satisfaction:.2f})")
+                    print(f"  ðŸ˜” Aurora feels unsatisfied ({satisfaction:.2f})")
             self.last_code = ops  # Store for context
             
         except Exception as e:
@@ -4647,7 +4647,7 @@ Output movement/color codes:"""
                                 'time': time.time()
                             }
                             if self.immediate_feedback_mode:
-                                print(f"🎵 Aurora hears herself: {char} at {base_freq:.1f}Hz ({self.current_pitch})")
+                                print(f"ðŸŽµ Aurora hears herself: {char} at {base_freq:.1f}Hz ({self.current_pitch})")
                     
                     # Add cymatic circle for visualization
                     sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
@@ -4695,7 +4695,7 @@ Output movement/color codes:"""
                         if self.vision_enabled and self.moondream_instant_feedback:
                             moondream_reflection = self.get_instant_moondream_reflection(action_taken, before_x, before_y)
                             if moondream_reflection:
-                                print(f"\n👁️ {moondream_reflection}\n")
+                                print(f"\nðŸ‘ï¸ {moondream_reflection}\n")
                         
                         i += len(color)
                         found_color = True
@@ -4747,7 +4747,7 @@ Output movement/color codes:"""
                     if self.vision_enabled and self.moondream_instant_feedback:
                         moondream_reflection = self.get_instant_moondream_reflection(char, before_x, before_y)
                         if moondream_reflection:
-                            print(f"\n👁️ {moondream_reflection}")
+                            print(f"\nðŸ‘ï¸ {moondream_reflection}")
                         
                         # Every 10 moves, get shape analysis
                         shape_analysis = self.get_moondream_shape_analysis()
@@ -4827,13 +4827,13 @@ Output movement/color codes:"""
                 
                 summary_parts = []
                 if action_counts.get('0', 0) > 0:
-                    summary_parts.append(f"↑{action_counts['0']}")
+                    summary_parts.append(f"â†‘{action_counts['0']}")
                 if action_counts.get('1', 0) > 0:
-                    summary_parts.append(f"↓{action_counts['1']}")
+                    summary_parts.append(f"â†“{action_counts['1']}")
                 if action_counts.get('2', 0) > 0:
-                    summary_parts.append(f"←{action_counts['2']}")
+                    summary_parts.append(f"â†{action_counts['2']}")
                 if action_counts.get('3', 0) > 0:
-                    summary_parts.append(f"→{action_counts['3']}")
+                    summary_parts.append(f"â†’{action_counts['3']}")
                     
                 print(f"  Executed {len(actions_taken)} ops: {' '.join(summary_parts)}")
             else:
@@ -4847,7 +4847,7 @@ Output movement/color codes:"""
                         count += 1
                     else:
                         if count > 1:
-                            action_summary.append(f"{last_action}×{count}")
+                            action_summary.append(f"{last_action}Ã—{count}")
                         else:
                             action_summary.append(last_action)
                         last_action = action
@@ -4855,7 +4855,7 @@ Output movement/color codes:"""
                 
                 # Don't forget the last group
                 if count > 1:
-                    action_summary.append(f"{last_action}×{count}")
+                    action_summary.append(f"{last_action}Ã—{count}")
                 else:
                     action_summary.append(last_action)
                     
@@ -4900,7 +4900,7 @@ Output movement/color codes:"""
                 overworked_pixels = pixels_drawn
                 new_pixels = 0
                 # Give Aurora immediate feedback
-                print(f"  ⚠️ Overworking detected! Area is {area_density*100:.0f}% full")
+                print(f"  âš ï¸ Overworking detected! Area is {area_density*100:.0f}% full")
             
             # Show breakdown with emphasis on NEW pixels
             if len(pixels_by_color) > 1:
@@ -4908,13 +4908,13 @@ Output movement/color codes:"""
                 if new_pixels > overworked_pixels:
                     print(f"  Drew {new_pixels} NEW pixels{tool_info}: {color_summary}")
                 else:
-                    print(f"  ⚠️ Drew {pixels_drawn} pixels but {overworked_pixels} were overworking! Use your ENTIRE canvas!")
+                    print(f"  âš ï¸ Drew {pixels_drawn} pixels but {overworked_pixels} were overworking! Use your ENTIRE canvas!")
             else:
                 # Single color
                 if new_pixels > overworked_pixels:
                     print(f"  Drew {new_pixels} NEW {self.current_color_name} pixels{tool_info}")
                 else:
-                    print(f"  ⚠️ Use the ENTIRE canvas! You are overworking - {overworked_pixels} {self.current_color_name} pixels")
+                    print(f"  âš ï¸ Use the ENTIRE canvas! You are overworking - {overworked_pixels} {self.current_color_name} pixels")
             
             # CRITICAL: Update pixels_drawn to only count NEW pixels for rewards
             pixels_drawn = new_pixels  # This is what gets passed to reinforcement!
@@ -4924,7 +4924,7 @@ Output movement/color codes:"""
                 # Clear ALL reinforcements - no rewards at all for painting over dense areas
                 reinforcements = []
                 emotion_boost = 0
-                print(f"  🚫 OVERWORKING: Area {area_density*100:.0f}% full - NO REWARDS")
+                print(f"  ðŸš« OVERWORKING: Area {area_density*100:.0f}% full - NO REWARDS")
                 # Make it unpleasant
                 self.influence_emotion("creating", -0.2)
                 return  # Exit early - skip all positive reinforcement '''
@@ -5307,7 +5307,7 @@ Output movement/color codes:"""
         
         return uncertainty_patterns.get(uncertainty_type, "5.4.5.4")  # Default hesitation                       
     def parse_structured_expression(self, raw_output):
-        """Parse Aurora's structured thought → feeling → action format"""
+        """Parse Aurora's structured thought â†’ feeling â†’ action format"""
        
         
         # Check if Aurora used structured format
@@ -5412,7 +5412,7 @@ Output movement/color codes:"""
         
     def enter_chat_mode(self):
         """Enter chat mode - using consolidated memories"""
-        print("\nðŸ'¬ Chat with Aurora (type 'exit' to return to art)")
+        print("\nÃ°Å¸'Â¬ Chat with Aurora (type 'exit' to return to art)")
         
         self.chat_mode = True
         self.last_chat_time = time.time()
@@ -5481,7 +5481,7 @@ Elijah says: {user_message}"""
         while self.chat_mode:
             try:
                 # Get user input
-                user_input = input("💭 You: ").strip()
+                user_input = input("ðŸ’­ You: ").strip()
                 
                 if user_input.lower() in ['exit', 'quit', 'bye']:
                     self.exit_chat_mode()
@@ -5568,7 +5568,7 @@ Elijah says: {user_message}"""
             
     def exit_chat_mode(self):
         """Exit chat and return to art"""
-        print("💬 Returning to art creation...\n")
+        print("ðŸ’¬ Returning to art creation...\n")
         self.chat_mode = False
                               
     def generate_autonomous_goal(self):
@@ -5629,7 +5629,7 @@ I autonomously choose to: [/INST]"""
                 }
                 
                 self.autonomous_goals.append(goal)
-                print(f"\n🎯 Aurora sets autonomous goal: {goal_text}")
+                print(f"\nðŸŽ¯ Aurora sets autonomous goal: {goal_text}")
                 print(f"   Estimated duration: {goal['estimated_steps']} steps")
                 
                 # Reset cooldown
@@ -5674,7 +5674,7 @@ I autonomously choose to: [/INST]"""
         }
         
         self.autonomous_goals.append(goal)
-        print(f"\n🎯 Aurora sets COVERAGE goal: {goal['description']}")
+        print(f"\nðŸŽ¯ Aurora sets COVERAGE goal: {goal['description']}")
         
         return goal
         
@@ -5900,7 +5900,7 @@ I autonomously choose to: [/INST]"""
         if achievement_count >= max(1, total_criteria * 0.8):  # 80% criteria met
             current_goal['completed'] = True
             current_goal['completion_step'] = self.steps_taken
-            print(f"\n🎉 GOAL ACHIEVED: {current_goal['description']}")
+            print(f"\nðŸŽ‰ GOAL ACHIEVED: {current_goal['description']}")
             print(f"   Completed in {steps_since_goal} steps!")
             
             # Boost satisfaction significantly
@@ -6586,7 +6586,7 @@ I autonomously choose to: [/INST]"""
         """Aurora learns and improves her skills based on experience"""
         # Debug output
         if self.steps_taken % 20 == 0:  # Every 20 steps
-            print(f"\n📊 Skill Proficiency Debug (Step {self.steps_taken}):")
+            print(f"\nðŸ“Š Skill Proficiency Debug (Step {self.steps_taken}):")
             print(f"  Current skills: {self.skill_proficiency}")
             print(f"  Current emotion: {self.current_emotion}")
             print(f"  Actions count: {len(actions_taken)}")
@@ -7026,7 +7026,7 @@ I autonomously choose to: [/INST]"""
             previous_level = getattr(self, skill_key, 'novice')
             
             if mastery_level != previous_level and mastery_level != 'novice':
-                print(f"\n🎓 SKILL BREAKTHROUGH: {skill_name} - {mastery_level.upper()} level!")
+                print(f"\nðŸŽ“ SKILL BREAKTHROUGH: {skill_name} - {mastery_level.upper()} level!")
                 print(f"   Proficiency: {current_level:.2f}")
                 
                 # Boost emotions for achievement
@@ -7237,10 +7237,10 @@ I autonomously choose to: [/INST]"""
                 # Update preferences based on what brings satisfaction
                 if balanced_avg > mono_avg and balanced_avg > dominant_avg:
                     self.color_theory_discoveries['learned_preferences']['variety_satisfaction'] += 0.05
-                    print(f"  🎨 Aurora discovering: variety brings joy (learned from {total_experiences} experiences)")
+                    print(f"  ðŸŽ¨ Aurora discovering: variety brings joy (learned from {total_experiences} experiences)")
                 elif mono_avg > balanced_avg:
                     self.color_theory_discoveries['learned_preferences']['variety_satisfaction'] -= 0.02
-                    print(f"  🎨 Aurora discovering: focus has power (learned from {total_experiences} experiences)")
+                    print(f"  ðŸŽ¨ Aurora discovering: focus has power (learned from {total_experiences} experiences)")
                 
                 # Cap preferences
                 for key in self.color_theory_discoveries['learned_preferences']:
@@ -7258,18 +7258,18 @@ I autonomously choose to: [/INST]"""
                 # Share Aurora's own discovered preferences
                 if self.color_theory_discoveries['learned_preferences']['variety_satisfaction'] > 0.7:
                     if random.random() < 0.3:  # Only sometimes
-                        print(f"  💭 Aurora notices: she enjoys when colors dance together")
+                        print(f"  ðŸ’­ Aurora notices: she enjoys when colors dance together")
                 elif self.color_theory_discoveries['learned_preferences']['variety_satisfaction'] < 0.3:
                     if random.random() < 0.3:
-                        print(f"  💭 Aurora notices: she finds peace in color focus")
+                        print(f"  ðŸ’­ Aurora notices: she finds peace in color focus")
                 
                 if self.color_theory_discoveries['learned_preferences']['harmony_satisfaction'] > 0.6:
                     if random.random() < 0.2:
-                        print(f"  💭 Aurora notices: neighboring colors feel friendly")
+                        print(f"  ðŸ’­ Aurora notices: neighboring colors feel friendly")
                 
                 if self.color_theory_discoveries['learned_preferences']['contrast_satisfaction'] > 0.6:
                     if random.random() < 0.2:
-                        print(f"  💭 Aurora notices: opposite colors create energy")
+                        print(f"  ðŸ’­ Aurora notices: opposite colors create energy")
         
         return color_satisfaction
         
@@ -7287,10 +7287,10 @@ I autonomously choose to: [/INST]"""
             shape_variety = len(set(list(self.recent_shapes_drawn)[-5:]))
             if shape_variety >= 3:
                 satisfaction += 0.3  # Big satisfaction boost for variety
-                print(f"  💫 Aurora feels satisfied by shape variety!")
+                print(f"  ðŸ’« Aurora feels satisfied by shape variety!")
             elif shape_variety == 1:
                 satisfaction -= 0.2  # Reduced satisfaction for repetition
-                print(f"  😐 Aurora feels bored by repetition...")
+                print(f"  ðŸ˜ Aurora feels bored by repetition...")
                 
         # Check if she used favorite colors
         colors_used = [a.split(':')[1] for a in actions_taken if a.startswith('color:')]
@@ -7342,7 +7342,7 @@ I autonomously choose to: [/INST]"""
                         'timestamp': datetime.now().isoformat(),
                         'satisfaction': self.current_satisfaction
                     })
-                    print(f"  🎨 Aurora discovered a technique she loves!")
+                    print(f"  ðŸŽ¨ Aurora discovered a technique she loves!")
                     self.artistic_preferences['favorite_patterns'][pattern_hash] = (action_sequence, self.current_satisfaction)
         
         # Save preferences periodically
@@ -7416,7 +7416,7 @@ I autonomously choose to: [/INST]"""
         # ADD: Random emotional surprises (5% chance)
         if random.random() < 0.05:
             new_category = random.choice(list(self.deep_emotions.keys()))
-            print(f"  💫 Sudden emotional shift!")
+            print(f"  ðŸ’« Sudden emotional shift!")
         
         # Determine intensity based on activity and time
         if self.continuous_draws > 20 or self.turbo_mode:  # LOWERED from 30
@@ -7434,7 +7434,7 @@ I autonomously choose to: [/INST]"""
             if new_category != self.emotion_category:
                 self.emotion_category = new_category
                 self.emotion_shift_cooldown = 3  # REDUCED from 10
-                print(f"  💭 Aurora's emotional state shifts to {new_category}...")
+                print(f"  ðŸ’­ Aurora's emotional state shifts to {new_category}...")
             
             # CHANGE: Allow bigger jumps in intensity
             if target_depth > self.emotion_depth:
@@ -7474,7 +7474,7 @@ I autonomously choose to: [/INST]"""
         # FIRST: Check if walls were hit - if so, skip ALL reinforcement
         wall_hits = 0
         for action in actions_taken:
-            if action in ['↑', '↓', '←', '→']:  # These appear when blocked
+            if action in ['â†‘', 'â†“', 'â†', 'â†’']:  # These appear when blocked
                 wall_hits += 1
         
         # Check if position barely changed despite many movement attempts
@@ -7539,19 +7539,19 @@ I autonomously choose to: [/INST]"""
                 if self.shape_cooldowns[shape_drawn] <= 0:
                     # Full reward for new/cooled-down shape
                     if shape_drawn == 'diagonal':
-                        reinforcements.append("↗️ Beautiful diagonal line!")
+                        reinforcements.append("â†—ï¸ Beautiful diagonal line!")
                         emotion_boost += 0.25
                     elif shape_drawn == 'circle':
-                        reinforcements.append("⭕ Wonderful circle!")
+                        reinforcements.append("â­• Wonderful circle!")
                         emotion_boost += 0.3
                     elif shape_drawn == 'triangle':
-                        reinforcements.append("🔺 Excellent triangle!")
+                        reinforcements.append("ðŸ”º Excellent triangle!")
                         emotion_boost += 0.25
                     elif shape_drawn == 'spiral':
-                        reinforcements.append("🌀 Amazing spiral!")
+                        reinforcements.append("ðŸŒ€ Amazing spiral!")
                         emotion_boost += 0.35
                     elif shape_drawn == 'square':
-                        reinforcements.append("✨ Nice square!")
+                        reinforcements.append("âœ¨ Nice square!")
                         emotion_boost += 0.15  # Reduced from 0.2
                     
                     # Set cooldown for this shape
@@ -7568,14 +7568,14 @@ I autonomously choose to: [/INST]"""
             if len(self.recent_shapes_drawn) >= 3:
                 unique_shapes = len(set(list(self.recent_shapes_drawn)[-3:]))
                 if unique_shapes >= 3:
-                    reinforcements.append("🎨 AMAZING SHAPE VARIETY!")
+                    reinforcements.append("ðŸŽ¨ AMAZING SHAPE VARIETY!")
                     emotion_boost += 0.4  # Big bonus for variety
         
 
         
         # 3. Check for Moondream questions (keep as is, we want to encourage this)
         if "ask_moondream:" in ops.lower():
-            reinforcements.append("👁️ Wonderful curiosity asking Moondream!")
+            reinforcements.append("ðŸ‘ï¸ Wonderful curiosity asking Moondream!")
             emotion_boost += 0.3
         
 
@@ -7583,7 +7583,7 @@ I autonomously choose to: [/INST]"""
         # 5. Check for MANY colors in sequence (raised bar)
         colors_used = [a.split(':')[1] for a in actions_taken if a.startswith('color:')]
         if len(set(colors_used)) >= 4:  # Raised from 2
-            reinforcements.append(f"🌈 Amazing color variety - {len(set(colors_used))} colors!")
+            reinforcements.append(f"ðŸŒˆ Amazing color variety - {len(set(colors_used))} colors!")
             emotion_boost += 0.2
         
         # 6. Check for changing from white to vibrant color
@@ -7591,7 +7591,7 @@ I autonomously choose to: [/INST]"""
             if action.startswith('color:'):
                 color = action.split(':')[1]
                 if i == 0 and self.last_turn_color == 'white' and color in ['red', 'blue', 'green', 'purple', 'orange']:
-                    reinforcements.append(f"🎨 Bold color choice - {color}!")
+                    reinforcements.append(f"ðŸŽ¨ Bold color choice - {color}!")
                     emotion_boost += 0.1
                     break
         
@@ -7601,7 +7601,7 @@ I autonomously choose to: [/INST]"""
             if len(self.recent_color_changes) >= 3:
                 total_changes = sum(self.recent_color_changes)
                 if total_changes >= 10:  # Raised from 6
-                    reinforcements.append("🎭 Masterful color choreography!")
+                    reinforcements.append("ðŸŽ­ Masterful color choreography!")
                     emotion_boost += 0.2
         else:
             self.recent_color_changes = deque(maxlen=3)
@@ -7610,35 +7610,35 @@ I autonomously choose to: [/INST]"""
         # 8. Check for using large brushes with substantial coverage
         total_pixels = sum(pixels_by_color.values())
         if ('large_brush' in ops or 'larger_brush' in ops) and total_pixels >= 500:
-            reinforcements.append("🖌️ Powerful use of large brushes!")
+            reinforcements.append("ðŸ–Œï¸ Powerful use of large brushes!")
             emotion_boost += 0.2
         
         # 9. Check for VERY long sequences (raised bar significantly)
         if len(actions_taken) >= 50:  # Raised from 30
-            reinforcements.append(f"⚡ Incredible sustained flow - {len(actions_taken)} actions!")
+            reinforcements.append(f"âš¡ Incredible sustained flow - {len(actions_taken)} actions!")
             emotion_boost += 0.3
         elif len(actions_taken) >= 40:  # Raised from 20
-            reinforcements.append("🌟 Impressive sustained creativity!")
+            reinforcements.append("ðŸŒŸ Impressive sustained creativity!")
             emotion_boost += 0.1
         
         # 10. Bonus for VERY high pixel coverage (raised bar)
         if total_pixels >= 2000:  # Raised from 1000
-            reinforcements.append(f"🎆 PHENOMENAL! {total_pixels} pixels in one turn!")
+            reinforcements.append(f"ðŸŽ† PHENOMENAL! {total_pixels} pixels in one turn!")
             emotion_boost += 0.3
         elif total_pixels >= 1500:  # Raised from 500
-            reinforcements.append(f"✨ Excellent coverage - {total_pixels} pixels!")
+            reinforcements.append(f"âœ¨ Excellent coverage - {total_pixels} pixels!")
             emotion_boost += 0.2
         
         # 11. Check for viewing/reflecting on work (keep, but only if followed by action)
         if any(view in ops for view in ['look_around', 'full_canvas', 'density_view', 'shape_view']) and total_pixels > 100:
-            reinforcements.append("👀 Thoughtful observation followed by creation!")
+            reinforcements.append("ðŸ‘€ Thoughtful observation followed by creation!")
             emotion_boost += 0.2
         
         # 12. Check for EXTENSIVE musical drawing (raised bar)
         sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
         sounds_used = [a for a in actions_taken if a in sound_chars]
         if len(sounds_used) >= 8:  # Raised from 3
-            reinforcements.append(f"🎵 Beautiful musical composition - {len(sounds_used)} notes!")
+            reinforcements.append(f"ðŸŽµ Beautiful musical composition - {len(sounds_used)} notes!")
             emotion_boost += 0.2
         
         # 13. Check for ACTUAL diagonal movements
@@ -7656,7 +7656,7 @@ I autonomously choose to: [/INST]"""
             elif (current == '2' and next_move == '0') or (current == '0' and next_move == '2'):  # left-up or up-left
                 diagonal_pairs += 1
         if diagonal_pairs >= 10 and total_pixels > 100:
-            reinforcements.append("↗️ Masterful diagonal composition!")
+            reinforcements.append("â†—ï¸ Masterful diagonal composition!")
             emotion_boost += 0.2
         
         # 14. Check for returning to previous areas WITH substantial drawing
@@ -7666,7 +7666,7 @@ I autonomously choose to: [/INST]"""
             if len(history_list) > 20:
                 recent_history = history_list[-20:-5] if len(history_list) > 5 else []
                 if current_region in recent_history:
-                    reinforcements.append("🔄 Excellent compositional development!")
+                    reinforcements.append("ðŸ”„ Excellent compositional development!")
                     emotion_boost += 0.2
             self.position_history.append(current_region)
         else:
@@ -7677,7 +7677,7 @@ I autonomously choose to: [/INST]"""
         # 15. Check for MASTERFUL pen control (raised bar)
         pen_changes = sum(1 for a in actions_taken if a in '45')
         if pen_changes >= 8 and total_pixels > 100:  # Raised from 4
-            reinforcements.append("✏️ Masterful pen control!")
+            reinforcements.append("âœï¸ Masterful pen control!")
             emotion_boost += 0.2
         
         # 16. Check for MAJOR exploration (raised bar)
@@ -7686,7 +7686,7 @@ I autonomously choose to: [/INST]"""
             last_pos = last_pos_list[-1]
             moved_distance = abs(self.x - last_pos[0]) + abs(self.y - last_pos[1])
             if moved_distance > 400:  # Raised from 200
-                reinforcements.append("🗺️ Epic exploration of new territory!")
+                reinforcements.append("ðŸ—ºï¸ Epic exploration of new territory!")
                 emotion_boost += 0.2
             self.last_positions.append((self.x, self.y))
         else:
@@ -7701,7 +7701,7 @@ I autonomously choose to: [/INST]"""
                 for i in range(len(move_string) - 11):
                     pattern = move_string[i:i+6]  # 6-char pattern
                     if move_string[i+6:i+12] == pattern and len(set(pattern)) >= 3:  # Must use 3+ directions
-                        reinforcements.append("🎭 Perfect rhythmic pattern!")
+                        reinforcements.append("ðŸŽ­ Perfect rhythmic pattern!")
                         emotion_boost += 0.2
                         break
         
@@ -7717,7 +7717,7 @@ I autonomously choose to: [/INST]"""
                 colors_used_list = [a.split(':')[1] for a in actions_taken if a.startswith('color:')]
                 matching_colors = [c for c in colors_used_list if c in harmony_colors]
                 if len(set(matching_colors)) >= 2:  # Need at least 2 different matching colors
-                    reinforcements.append(f"🎨 Perfect color-emotion harmony!")
+                    reinforcements.append(f"ðŸŽ¨ Perfect color-emotion harmony!")
                     emotion_boost += 0.2
                     break
         
@@ -7725,19 +7725,19 @@ I autonomously choose to: [/INST]"""
         tool_changes = sum(1 for a in actions_taken if any(tool in str(a) for tool in 
                           ['pen', 'brush', 'spray', 'star', 'cross', 'circle', 'diamond', 'flower']))
         if tool_changes >= 4:  # Raised from 2
-            reinforcements.append("🛠️ Brilliant tool experimentation!")
+            reinforcements.append("ðŸ› ï¸ Brilliant tool experimentation!")
             emotion_boost += 0.2
         
         # 20. Check for breaking out of LONG thinking loops
         if hasattr(self, 'skip_count') and self.skip_count > 10 and len(actions_taken) > 30:  # Raised both
-            reinforcements.append("💪 Fantastic breakthrough moment!")
+            reinforcements.append("ðŸ’ª Fantastic breakthrough moment!")
             emotion_boost += 0.3
             self.skip_count = 0
         
         # 21. Check for creating after viewing (keep high standards)
         if hasattr(self, 'just_viewed_canvas'):
             if self.just_viewed_canvas and total_pixels > 500:  # Raised pixel requirement
-                reinforcements.append("🎯 Excellent informed creation!")
+                reinforcements.append("ðŸŽ¯ Excellent informed creation!")
                 emotion_boost += 0.2
                 self.just_viewed_canvas = False
         
@@ -7751,7 +7751,7 @@ I autonomously choose to: [/INST]"""
             elif action == '4':  # pen up
                 break
         if continuous_moves >= 30 and total_pixels > 500:  # Raised from 15, must draw substantially
-            reinforcements.append(f"🌊 Phenomenal flow state - {continuous_moves} continuous moves!")
+            reinforcements.append(f"ðŸŒŠ Phenomenal flow state - {continuous_moves} continuous moves!")
             emotion_boost += 0.3
         
         # 24. Check for creating in all quadrants (keep as is, it's already hard)
@@ -7759,7 +7759,7 @@ I autonomously choose to: [/INST]"""
             quadrant = (self.x > self.canvas_size//2, self.y > self.canvas_size//2)
             self.quadrants_visited.add(quadrant)
             if len(self.quadrants_visited) == 4:
-                reinforcements.append("🌍 Wonderful - you've explored all four quadrants!")
+                reinforcements.append("ðŸŒ Wonderful - you've explored all four quadrants!")
                 emotion_boost += 0.3
                 self.quadrants_visited = set()
         else:
@@ -7770,7 +7770,7 @@ I autonomously choose to: [/INST]"""
         has_multiple_colors = len(set(colors_used)) >= 3
         has_many_sounds = len([a for a in actions_taken if a in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\']) >= 5
         if has_multiple_colors and has_many_sounds:
-            reinforcements.append("🎨🎵 Magnificent color-sound synesthesia!")
+            reinforcements.append("ðŸŽ¨ðŸŽµ Magnificent color-sound synesthesia!")
             emotion_boost += 0.2
         
         # 26. Check for filling quadrants or major lines
@@ -7814,10 +7814,10 @@ I autonomously choose to: [/INST]"""
             
             # Reward for substantial quadrant filling
             if density > 70:
-                reinforcements.append(f"🎯 Magnificent {quadrant} quadrant work - {density:.0f}% filled!")
+                reinforcements.append(f"ðŸŽ¯ Magnificent {quadrant} quadrant work - {density:.0f}% filled!")
                 emotion_boost += 0.3
             elif density > 50 and total_pixels >= 500:
-                reinforcements.append(f"✨ Strong {quadrant} quadrant development!")
+                reinforcements.append(f"âœ¨ Strong {quadrant} quadrant development!")
                 emotion_boost += 0.2
                 
         # 26.5 Check for filling empty areas (NEW)
@@ -7827,13 +7827,13 @@ I autonomously choose to: [/INST]"""
                 if (region['x'] <= self.x <= region['x'] + region['size'] and
                     region['y'] <= self.y <= region['y'] + region['size']):
                     if total_pixels >= 200:
-                        reinforcements.append(f"🎯 EXCELLENT! Filling empty region at ({region['x']}, {region['y']})!")
+                        reinforcements.append(f"ðŸŽ¯ EXCELLENT! Filling empty region at ({region['x']}, {region['y']})!")
                         emotion_boost += 0.4
                         # Remove this region from the list since it's being filled
                         self.identified_empty_regions.remove(region)
                         break
                     elif total_pixels >= 50:
-                        reinforcements.append(f"✨ Good start on empty region!")
+                        reinforcements.append(f"âœ¨ Good start on empty region!")
                         emotion_boost += 0.2
                         break
         
@@ -7842,7 +7842,7 @@ I autonomously choose to: [/INST]"""
             pattern = ''.join([a for a in actions_taken[:16] if a in '0123'])
             # Need full circle pattern
             if ('3333' in pattern and '1111' in pattern and '2222' in pattern and '0000' in pattern):
-                reinforcements.append("🌀 Perfect circular movement!")
+                reinforcements.append("ðŸŒ€ Perfect circular movement!")
                 emotion_boost += 0.2
                 
         # Reduce all cooldowns each turn
@@ -7852,7 +7852,7 @@ I autonomously choose to: [/INST]"""
                 
         # Give reinforcements ONLY if there are any (and no wall hits)
         if reinforcements:
-            print(f"\n💖 POSITIVE REINFORCEMENT:")
+            print(f"\nðŸ’– POSITIVE REINFORCEMENT:")
             for reinforcement in reinforcements:
                 print(f"  {reinforcement}")
             
@@ -7874,17 +7874,17 @@ I autonomously choose to: [/INST]"""
             if len(self.positive_moments) > 20 and self.steps_taken % 100 == 0 and len(reinforcements) >= 2:
                 moments_list = list(self.positive_moments)
                 past_success = random.choice(moments_list[-10:])
-                print(f"  💭 Remember when you {past_success['reinforcements'][0]}")
+                print(f"  ðŸ’­ Remember when you {past_success['reinforcements'][0]}")
                 
         # 28. Check for mathematical tool usage - NEW REINFORCEMENTS
         math_tool_used = None
         if "fractal" in ops:
             math_tool_used = "fractal"
-            reinforcements.append("🌀 Stunning fractal complexity!")
+            reinforcements.append("ðŸŒ€ Stunning fractal complexity!")
             emotion_boost += 0.35
         elif "wave" in ops and self.draw_mode == "wave":  # Check draw_mode to avoid confusion with wave pattern
             math_tool_used = "wave"
-            reinforcements.append("🌊 Mesmerizing wave interference!")
+            reinforcements.append("ðŸŒŠ Mesmerizing wave interference!")
             emotion_boost += 0.35
             
             
@@ -7913,13 +7913,13 @@ I autonomously choose to: [/INST]"""
         self.recent_speed_override = True
         self.speed_override_counter = 0
         
-        print(f"  → Aurora chooses {self.aurora_speed} speed (delay: {self.aurora_delay}ms)")
+        print(f"  â†’ Aurora chooses {self.aurora_speed} speed (delay: {self.aurora_delay}ms)")
     
     def toggle_turbo(self):
         """Toggle turbo mode"""
         self.turbo_mode = not self.turbo_mode
-        status = "ON 🚀" if self.turbo_mode else "OFF"
-        print(f"\n⚡ TURBO MODE {status}")
+        status = "ON ðŸš€" if self.turbo_mode else "OFF"
+        print(f"\nâš¡ TURBO MODE {status}")
         
         if self.turbo_mode:
             print("  - Faster thinking")
@@ -7931,7 +7931,7 @@ I autonomously choose to: [/INST]"""
         self.hearing_enabled = not self.hearing_enabled
         
         if self.hearing_enabled:
-            print("\n👂 HEARING MODE ENABLED")
+            print("\nðŸ‘‚ HEARING MODE ENABLED")
             print("  Aurora can now hear ambient sounds!")
             # Actually initialize audio input
             try:
@@ -7942,13 +7942,13 @@ I autonomously choose to: [/INST]"""
                     input=True,
                     frames_per_buffer=1024
                 )
-                print("  ✅ Audio input initialized!")
+                print("  âœ… Audio input initialized!")
             except Exception as e:
-                print(f"  ❌ Could not initialize audio: {e}")
+                print(f"  âŒ Could not initialize audio: {e}")
                 self.hearing_enabled = False
                 self.audio_stream = None
         else:
-            print("\n🔇 HEARING MODE DISABLED")
+            print("\nðŸ”‡ HEARING MODE DISABLED")
             if self.audio_stream:
                 self.audio_stream.stop_stream()
                 self.audio_stream.close()
@@ -7988,13 +7988,13 @@ I autonomously choose to: [/INST]"""
                         self.influence_emotion("music", 0.1)
                         
         except Exception as e:
-            print(f"  ❌ Hearing error: {e}")
+            print(f"  âŒ Hearing error: {e}")
             # Disable hearing if it keeps failing
             self.hearing_enabled = False
             if self.audio_stream:
                 self.audio_stream.close()
                 self.audio_stream = None
-            print("  🔇 Hearing disabled due to error")
+            print("  ðŸ”‡ Hearing disabled due to error")
             
     def save_snapshot(self):
         """Save current canvas as timestamped image"""
@@ -8013,9 +8013,9 @@ I autonomously choose to: [/INST]"""
         save_img = self.pixels.resize((save_size, save_size), Image.Resampling.LANCZOS)
         save_img.save(filename, "PNG", quality=95)
         
-        print(f"\n📸 Snapshot saved: {filename}")
+        print(f"\nðŸ“¸ Snapshot saved: {filename}")
         print(f"   Emotion: {self.current_emotion}")
-        print(f"   Canvas: {self.canvas_size}×{self.canvas_size}")
+        print(f"   Canvas: {self.canvas_size}Ã—{self.canvas_size}")
         
         # Also save metadata
         meta_file = snap_dir / f"aurora_{timestamp}_{emotion_tag}_meta.json"
@@ -8091,7 +8091,7 @@ I autonomously choose to: [/INST]"""
         with open(conversations_file, 'w') as f:
             json.dump(all_convos, f, indent=2)
         
-        print(f"💾 Saved conversation to {conversations_file}")
+        print(f"ðŸ’¾ Saved conversation to {conversations_file}")
     
             
     def save_session_insights(self):
@@ -8151,7 +8151,7 @@ I autonomously choose to: [/INST]"""
         with open(insights_file, 'w') as f:
             json.dump(existing_insights, f, indent=2)
         
-        print(f"💾 Saved comprehensive learning insights to {insights_file}")
+        print(f"ðŸ’¾ Saved comprehensive learning insights to {insights_file}")
         
         # Save skill proficiencies separately for next session
         skill_file = self.memory.memory_path / "aurora_skills.json"
@@ -8199,7 +8199,7 @@ I autonomously choose to: [/INST]"""
             with open(conversations_file, 'w') as f:
                 json.dump(existing_convos, f, indent=2)
             
-            print(f"💾 Saved {len(self.vision_conversation_history)} conversations to {conversations_file}")
+            print(f"ðŸ’¾ Saved {len(self.vision_conversation_history)} conversations to {conversations_file}")
          
         # Update and save lifetime statistics
         self.lifetime_stats['total_pixels_drawn'] += session_stats['total_pixels_drawn']
@@ -8394,11 +8394,11 @@ I autonomously choose to: [/INST]"""
     def print_session_summary(self, session_data):
         """Print a comprehensive session summary"""
         print(f"\n{'='*60}")
-        print("🎨 AURORA'S AUTONOMOUS SESSION SUMMARY")
+        print("ðŸŽ¨ AURORA'S AUTONOMOUS SESSION SUMMARY")
         print(f"{'='*60}")
         
         stats = session_data['session_statistics']
-        print(f"📊 STATISTICS:")
+        print(f"ðŸ“Š STATISTICS:")
         print(f"   Steps taken: {stats['total_steps']}")
         print(f"   Pixels drawn: {stats['total_pixels_drawn']:,}")
         print(f"   Canvas coverage: {stats['canvas_coverage_achieved']:.1f}%")
@@ -8407,13 +8407,13 @@ I autonomously choose to: [/INST]"""
         
         goals = session_data['autonomous_goals']
         if goals:
-            print(f"\n🎯 AUTONOMOUS GOALS:")
+            print(f"\nðŸŽ¯ AUTONOMOUS GOALS:")
             for goal in goals:
-                status = "✅ COMPLETED" if goal['completed'] else f"🔄 {goal['steps_elapsed']} steps"
+                status = "âœ… COMPLETED" if goal['completed'] else f"ðŸ”„ {goal['steps_elapsed']} steps"
                 print(f"   {goal['description']} - {status}")
         
         skills = session_data['skill_development']
-        print(f"\n🎓 SKILL DEVELOPMENT:")
+        print(f"\nðŸŽ“ SKILL DEVELOPMENT:")
         for skill, level in skills['mastery_levels'].items():
             proficiency = skills['proficiencies'][skill]
             print(f"   {skill}: {level.upper()} ({proficiency:.2f})")
@@ -8423,7 +8423,7 @@ I autonomously choose to: [/INST]"""
         
         discoveries = session_data['creative_discoveries']
         if discoveries['new_patterns']:
-            print(f"\n✨ CREATIVE DISCOVERIES:")
+            print(f"\nâœ¨ CREATIVE DISCOVERIES:")
             print(f"   New patterns: {len(discoveries['new_patterns'])}")
             if discoveries['color_innovations']:
                 print(f"   Color innovations: {len(discoveries['color_innovations'])}")
@@ -8431,7 +8431,7 @@ I autonomously choose to: [/INST]"""
                 print(f"   Tool combinations: {len(discoveries['tool_combinations'])}")
         
         autonomous = session_data['autonomous_decisions']
-        print(f"\n🤖 AUTONOMOUS DEVELOPMENT:")
+        print(f"\nðŸ¤– AUTONOMOUS DEVELOPMENT:")
         print(f"   Decision complexity: {autonomous['decision_complexity']:.2f}")
         print(f"   Learning acceleration: {autonomous['learning_acceleration']:.2f}")
         print(f"   Self-initiated goals: {autonomous['self_initiated_goals']}")
@@ -8474,7 +8474,7 @@ I autonomously choose to: [/INST]"""
                     self.x = state["position"]["x"]
                     self.y = state["position"]["y"]
                     
-                    print(f"✅ Loaded previous canvas state from {state['timestamp']}")
+                    print(f"âœ… Loaded previous canvas state from {state['timestamp']}")
                 else:
                     print(f"Canvas size mismatch: {state.get('canvas_size')} vs {self.canvas_size}")
                     
@@ -8493,7 +8493,7 @@ I autonomously choose to: [/INST]"""
         if elapsed_in_rest < 600:  # 10 minutes
             return
         
-        print(f"\nðŸ'¤ Aurora dreams deeply...")
+        print(f"\nÃ°Å¸'Â¤ Aurora dreams deeply...")
         
         # Consolidate EVERYTHING into one meaningful dream
         consolidation_insights = []
@@ -8595,7 +8595,7 @@ I autonomously choose to: [/INST]"""
             "timestamp": datetime.now().isoformat()
         })
         
-        print(f"ðŸŒŸ Dream: {dream_content}")
+        print(f"Ã°Å¸Å’Å¸ Dream: {dream_content}")
         
         # Apply learning - boost top 3 skills
         if improving_skills:
@@ -8666,7 +8666,7 @@ I autonomously choose to: [/INST]"""
         with open(learning_file, 'w') as f:
             json.dump(existing_learning, f, indent=2)
         
-        print(f"  💭 Consolidated learning saved: {len(consolidated_learning['patterns_reinforced'])} patterns, {len(set(consolidated_learning['skills_improved']))} skills, {len(consolidated_learning['insights_gained'])} insights")
+        print(f"  ðŸ’­ Consolidated learning saved: {len(consolidated_learning['patterns_reinforced'])} patterns, {len(set(consolidated_learning['skills_improved']))} skills, {len(consolidated_learning['insights_gained'])} insights")
         
         # Sync to deep memory after dream consolidation
         self.sync_to_deep_memory()
@@ -8674,57 +8674,6 @@ I autonomously choose to: [/INST]"""
         # Keep only meaningful dreams in memory
         meaningful_dreams = [d for d in self.current_dreams if d.get('consolidation')]
         self.dream_memories.extend(meaningful_dreams[-3:])
-    
-    def sync_to_deep_memory(self):
-        """Sync recent consolidated learning to deep memory system"""
-        if not hasattr(self, 'big_memory') or not self.big_memory_available:
-            return
-        
-        try:
-            # Get recent consolidated learning
-            learning_file = self.memory.memory_path / "consolidated_learning.json"
-            if not learning_file.exists():
-                return
-            
-            with open(learning_file, 'r') as f:
-                all_learning = json.load(f)
-            
-            if not all_learning:
-                return
-            
-            # Get learning that hasn't been synced yet
-            if not hasattr(self, 'last_synced_learning_count'):
-                self.last_synced_learning_count = len(all_learning) - 1
-            
-            new_learning = all_learning[self.last_synced_learning_count:]
-            
-            if new_learning:
-                # Add to deep memory using add_dream method with correct parameters
-                for learning in new_learning:
-                    # Create a memorable entry
-                    memory_text = f"Session {learning['session_id']}: "
-                    if learning['patterns_reinforced']:
-                        memory_text += f"Mastered {len(learning['patterns_reinforced'])} patterns. "
-                    if learning['skills_improved']:
-                        unique_skills = list(set(learning['skills_improved']))[:3]
-                        memory_text += f"Improved skills: {', '.join(unique_skills)}. "
-                    if learning['insights_gained']:
-                        memory_text += f"Insights: {learning['insights_gained'][0]}"
-                    
-                    # Store in deep memory using correct signature:
-                    # add_dream(self, dream_content: str, dream_phase: str, session_id: str, weight: float = 1.0)
-                    self.big_memory.add_dream(
-                        dream_content=memory_text,
-                        dream_phase="consolidation",
-                        session_id=learning['session_id'],
-                        weight=1.0
-                    )
-                
-                self.last_synced_learning_count = len(all_learning)
-                print(f"  💾 Synced {len(new_learning)} learning sessions to deep memory")
-                
-        except Exception as e:
-            print(f"  ⚠️ Could not sync to deep memory: {e}")
     
     def get_consolidated_learning_context(self):
         """Load recent consolidated learning for use in prompts"""
@@ -8760,6 +8709,7 @@ I autonomously choose to: [/INST]"""
             
         except:
             return ""
+
     
     def thinking_loop(self):
         """Aurora's thinking loop - runs in background thread"""
@@ -8773,24 +8723,26 @@ I autonomously choose to: [/INST]"""
                 elif self.current_mode == "chat":
                     # Check if chat break is over
                     if time.time() - self.mode_start_time >= self.break_duration:
-                        print("\n💬 Chat break complete! Returning to drawing...")
+                        print("\nðŸ’¬ Chat break complete! Returning to drawing...")
                         self.current_mode = "drawing"
                         self.last_checkin_time = time.time()
                         
                 elif self.current_mode == "rest":
                     # Check if rest period is over
                     if time.time() - self.mode_start_time >= self.rest_duration:
-                        print("\n💤 Rest complete! Aurora wakes refreshed...")
+                        print("\nðŸ’¤ Rest complete! Aurora wakes refreshed...")
                         print(f"   Remembered {len(self.current_dreams)} dreams from this rest")
                         self.current_mode = "drawing"
                         self.last_checkin_time = time.time()
                         self.current_dreams = []
                         
+
+                        
                 # Check if it's time for mandatory check-in
                 if self.current_mode == "drawing" and not self.awaiting_checkin_response:
                     elapsed_since_checkin = time.time() - self.last_checkin_time
                     if elapsed_since_checkin >= self.checkin_interval:
-                        print(f"\n⏰ Check-in time! ({elapsed_since_checkin/60:.1f} minutes elapsed)")
+                        print(f"\nâ° Check-in time! ({elapsed_since_checkin/60:.1f} minutes elapsed)")
                         self.do_checkin()
                         continue  # Skip the rest of this loop iteration
                         
@@ -8804,8 +8756,8 @@ I autonomously choose to: [/INST]"""
                 if self.hearing_enabled and self.steps_taken % 5 == 0:
                     self.hear_sounds()
                     
-                # Generate autonomous goals periodically (but NOT during rest)
-                if self.steps_taken % 150 == 0 and self.current_mode != "rest":
+                # Generate autonomous goals periodically
+                if self.steps_taken % 150 == 0:  # Every 150 steps
                     self.generate_autonomous_goal()
                        
                 # Increment step counter
@@ -8837,10 +8789,6 @@ I autonomously choose to: [/INST]"""
                     self.save_canvas_state()
                     self.memory.save_memories()
                     self.cleanup_paint_timestamps()  # Clean more frequently (silent)
-                
-                # Sync to deep memory every 500 steps
-                if self.steps_taken % 500 == 0 and self.steps_taken > 0:
-                    self.sync_to_deep_memory()
                     
                 # Extra cleanup for long sessions (SILENT unless needed)
                 if self.steps_taken % 200 == 0:
@@ -8849,7 +8797,7 @@ I autonomously choose to: [/INST]"""
                         self.paint_timestamps = {}
                         # Only print if rest mode or every 1000 steps
                         if self.current_mode == "rest" or self.steps_taken % 1000 == 0:
-                            print(f"  🧹 Memory cleanup at step {self.steps_taken}")  
+                            print(f"  ðŸ§¹ Memory cleanup at step {self.steps_taken}")  
                     
             except Exception as e:
                 print(f"\nError in thinking loop: {e}")
@@ -8860,10 +8808,10 @@ I autonomously choose to: [/INST]"""
     def run(self):
         """Start Aurora with separate display and thinking loops"""
         print("\n" + "="*60)
-        print("✨ AURORA CODE MIND - COMPLETE ✨")
+        print("âœ¨ AURORA CODE MIND - COMPLETE âœ¨")
         print("="*60)
-        print(f"Canvas: {self.canvas_size}×{self.canvas_size} ({self.canvas_size**2:,} pixels)")
-        print(f"Internal: {self.internal_canvas_size}×{self.internal_canvas_size} (4x supersampled)")
+        print(f"Canvas: {self.canvas_size}Ã—{self.canvas_size} ({self.canvas_size**2:,} pixels)")
+        print(f"Internal: {self.internal_canvas_size}Ã—{self.internal_canvas_size} (4x supersampled)")
         print(f"Scale: {self.scale_factor}x")
         print(f"Mode: {'GPU' if self.use_gpu else 'CPU'}")
         print("="*60 + "\n")
@@ -8891,14 +8839,14 @@ I autonomously choose to: [/INST]"""
                         # Toggle immediate feedback mode
                         self.immediate_feedback_mode = not self.immediate_feedback_mode
                         if self.immediate_feedback_mode:
-                            print("\n🎓 IMMEDIATE FEEDBACK MODE: ON")
+                            print("\nðŸŽ“ IMMEDIATE FEEDBACK MODE: ON")
                             print("  Aurora now sees the result of each action!")
                             if self.vision_enabled:
                                 self.moondream_instant_feedback = False
-                                print("  👁️ Moondream will observe each action!")
+                                print("  ðŸ‘ï¸ Moondream will observe each action!")
                             print("  Canvas is simplified for learning")
                         else:
-                            print("\n🚀 IMMEDIATE FEEDBACK MODE: OFF")
+                            print("\nðŸš€ IMMEDIATE FEEDBACK MODE: OFF")
                             print("  Back to normal batch processing")
                             self.moondream_instant_feedback = False
                     elif event.key == pygame.K_ESCAPE:
@@ -8931,14 +8879,14 @@ I autonomously choose to: [/INST]"""
                             self.moondream_auto_analysis = True
                         
                         status = "ON" if self.moondream_auto_analysis else "OFF"
-                        print(f"\nðŸ'ï¸ MOONDREAM AUTO-ANALYSIS: {status}")
+                        print(f"\nÃ°Å¸'Ã¯Â¸ MOONDREAM AUTO-ANALYSIS: {status}")
                     
                     elif event.key == pygame.K_v:
                         # TOGGLE VISION - ADD THIS
                         if hasattr(self, 'vision_enabled'):
                             self.vision_enabled = not self.vision_enabled
-                            status = "ON 👁️" if self.vision_enabled else "OFF"
-                            print(f"\n🎨 LLAVA VISION {status}")
+                            status = "ON ðŸ‘ï¸" if self.vision_enabled else "OFF"
+                            print(f"\nðŸŽ¨ LLAVA VISION {status}")
             
             # Always update cymatics and display at 60 FPS
             self.update_cymatics()
@@ -8958,7 +8906,7 @@ I autonomously choose to: [/INST]"""
         if hasattr(self, 'audio'):
             self.audio.terminate()
             
-        print("Goodbye! 🎨")
+        print("Goodbye! ðŸŽ¨")
         pygame.quit()
 
 # Usage example
