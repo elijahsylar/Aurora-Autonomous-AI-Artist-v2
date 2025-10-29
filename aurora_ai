@@ -1,4 +1,10 @@
-from llama_cpp import Llama
+try:
+    from llama_cpp import Llama
+    LLAMA_AVAILABLE = True
+except ImportError:  # pragma: no cover - handled gracefully at runtime
+    Llama = None
+    LLAMA_AVAILABLE = False
+    print("❌ The `llama_cpp` package is not installed. Aurora will start without the local LLM.")
 from pathlib import Path
 import pygame
 import os
@@ -248,7 +254,14 @@ class AuroraCodeMindComplete:
     """
     def __init__(self, model_path, use_gpu=True, gpu_layers=10):
         print("Initializing AuroraCodeMindComplete...")
-        
+
+        if not LLAMA_AVAILABLE:
+            raise RuntimeError(
+                "llama_cpp is required to run Aurora's local language model. "
+                "Install the package and ensure native dependencies are available "
+                "before launching."
+            )
+
         # Detect GPU and set layers
         if use_gpu:
             print(" GPU Mode Enabled!")
