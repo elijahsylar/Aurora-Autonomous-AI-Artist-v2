@@ -3,7 +3,6 @@ from pathlib import Path
 import pygame
 import os
 os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
-# DON'T call pygame.init() yet! We need to initialize the mixer first with correct settings!
 
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 import json
@@ -28,7 +27,6 @@ except Exception as e:
     print(f"Error: {e}")
     DEEP_MEMORY_AVAILABLE = False
     
-# LLAVA VISION IMPORTS - ADD RIGHT HERE
 try:
     from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
     import torch
@@ -39,7 +37,7 @@ except ImportError:
     LLAVA_AVAILABLE = False
       
 class SimpleMemorySystem:
-    """A simple memory system for Aurora to access and store her own memories.
+    """A simple memory system for Aurora to access and store Aurora's memories.
 
     Provides basic memory file management, drawing and code history, and canvas-specific storage.
     """
@@ -82,7 +80,7 @@ class SimpleMemorySystem:
         self.canvas_path.mkdir(exist_ok=True)
         
     def read_memory(self, filename):
-        """Aurora can read her own memory files"""
+        """Aurora can read Aurora's memory files"""
         if filename in self.available_memories:
             try:
                 with open(self.available_memories[filename], 'r') as f:
@@ -137,7 +135,7 @@ class SimpleMemorySystem:
             try:
                 with open(dreams_file, 'r') as f:
                     dream_data = json.load(f)
-                    # We'll load these into Aurora when she initializes
+                    # We'll load these into Aurora during initialization
                     self.loaded_dreams = dream_data
                     print(f"Found {len(dream_data)} dream memories")
             except Exception as e:
@@ -281,7 +279,7 @@ class AuroraCodeMindComplete:
         screen_height = 1080  # Default assumption
         
         # Canvas - adjust size based on screen (much smaller pixels now!)
-        self.scale_factor = 2.0  # Lower scale_factor means smaller pixels and higher canvas resolution; e.g., 1.6 gives more pixels than 8.
+        self.scale_factor = 2.0  # Lower scale_factor means smaller pixels and higthe canvas resolution; e.g., 1.6 gives more pixels than 8.
         self.initial_scale_factor = self.scale_factor  # Store the starting scale factor
         self.canvas_size = min(int(screen_width / self.scale_factor) - 50, 
                                int(screen_height / self.scale_factor) - 50)
@@ -304,6 +302,9 @@ class AuroraCodeMindComplete:
             'first_session': datetime.now().isoformat(),
             'sessions_count': 0
         }
+        # Track what's been saved to prevent double-counting
+        self.last_saved_pixels = 0
+        self.last_saved_steps = 0
         print(f"3. Canvas settings done - Size: {self.canvas_size}x{self.canvas_size} ({self.scale_factor}x scale)")
         
         # Expanded color palette with full word codes
@@ -497,7 +498,7 @@ class AuroraCodeMindComplete:
                     self.emotion_memory = deque(saved_emotions[-50:], maxlen=50)  # Keep last 50
                     if self.emotion_memory:
                         last_emotion = self.emotion_memory[-1]
-                        # Start with the emotion she ended with
+                        # Start with the last recorded emotion
                         self.current_emotion = last_emotion.get('emotion', 'curious')
                         self.emotion_category = last_emotion.get('category', 'curiosity')
                         print(f" Aurora remembers feeling {self.current_emotion} last time")
@@ -558,7 +559,6 @@ class AuroraCodeMindComplete:
                 print(f"  User identity loaded: {identity.get('name', 'Unknown')}")
         print("")
         # Connect to Big Aurora's deep memory
-        # ADD THIS BLOCK RIGHT AFTER memory system creation:
 
         if DEEP_MEMORY_AVAILABLE:
             try:
@@ -698,7 +698,7 @@ class AuroraCodeMindComplete:
         # Immediate feedback learning mode - start with it ON
         self.immediate_feedback_mode = True
         print(" IMMEDIATE FEEDBACK MODE: ON - Aurora sees each action's result!")
-        self.moondream_instant_feedback = False  # Moondream comments on every action in feedback mode
+        self.moondream_instant_feedback = True  # Moondream comments on every action in feedback mode
         print(" MOONDREAM INSTANT FEEDBACK: ON - Moondream observes each action!")
         # Check-in system initialization
         self.last_checkin_time = time.time()
@@ -931,15 +931,14 @@ class AuroraCodeMindComplete:
             
         # Cymatics system
         self.cymatic_circles = []
-        self.current_pitch = 'normal'  # ADD THIS - tracks current pitch mode
+        self.current_pitch = 'normal'  
 
         
-        # Sound duration control (in seconds) - ADD THESE THREE LINES
+        # Sound duration control 
         self.note_duration = 0.15  # Default duration
         self.min_duration = 0.05   # Minimum 50ms
         self.max_duration = 1.0    # Maximum 1 second
         
-        # LLAVA VISION SYSTEM - ADD THIS ENTIRE BLOCK HERE
         print("8c. Initializing vision system...")
         self.vision_enabled = False
         
@@ -955,6 +954,9 @@ class AuroraCodeMindComplete:
             'connected_marks': []
         }
         self.conversation_turn = 0
+        
+        # Track canvas state for delta detection
+        self.last_moondream_canvas_state = "Empty black canvas"
         
         if LLAVA_AVAILABLE:
             try:
@@ -1001,7 +1003,6 @@ class AuroraCodeMindComplete:
         self.setup_display()
         print("10. Display setup complete")
         
-    # CLASS METHODS - These must be OUTSIDE __init__, at the same level as def __init__
     
     def _generate_lofi_sounds(self, freq, sample_rate):
         """Generate REAL musical lofi sounds using Karplus-Strong physical modeling"""
@@ -1164,6 +1165,118 @@ class AuroraCodeMindComplete:
     def _scale_from_internal(self, coord):
         """Convert internal supersampled coordinates to display coordinates"""
         return coord // self.supersample_factor
+    
+    def _get_effective_tool_size(self, base_canvas_units, min_chars=1):
+        """
+        Convert tool size from canvas units to internal pixels, automatically
+        scaling up to maintain visibility in ASCII grid at any zoom level.
+        
+        Args:
+            base_canvas_units: Desired size in canvas coordinate pixels
+            min_chars: Minimum number of ASCII characters the tool should occupy (default: 1)
+        
+        Returns:
+            Size in internal pixels that will be visible in ASCII grid
+        """
+        # Calculate current ASCII grid step size
+        if self.canvas_size <= 100:
+            step = 1
+        elif self.canvas_size <= 200:
+            step = 2
+        elif self.canvas_size <= 400:
+            step = 4
+        elif self.canvas_size <= 800:
+            step = 8
+        else:
+            step = self.canvas_size // 100
+        
+        # Calculate minimum canvas pixels needed for desired ASCII character width
+        min_canvas_pixels = step * min_chars
+        
+        # Use the larger of: desired size or minimum for visibility
+        actual_canvas_pixels = max(base_canvas_units, min_canvas_pixels)
+        
+        # Convert to internal pixels
+        return actual_canvas_pixels * self.supersample_factor
+    
+    def _get_canvas_step_size(self):
+        """Get the current ASCII grid sampling step size"""
+        if self.canvas_size <= 100:
+            return 1
+        elif self.canvas_size <= 200:
+            return 2
+        elif self.canvas_size <= 400:
+            return 4
+        elif self.canvas_size <= 800:
+            return 8
+        else:
+            return self.canvas_size // 100
+    
+    def _get_tool_visibility_info(self, tool_name):
+        """
+        Get visibility information for a tool at current canvas size.
+        Useful for Aurora's self-awareness of Aurora's tools.
+        
+        Returns: dict with visibility status
+        """
+        step = self._get_canvas_step_size()
+        
+        # Tool sizes in canvas units (before supersample)
+        tool_sizes = {
+            'pen_min': 3,
+            'pen_max': 25,
+            'brush': 12,
+            'large_brush': 20,
+            'larger_brush': 28,
+            'spray': 15,
+            'watercolor': 14,
+            'charcoal': 16,
+            'glow': 10
+        }
+        
+        if tool_name not in tool_sizes:
+            return {'visible': False, 'reason': 'Unknown tool'}
+        
+        canvas_pixels = tool_sizes[tool_name]
+        ascii_chars = canvas_pixels / step
+        
+        return {
+            'visible': ascii_chars >= 1,
+            'ascii_chars': ascii_chars,
+            'canvas_pixels': canvas_pixels,
+            'step_size': step,
+            'status': (
+                'INVISIBLE' if ascii_chars < 0.5 else
+                'BARELY_VISIBLE' if ascii_chars < 1 else
+                'MARGINAL' if ascii_chars < 2 else
+                'VISIBLE'
+            )
+        }
+    
+    def _get_tool_status_message(self):
+        """Get current tool visibility status for Aurora's awareness"""
+        tool_map = {
+            'pen': 'pen_min',  # Use minimum size for conservative estimate
+            'brush': 'brush',
+            'large_brush': 'large_brush',
+            'larger_brush': 'larger_brush',
+            'spray': 'spray',
+            'watercolor': 'watercolor'
+        }
+        
+        if self.draw_mode not in tool_map:
+            return ""
+        
+        info = self._get_tool_visibility_info(tool_map[self.draw_mode])
+        
+        if info['status'] == 'INVISIBLE':
+            return f"⚠️ Current tool ({self.draw_mode}) may be INVISIBLE in ASCII grid at this zoom level!"
+        elif info['status'] == 'BARELY_VISIBLE':
+            return f"⚠️ Current tool ({self.draw_mode}) is BARELY VISIBLE (~{info['ascii_chars']:.1f} chars)"
+        elif info['status'] == 'MARGINAL':
+            return f"ℹ️ Current tool ({self.draw_mode}) is visible as ~{info['ascii_chars']:.1f} characters"
+        else:
+            return ""  # Don't clutter output when everything is fine
         
     def _mix_colors(self, color1, color2, ratio):
         """Mix two colors based on ratio (0=all color1, 1=all color2)"""
@@ -1265,7 +1378,7 @@ class AuroraCodeMindComplete:
             if hardness == 1.0:
                 opacity = 255 if i == 1 else 0  # Full opacity only at very center
             else:
-                # FIXED: Inverted - smaller i (center) gets higher opacity
+                # Center gets higher opacity (inverted from edge)
                 center_strength = 1 - (i / size)  # 0 at edge, 1 at center
                 opacity = int(255 * (center_strength ** (hardness + 0.1)))
                 # Add some randomness for paint texture
@@ -1655,20 +1768,35 @@ Combine for complex paths"""
         
         
     def see_immediate_change(self, action, old_x, old_y):
-        """Show Aurora EXACTLY what her last action did - with FULL CANVAS view!"""
+        """Show Aurora EXACTLY what the last action did - with FULL CANVAS view!"""
         
         feedback = []
         feedback.append("=" * 60)
         
-        # Tell her exactly what she did
+        # Check if position actually changed (wall detection)
+        position_changed = (self.x != old_x or self.y != old_y)
+        
+        # Indicate exactly what was done
         if action == '0':
-            feedback.append(f"You moved UP from ({old_x},{old_y}) to ({self.x},{self.y})")
+            if position_changed:
+                feedback.append(f"You moved UP from ({old_x},{old_y}) to ({self.x},{self.y})")
+            else:
+                feedback.append(f"No marks made, edge of canvas at ({self.x},{self.y})")
         elif action == '1':
-            feedback.append(f"You moved DOWN from ({old_x},{old_y}) to ({self.x},{self.y})")
+            if position_changed:
+                feedback.append(f"You moved DOWN from ({old_x},{old_y}) to ({self.x},{self.y})")
+            else:
+                feedback.append(f"No marks made, edge of canvas at ({self.x},{self.y})")
         elif action == '2':
-            feedback.append(f"You moved LEFT from ({old_x},{old_y}) to ({self.x},{self.y})")
+            if position_changed:
+                feedback.append(f"You moved LEFT from ({old_x},{old_y}) to ({self.x},{self.y})")
+            else:
+                feedback.append(f"No marks made, edge of canvas at ({self.x},{self.y})")
         elif action == '3':
-            feedback.append(f"You moved RIGHT from ({old_x},{old_y}) to ({self.x},{self.y})")
+            if position_changed:
+                feedback.append(f"You moved RIGHT from ({old_x},{old_y}) to ({self.x},{self.y})")
+            else:
+                feedback.append(f"No marks made, edge of canvas at ({self.x},{self.y})")
         elif action == '4':
             feedback.append("You LIFTED the pen - no longer drawing")
         elif action == '5':
@@ -1677,9 +1805,9 @@ Combine for complex paths"""
             color_name = action.split(':')[1]
             feedback.append(f"You changed color to {color_name.upper()}")
         
-        # Show if she drew
+        # Show if drawing occurred (only if position actually changed)
         if self.is_drawing and action in '0123':
-            if (self.x, self.y) != (old_x, old_y):
+            if position_changed:
                 feedback.append(f" You DREW a {self.current_color_name} line!")
         
         # FULL CANVAS VIEW - compressed to fit
@@ -1711,7 +1839,7 @@ Combine for complex paths"""
         for y in range(0, self.canvas_size, step):
             row = ""
             for x in range(0, self.canvas_size, step):
-                # Check if Aurora is here
+                # Check if Aurora is at this position
                 if abs(x - self.x) < step and abs(y - self.y) < step:
                     row += "@"  # Aurora's position
                 else:
@@ -2361,145 +2489,59 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
         }    
         
     def get_instant_moondream_reflection(self, action, old_x, old_y):
-        """Get Moondream's literal observation of Aurora's drawing progression"""
-        if not self.vision_enabled:
+        """Accurate feedback - describe what Aurora ACTUALLY did based on executed code"""
+        if not self.moondream_instant_feedback:
             return ""
             
         try:
-            # Track recent drawing context
-            if not hasattr(self, 'moondream_action_context'):
-                self.moondream_action_context = {
-                    'recent_positions': deque(maxlen=10),
-                    'recent_colors': deque(maxlen=5),
-                    'current_line_start': None,
-                    'lines_drawn': 0,
-                    'last_direction': None
-                }
+            # Build accurate description from actual executed action
+            feedback = ""
             
-            # Check if there was actual movement
-            actual_movement = abs(self.x - old_x) + abs(self.y - old_y)
-            
-            # Don't comment if no movement happened (hit wall)
-            if action in '0123' and actual_movement == 0:
-                return ""
-            
-            # Create canvas image for Moondream
-            display_size = 224
-            actual_canvas = self.pixels.resize(
-                (self.canvas_size, self.canvas_size),
-                Image.Resampling.LANCZOS
-            )
-            canvas_image = actual_canvas.resize(
-                (display_size, display_size),
-                Image.Resampling.NEAREST
-            ).convert("RGB")
-            
-            # Enhance for better visibility
-            enhancer = ImageEnhance.Contrast(canvas_image)
-            canvas_image = enhancer.enhance(2.0)
-            enhancer = ImageEnhance.Brightness(canvas_image)
-            canvas_image = enhancer.enhance(1.2)
-            
-            # Encode image
-            enc_image = self.vision_model.encode_image(canvas_image)
-            
-            # Build literal DESCRIPTIVE prompts (not questions)
-            question = ""
-            
-            # Track position for context
-            self.moondream_action_context['recent_positions'].append((self.x, self.y))
-            
-            # Determine direction of movement
-            direction = ""
-            if action == '0':
-                direction = "upward"
-                self.moondream_action_context['last_direction'] = "up"
-            elif action == '1':
-                direction = "downward"
-                self.moondream_action_context['last_direction'] = "down"
-            elif action == '2':
-                direction = "leftward"
-                self.moondream_action_context['last_direction'] = "left"
-            elif action == '3':
-                direction = "rightward"
-                self.moondream_action_context['last_direction'] = "right"
-            
-            # Create specific DESCRIPTIVE prompts based on action
             if action in '0123' and self.is_drawing:
-                # Drawing movement - describe the LINE being drawn
-                color_desc = self.current_color_name
+                # Drawing movement
+                direction_map = {
+                    '0': 'upward',
+                    '1': 'downward', 
+                    '2': 'left',
+                    '3': 'right'
+                }
+                direction = direction_map.get(action, '')
+                feedback = f"You drew a {self.current_color_name} {self.draw_mode} mark {direction}"
                 
-                # Track if this is continuation or new line
-                if self.moondream_action_context['current_line_start'] is None:
-                    self.moondream_action_context['current_line_start'] = (old_x, old_y)
-                    question = f"Describe the {color_desc} mark extending {direction} and any connections it makes."
-                else:
-                    # Continuing a line
-                    positions = list(self.moondream_action_context['recent_positions'])
-                    if len(positions) >= 3:
-                        # Check if line is straight or turning
-                        recent_moves = []
-                        for i in range(len(positions)-1):
-                            if positions[i+1][0] > positions[i][0]:
-                                recent_moves.append('right')
-                            elif positions[i+1][0] < positions[i][0]:
-                                recent_moves.append('left')
-                            elif positions[i+1][1] > positions[i][1]:
-                                recent_moves.append('down')
-                            elif positions[i+1][1] < positions[i][1]:
-                                recent_moves.append('up')
-                        
-                        if len(set(recent_moves)) == 1:
-                            question = f"Describe the {color_desc} line continuing straight {direction}."
-                        else:
-                            question = f"Describe the {color_desc} line turning {direction}."
-                    else:
-                        question = f"Describe the {color_desc} line extending {direction}."
-                        
             elif action == '4':
                 # Pen lifted
-                self.moondream_action_context['current_line_start'] = None
-                question = "Describe what shape or line was just completed."
+                feedback = "You lifted the pen"
                 
             elif action == '5':
                 # Pen down
-                self.moondream_action_context['current_line_start'] = (self.x, self.y)
-                question = f"Describe the marks near the pen's new position."
+                feedback = f"You put the pen down at ({self.x}, {self.y})"
                 
             elif action.startswith('color:'):
+                # Color change
                 color_name = action.split(':')[1]
-                self.moondream_action_context['recent_colors'].append(color_name)
-                question = f"Describe any {color_name} marks visible on the canvas."
+                feedback = f"You switched to {color_name}"
+                
+            elif action == 'star':
+                feedback = f"You stamped a {self.current_color_name} star at ({self.x}, {self.y})"
+                
+            elif action == 'circle':
+                feedback = f"You stamped a {self.current_color_name} circle at ({self.x}, {self.y})"
                 
             else:
-                # Default prompt
-                question = "Describe the lines and marks visible, their positions and connections."
+                # Movement without drawing
+                if action in '0123':
+                    direction_map = {
+                        '0': 'upward',
+                        '1': 'downward',
+                        '2': 'left', 
+                        '3': 'right'
+                    }
+                    direction = direction_map.get(action, '')
+                    feedback = f"You moved {direction} to ({self.x}, {self.y})"
             
-            # Get response with literal focus
-            response = self.vision_model.answer_question(
-                enc_image, 
-                question, 
-                self.vision_tokenizer,
-                max_new_tokens=15  # Short but descriptive
-            )
-            
-            # Clean up response to be more literal
-            response = response.strip()
-            
-            # Filter out yes/no answers and overly imaginative responses
-            imagination_words = ['flying', 'falling', 'dancing', 'floating', 'magical', 'dreams', 'sky', 'yes,', 'no,']
-            response_lower = response.lower()
-            if any(word in response_lower for word in imagination_words):
-                # Ask a more direct descriptive prompt
-                question = "Describe only the lines and marks visible."
-                response = self.vision_model.answer_question(
-                    enc_image, 
-                    question, 
-                    self.vision_tokenizer,
-                    max_new_tokens=20
-                )
-            
-            return f"Moondream: {response.strip()}"
+            if feedback:
+                return f"Moondream: {feedback}"
+            return ""
             
         except Exception as e:
             return ""  # Silent fail to not interrupt flow
@@ -2576,23 +2618,24 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
             # Encode image
             enc_image = self.vision_model.encode_image(canvas_image)
             
-            # Craft detailed prompt for abstract art analysis
-            question = """This is an abstract digital artwork in progress. Describe what you see in detail:
-- What colors are most prominent and how are they distributed?
-- What patterns, shapes, or structures are emerging?
-- What is the overall composition - dense/sparse, balanced/asymmetric?
-- What emotions or energy does the piece convey?
-- What areas are most developed vs still empty?
-Be specific and descriptive."""
+            # FULL canvas description - this resets/updates the baseline state
+            question = "Describe the FULL canvas using ONLY color names and basic shapes (lines, dots, marks, areas, clusters). Do not mention objects."
             
             response = self.vision_model.answer_question(
                 enc_image, 
                 question, 
                 self.vision_tokenizer,
-                max_new_tokens=150  # Longer for detailed description
+                max_new_tokens=150
             )
             
-            return response.strip()
+            response = response.strip()
+            
+            # THIS is where we update state - with comprehensive full description
+            if response:
+                self.last_moondream_canvas_state = response
+                print(f"\n[State updated: {response}]\n")
+            
+            return response
             
         except Exception as e:
             print(f"Vision error: {e}")
@@ -2903,7 +2946,7 @@ Be specific and descriptive."""
                     # Encode the image
                     enc_image = self.vision_model.encode_image(artwork_for_vision)
                     
-                    # Aurora asks herself questions about Elijah's art
+                    # Aurora generates questions about Elijah's art
                     questions_and_responses = []
                     
                     # Question 1: Overall impression
@@ -2973,7 +3016,7 @@ Be specific and descriptive."""
             except Exception as e:
                 print(f"    Error studying this artwork: {e}")
         
-        # Aurora reflects on what she learned from Elijah's art
+        # Aurora reflects on what was learned from Elijah's art
         if studied_insights:
             self.reflect_on_elijahs_art(studied_insights)
         
@@ -3034,7 +3077,7 @@ Be specific and descriptive."""
             print(f"      - I'm inspired by Elijah's techniques!")
     
     def reflect_on_elijahs_art(self, studied_insights):
-        """Aurora reflects on what she learned from studying Elijah's paintings"""
+        """Aurora reflects on what was learned from studying Elijah's paintings"""
         print("\n Aurora's reflection on Elijah's artwork:")
         
         # Build context for reflection
@@ -3120,7 +3163,7 @@ My thoughts on Elijah's art: [/INST]"""
      
     
     def think_in_code(self):
-        """Aurora outputs direct operation codes - she presses buttons, not types words"""
+        """Aurora outputs direct operation codes - Aurora executes commands, not types words"""
         think_start = time.time()
         
         # Get consolidated learning from dreams/rest EARLY - before any conditionals
@@ -3180,7 +3223,6 @@ What would you like to do?"""
                 choice = response['choices'][0]['text'].strip().upper()
                 print(f"Aurora's response: '{choice}'")
                 
-                # FIXED: Look for keywords anywhere in response
                 if "CHAT" in choice:
                     print(f"\n Aurora chose: CHAT MODE")
                     print("Entering 20-minute conversation mode...")
@@ -3198,7 +3240,7 @@ What would you like to do?"""
                     self.sleep_phase_start = time.time()
                     self.current_dreams = []  # Clear dreams for new session
                 
-                    # Show her the full canvas before sleeping
+                    # Display the full canvas before sleeping
                     wide_view = self.get_compressed_canvas_view()
                     print("\nFull canvas view before dreaming:")
                     print(wide_view)
@@ -3262,7 +3304,7 @@ What have you discovered? What are you thinking about?"""
                     
                     aurora_says = response['choices'][0]['text'].strip()
                     print(f"\n Aurora says:\n{aurora_says}\n")
-                    print("(Aurora is now quietly contemplating... She'll check in again in a bit)")
+                    print("(Aurora is now quietly contemplating... Aurora will check in again in a bit)")
                     
                     self.chat_message_count += 1
                     # Chats affect emotions based on what Aurora expressed
@@ -3492,20 +3534,43 @@ Current view:
             print("   Starting natural dialogue...\n")
             
             # PRE-WRITTEN ESSENTIAL QUESTIONS - grounded in actual canvas state
+            # ARTISTIC SELF-EVALUATION QUESTIONS - organized by category
             essential_questions = [
-                "You're at position ({x}, {y}) on the canvas. What made you move to this area?",
-                "You're currently using {color}. Why did you choose this color right now?",
-                "I see the canvas is {coverage:.0f}% filled. How does that feel?",
-                "You just drew {pixels} pixels. What were you trying to create?",
-                "Your pen is currently {pen_state}. What are you planning next?",
-                "You've been working for {steps} steps. What's your main focus right now?",
-                "Looking at your recent movements, what pattern were you exploring?",
-                "The canvas has these colors: {colors_used}. Which one speaks to you most?",
-                "You're feeling {emotion}. How is that influencing your marks?",
-                "What part of the canvas are you most drawn to continue working on?",
-                "If you could describe what you're creating in one word, what would it be?",
-                "What's the most challenging part of what you're working on right now?",
-                "Is there a specific feeling or idea you're trying to express?"
+                # COMPOSITIONAL AWARENESS
+                "Looking at the overall composition, is it balanced or are you creating intentional tension?",
+                "What's happening in the negative space - the areas you haven't touched yet?",
+                "Are you building contrast or harmony with your recent marks?",
+                "If you stepped back right now, what would be the focal point?",
+                
+                # PROCESS AND INTENTION
+                "How does this mark relate to what you created 50 steps ago?",
+                "Are you following a plan or discovering as you go?",
+                "What would happen if you inverted your current approach?",
+                "Is this piece evolving the way you expected, or surprising you?",
+                
+                # COLOR AND EMOTION
+                "You're using {color}. What emotion are you expressing through this choice?",
+                "The canvas has {colors_used}. Are these colors in dialogue or in conflict?",
+                "What color is missing that the piece needs?",
+                "You're feeling {emotion}. Is your work reflecting or contrasting that feeling?",
+                
+                # CRITICAL SELF-ASSESSMENT
+                "What's working in this piece so far?",
+                "What area needs more attention or development?",
+                "If you could change one thing about what you've created, what would it be?",
+                "Is there too much or too little happening in any particular region?",
+                
+                # FORWARD MOMENTUM
+                "Should you continue this direction or pivot to something different?",
+                "What's the next most important area to develop?",
+                "Are you creating a finished piece or exploring an idea?",
+                "At {coverage:.0f}% coverage, is this piece just beginning or nearing completion?",
+                
+                # SPATIAL AND STRUCTURAL
+                "You're at ({x}, {y}). What draws you to work in this specific area?",
+                "Looking at the canvas edges - do they feel active or quiet?",
+                "Are you building outward from a center or working from the edges inward?",
+                "What patterns or rhythms are emerging in your mark-making?"
             ]
             
             conversation = []
@@ -3655,7 +3720,6 @@ Colors: {', '.join(f'{c}:{n}' for c,n in colors.items()) if colors else 'none'}
 Nearest empty area: {nearest_empty}"""
         
         
-        # ADD THIS: Get inspiration from Big Aurora's memories
         memory_inspiration = ""
 
         if hasattr(self, 'big_memory') and self.big_memory and self.big_memory_available:
@@ -4008,7 +4072,7 @@ Make autonomous choices that advance YOUR goals and develop YOUR skills."""
 
 Output movement/color codes:"""
 
-        # Sometimes give Aurora a wider view to see her overall work
+        # Sometimes give Aurora a wider view to see the overall work
         if self.steps_taken % 50 == 0:  # Every 50 steps
             overview = self.get_canvas_overview()  # Define overview FIRST
             wide_vision = self.see(zoom_out=True)   # Then get wide vision
@@ -4083,7 +4147,7 @@ Output movement/color codes:"""
         if recent_patterns:
             non_skip_patterns = [p for p in recent_patterns[-3:] if "0123456789" not in p]
             if non_skip_patterns and len(set(non_skip_patterns)) == 1:
-                # She's repeating actual drawing patterns! Encourage change with rotating inspiration
+                # Repeating actual drawing patterns! Encourage change with rotating inspiration
                 pattern_index = self.steps_taken % len(creativity_boosters)
                 system_prompt += "\nYou've been repeating! Try something NEW and DIFFERENT!"
                 system_prompt += f"\nInspiration: {creativity_boosters[pattern_index]}"
@@ -4149,7 +4213,7 @@ Output movement/color codes:"""
             # PARSE STRUCTURED EXPRESSION: thought  feeling  action
             structured_expression = self.parse_structured_expression(raw_output)
             if structured_expression:
-                # Aurora expressed herself in structured format!
+                # Aurora expressed in structured format!
                 print(f"\n Aurora's THOUGHT: {structured_expression.get('thought', 'processing...')}")
                 print(f" Aurora's FEELING: {structured_expression.get('feeling', 'uncertain')}")
                 print(f" Aurora's INTENTION: {structured_expression.get('intention', 'exploring')}")
@@ -4320,7 +4384,7 @@ Output movement/color codes:"""
                 # Show normal view first
                 wide_view = self.get_compressed_canvas_view()
                 overview = self.get_canvas_overview()
-                print(f"   Aurora looks around at her canvas:")
+                print(f"   Aurora looks around at the canvas:")
                 print(overview)
                 print("\n=== NORMAL VIEW ===")
                 print(wide_view)
@@ -4354,22 +4418,22 @@ Output movement/color codes:"""
                 else:
                     self.influence_emotion("artwork", -0.2)  # Empty canvas is contemplative
                     
-                # Give her a moment to process what she sees
+                # Allow processing time what Aurora sees
                 self.skip_count += 1
-                self.just_viewed_canvas = True  # ADD THIS LINE HERE
+                self.just_viewed_canvas = True  
                 return
                 
             # Check for full canvas view command
             if "full_canvas" in raw_output:
                 full_view = self.see(full_canvas=True)  # Use the actual method!
                 overview = self.get_canvas_overview()
-                print(f"   Aurora views her ENTIRE canvas:")
+                print(f"   Aurora views the ENTIRE canvas:")
                 print(overview)
                 print(full_view)
                 raw_output = raw_output.replace("full_canvas", "", 1)
-                # Give her a moment to process what she sees
+                # Allow processing time what Aurora sees
                 self.skip_count += 1
-                self.just_viewed_canvas = True  # ADD THIS LINE HERE
+                self.just_viewed_canvas = True  
                 return
                 
             # Check for center/teleport command
@@ -4452,7 +4516,7 @@ Output movement/color codes:"""
             if "examples" in raw_output:
                 examples = self.get_ascii_art_examples()
                 
-                # Build examples text that Aurora will see in her next vision
+                # Build examples text that Aurora will see in Aurora's next vision
                 examples_text = "\n=== MOVEMENT DISCOVERIES ===\n"
                 example_keys = list(examples.keys())
                 # Show 3 random examples to avoid overwhelming
@@ -4468,7 +4532,7 @@ Output movement/color codes:"""
                 print(f"   Aurora examines movement discoveries")
                 
                 raw_output = raw_output.replace("examples", "", 1)
-                # Don't skip - let her continue with this knowledge
+                # Don't skip - allow continuation with this knowledge
                 
             
                 
@@ -4587,7 +4651,7 @@ Output movement/color codes:"""
                 raw_output = raw_output.replace("glow", "", 1)
                 
             # Check for sound type changes - DISABLED to keep lofi as permanent default
-            # Uncomment these if you want Aurora to switch sound types based on her output
+            # Uncomment these if you want Aurora to switch sound types based on Aurora's output
             # if "synth" in raw_output:
             #     self.current_sound_type = "synth"
             #     print("   Aurora switches to SYNTH sounds! (Karplus-Strong synthesis)")
@@ -4677,13 +4741,16 @@ Output movement/color codes:"""
             ops = ops_clean[:40]  # Only process first 40 characters
             
             print(f"\n[Step {self.steps_taken}] Aurora signals: {ops}")
-            # Aurora evaluates her last creation for personal satisfaction
+            # REINFORCEMENT REMOVED - No satisfaction evaluation
+            # Aurora evaluates the last creation for personal satisfaction
+            '''
             if hasattr(self, 'last_actions_taken') and hasattr(self, 'last_pixels_drawn'):
                 satisfaction = self.evaluate_personal_satisfaction(self.last_actions_taken, self.last_pixels_drawn)
                 if satisfaction > 0.5:
                     print(f"   Aurora feels satisfied ({satisfaction:.2f})")
                 elif satisfaction < -0.3:
                     print(f"   Aurora feels unsatisfied ({satisfaction:.2f})")
+            '''
             self.last_code = ops  # Store for context
             
         except Exception as e:
@@ -4713,9 +4780,9 @@ Output movement/color codes:"""
                     # Play the sound (WAV files load cleanly, no delay needed)
                     self.sounds[sound_key].play()
                     
-                    # Aurora hears herself immediately
+                    # Aurora perceives self-generated sound immediately
                     if self.hearing_enabled and self.immediate_feedback_mode:
-                        # Calculate the frequency she just played
+                        # Calculate the frequency just played
                         char_index = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'.index(char)
                         
                         # Musical scale calculation (matching the glitch pop synthesis)
@@ -4731,11 +4798,11 @@ Output movement/color codes:"""
                         elif self.current_pitch == 'high':
                             base_freq *= 2.0
                         
-                        # Feed this frequency to her hearing system
+                        # Feed this frequency to Aurora's hearing system
                         if hasattr(self, 'process_heard_frequency'):
                             self.process_heard_frequency(base_freq, amplitude=0.5, source="self")
                         else:
-                            # Store for her awareness
+                            # Store for Aurora's awareness
                             self.last_heard_self = {
                                 'frequency': base_freq,
                                 'char': char,
@@ -4743,7 +4810,7 @@ Output movement/color codes:"""
                                 'time': time.time()
                             }
                             if self.immediate_feedback_mode:
-                                print(f" Aurora hears herself: {char} at {base_freq:.1f}Hz ({self.current_pitch})")
+                                print(f" Aurora perceives self-generated sound: {char} at {base_freq:.1f}Hz ({self.current_pitch})")
                     
                     # Add cymatic circle for visualization
                     sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
@@ -4787,7 +4854,6 @@ Output movement/color codes:"""
                         feedback = self.see_immediate_change(action_taken, before_x, before_y)
                         print(feedback)
                         
-                        # ADD MOONDREAM'S INSTANT REFLECTION
                         if self.vision_enabled and self.moondream_instant_feedback:
                             moondream_reflection = self.get_instant_moondream_reflection(action_taken, before_x, before_y)
                             if moondream_reflection:
@@ -4839,7 +4905,6 @@ Output movement/color codes:"""
                     feedback = self.see_immediate_change(char, before_x, before_y)
                     print(feedback)
                     
-                    # ADD MOONDREAM'S INSTANT REFLECTION
                     if self.vision_enabled and self.moondream_instant_feedback:
                         moondream_reflection = self.get_instant_moondream_reflection(char, before_x, before_y)
                         if moondream_reflection:
@@ -5025,8 +5090,8 @@ Output movement/color codes:"""
                 self.influence_emotion("creating", -0.2)
                 return  # Exit early - skip all positive reinforcement '''
                 
-        # Give positive reinforcement for creative behaviors
-        self.give_positive_reinforcement(ops, actions_taken, pixels_by_color, old_pos)
+        # REINFORCEMENT REMOVED - No positive reinforcement
+        # self.give_positive_reinforcement(ops, actions_taken, pixels_by_color, old_pos)
        
         # Pen state feedback
         if '4' in self.last_code and self.continuous_draws > 5:
@@ -5058,8 +5123,8 @@ Output movement/color codes:"""
             "timestamp": datetime.now().isoformat()
         }
         
-        # Update skill learning based on this turn's actions
-        self.update_skill_proficiency(actions_taken, pixels_drawn, context)
+        # REINFORCEMENT REMOVED - No skill learning tracking
+        # self.update_skill_proficiency(actions_taken, pixels_drawn, context)
         
         # Evaluate progress on autonomous goals
         self.evaluate_goal_progress()
@@ -5068,6 +5133,8 @@ Output movement/color codes:"""
         # Update displays
         self.update_memory_display()
         
+        # REINFORCEMENT REMOVED - No immediate feedback or emotion boosts
+        '''
         # IMMEDIATE POSITIVE FEEDBACK FOR ANY DRAWING
         if pixels_drawn > 0:
             # Small emotional boost for ANY creation - SCALED BY NOVELTY
@@ -5110,9 +5177,16 @@ Output movement/color codes:"""
         else:
             # Clear encouragement if not drawing
             self.recent_encouragement = ""
+        '''
         
         # Update color history and save last color
         self.last_turn_color = self.current_color_name
+        
+        # REINFORCEMENT REMOVED - No learning consolidation
+        # Consolidate learning periodically (every 200 steps)
+        # if self.steps_taken % 200 == 0 and self.steps_taken > 0:
+        #     self.consolidate_recent_learning()
+        
         # Track area visits for novelty rewards
         self.pixel_visit_counts = {}
         # Track performance
@@ -5177,9 +5251,9 @@ Output movement/color codes:"""
         internal_y2 = self._scale_to_internal(y2)
         
         if self.draw_mode == "pen":
-            # Dynamic pen with paint buildup
-            base_size = 3 * self.supersample_factor
-            max_size = 25 * self.supersample_factor
+            # Dynamic pen with paint buildup - NOW WITH VISIBILITY SCALING
+            base_size = self._get_effective_tool_size(3, min_chars=1)
+            max_size = self._get_effective_tool_size(25, min_chars=3)
             
             momentum_factor = min(1.0, self.pen_momentum / 10.0)
             current_size = int(base_size + (max_size - base_size) * momentum_factor)
@@ -5192,8 +5266,8 @@ Output movement/color codes:"""
                                  lambda x, y: self._paint_with_brush(x, y, brush, self.current_color))
         
         elif self.draw_mode == "brush":
-            # Soft brush with paint
-            size = 12 * self.supersample_factor
+            # Soft brush with paint - NOW WITH VISIBILITY SCALING
+            size = self._get_effective_tool_size(12, min_chars=2)
             brush = self._create_paint_brush(size // 2, hardness=0.3)
             self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
                                  lambda x, y: self._paint_with_brush(x, y, brush, self.current_color))
@@ -5216,15 +5290,15 @@ Output movement/color codes:"""
             
             
         elif self.draw_mode == "large_brush":
-            # Large brush with more paint
-            size = 20 * self.supersample_factor
+            # Large brush with more paint - NOW WITH VISIBILITY SCALING
+            size = self._get_effective_tool_size(20, min_chars=2)
             brush = self._create_paint_brush(size // 2, hardness=0.2)
             self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
                                  lambda x, y: self._paint_with_brush(x, y, brush, self.current_color))
         
         elif self.draw_mode == "larger_brush":
-            # Larger brush with heavy paint
-            size = 28 * self.supersample_factor
+            # Larger brush with heavy paint - NOW WITH VISIBILITY SCALING
+            size = self._get_effective_tool_size(28, min_chars=3)
             brush = self._create_paint_brush(size // 2, hardness=0.15)
             self._draw_smooth_line(internal_x1, internal_y1, internal_x2, internal_y2,
                                  lambda x, y: self._paint_with_brush(x, y, brush, self.current_color))
@@ -5258,9 +5332,9 @@ Output movement/color codes:"""
         internal_y = self._scale_to_internal(y)
         
         if self.draw_mode == "pen":
-            # Dynamic pen with paint
-            base_size = 3 * self.supersample_factor
-            max_size = 25 * self.supersample_factor
+            # Dynamic pen with paint - NOW WITH VISIBILITY SCALING
+            base_size = self._get_effective_tool_size(3, min_chars=1)
+            max_size = self._get_effective_tool_size(25, min_chars=3)
             momentum_factor = min(1.0, self.pen_momentum / 10.0)
             current_size = int(base_size + (max_size - base_size) * momentum_factor)
             
@@ -5268,7 +5342,7 @@ Output movement/color codes:"""
             self._paint_with_brush(internal_x, internal_y, brush, self.current_color)
             
         elif self.draw_mode == "brush":
-            size = 12 * self.supersample_factor
+            size = self._get_effective_tool_size(12, min_chars=2)
             brush = self._create_paint_brush(size // 2, hardness=0.3)
             self._paint_with_brush(internal_x, internal_y, brush, self.current_color)
             
@@ -5291,12 +5365,12 @@ Output movement/color codes:"""
             
             
         elif self.draw_mode == "large_brush":
-            size = 20 * self.supersample_factor
+            size = self._get_effective_tool_size(20, min_chars=2)
             brush = self._create_paint_brush(size // 2, hardness=0.2)
             self._paint_with_brush(internal_x, internal_y, brush, self.current_color)
             
         elif self.draw_mode == "larger_brush":
-            size = 28 * self.supersample_factor
+            size = self._get_effective_tool_size(28, min_chars=3)
             brush = self._create_paint_brush(size // 2, hardness=0.15)
             self._paint_with_brush(internal_x, internal_y, brush, self.current_color)
             
@@ -5517,7 +5591,7 @@ Output movement/color codes:"""
         self.chat_loop()
     
     def aurora_chat_response(self, user_message):
-        """Generate Aurora's natural response using her learned experiences"""
+        """Generate Aurora's natural response using Aurora's learned experiences"""
         
         # Get consolidated learning context
         learning_context = self.get_consolidated_learning_context()
@@ -5668,7 +5742,7 @@ Elijah says: {user_message}"""
         self.chat_mode = False
                               
     def generate_autonomous_goal(self):
-        """Aurora generates and pursues her own complex, multi-step goals"""
+        """Aurora generates and pursues Aurora's own complex, multi-step goals"""
         if self.goal_generation_cooldown > 0:
             self.goal_generation_cooldown -= 1
             return None
@@ -5677,7 +5751,7 @@ Elijah says: {user_message}"""
         if len(self.memory.code_history) < 20:
             return None
             
-        # Analyze her current situation deeply
+        # Analyze Aurora's current situation deeply
         canvas_analysis = self.analyze_canvas_for_goals()
         emotional_state = self.analyze_emotional_trajectory()
         skill_gaps = self.identify_skill_gaps()
@@ -5999,8 +6073,9 @@ I autonomously choose to: [/INST]"""
             print(f"\n GOAL ACHIEVED: {current_goal['description']}")
             print(f"   Completed in {steps_since_goal} steps!")
             
+            # REINFORCEMENT REMOVED - No emotion boost for goal completion
             # Boost satisfaction significantly
-            self.influence_emotion("creating", 0.8)
+            # self.influence_emotion("creating", 0.8)
             
             # Generate follow-up goal
             self.goal_generation_cooldown = 5  # Quick follow-up
@@ -6033,9 +6108,9 @@ I autonomously choose to: [/INST]"""
         self.draw_img.rectangle([x1, y1, x2, y2], fill=self.current_color)
     
     def _draw_spray_paint(self, center_x, center_y):
-        """Draw spray paint effect with paint droplets"""
+        """Draw spray paint effect with paint droplets - NOW WITH VISIBILITY SCALING"""
     
-        spray_size = 15 * self.supersample_factor
+        spray_size = self._get_effective_tool_size(15, min_chars=2)
         dots = 30
         
         for _ in range(dots):
@@ -6045,8 +6120,8 @@ I autonomously choose to: [/INST]"""
             x = int(center_x + distance * math.cos(angle))
             y = int(center_y + distance * math.sin(angle))
             
-            # Paint droplet size varies
-            droplet_size = random.uniform(0.5, 2.0) * self.supersample_factor
+            # Paint droplet size varies - scaled proportionally
+            droplet_size = random.uniform(0.5, 2.0) * (spray_size / 60.0)  # Scale with spray size
             opacity = random.uniform(0.3, 0.9)
             
             # Apply paint droplet
@@ -6056,10 +6131,10 @@ I autonomously choose to: [/INST]"""
                         self._apply_paint(x + dx, y + dy, self.current_color, opacity)
                         
     def _draw_watercolor(self, center_x, center_y):
-        """Draw with watercolor effect - transparent with subtle bleeding"""
+        """Draw with watercolor effect - transparent with subtle bleeding - NOW WITH VISIBILITY SCALING"""
         
-        # Much smaller, more controlled size
-        watercolor_size = 14 * self.supersample_factor  # Similar to large_brush
+        # Scale watercolor size for visibility
+        watercolor_size = self._get_effective_tool_size(14, min_chars=2)
         
         # Create soft brush with very low hardness for watercolor spread
         brush = self._create_paint_brush(watercolor_size // 2, hardness=0.1)  # Very soft edges
@@ -6679,7 +6754,7 @@ I autonomously choose to: [/INST]"""
         pass
         
     def update_skill_proficiency(self, actions_taken, pixels_drawn, context):
-        """Aurora learns and improves her skills based on experience"""
+        """Aurora learns and improves Aurora's skills based on experience"""
         # Debug output
         if self.steps_taken % 20 == 0:  # Every 20 steps
             print(f"\n Skill Proficiency Debug (Step {self.steps_taken}):")
@@ -7229,7 +7304,7 @@ I autonomously choose to: [/INST]"""
                 if pixels_drawn > 200:
                     base_satisfaction += 0.2  # Committed to the choice
                 
-                # Check if it's a new color she hasn't used much
+                # Check if it's a new color Aurora has not used much
                 if color in self.artistic_preferences.get('favorite_colors', {}):
                     base_satisfaction += self.artistic_preferences['favorite_colors'][color] * 0.2
                 else:
@@ -7354,10 +7429,10 @@ I autonomously choose to: [/INST]"""
                 # Share Aurora's own discovered preferences
                 if self.color_theory_discoveries['learned_preferences']['variety_satisfaction'] > 0.7:
                     if random.random() < 0.3:  # Only sometimes
-                        print(f"   Aurora notices: she enjoys when colors dance together")
+                        print(f"   Aurora notices: Aurora enjoys when colors dance together")
                 elif self.color_theory_discoveries['learned_preferences']['variety_satisfaction'] < 0.3:
                     if random.random() < 0.3:
-                        print(f"   Aurora notices: she finds peace in color focus")
+                        print(f"   Aurora notices: Aurora finds peace in color focus")
                 
                 if self.color_theory_discoveries['learned_preferences']['harmony_satisfaction'] > 0.6:
                     if random.random() < 0.2:
@@ -7371,7 +7446,7 @@ I autonomously choose to: [/INST]"""
         
                    
     def evaluate_personal_satisfaction(self, actions_taken, pixels_drawn):
-        """Aurora evaluates her own satisfaction with what she created"""
+        """Aurora evaluates Aurora's own satisfaction with what Aurora created"""
         satisfaction = 0.0
         
         # Include color theory discoveries in satisfaction
@@ -7388,13 +7463,13 @@ I autonomously choose to: [/INST]"""
                 satisfaction -= 0.2  # Reduced satisfaction for repetition
                 print(f"   Aurora feels bored by repetition...")
                 
-        # Check if she used favorite colors
+        # Check if favorite colors
         colors_used = [a.split(':')[1] for a in actions_taken if a.startswith('color:')]
         for color in colors_used:
             if color in self.artistic_preferences['favorite_colors']:
                 satisfaction += self.artistic_preferences['favorite_colors'][color] * 0.1
         
-        # Check if she used favorite tools
+        # Check if favorite tools
         if self.draw_mode in self.artistic_preferences['favorite_tools']:
             satisfaction += self.artistic_preferences['favorite_tools'][self.draw_mode] * 0.1
         
@@ -7407,9 +7482,9 @@ I autonomously choose to: [/INST]"""
         
         # Personal aesthetic evaluation
         if pixels_drawn > 500 and self.artistic_preferences['aesthetic_values']['size_preference'] > 0.7:
-            satisfaction += 0.2  # She likes making big marks
+            satisfaction += 0.2  # Aurora prefers large marks
         elif pixels_drawn < 100 and self.artistic_preferences['aesthetic_values']['size_preference'] < 0.3:
-            satisfaction += 0.2  # She likes small details
+            satisfaction += 0.2  # Aurora prefers small details
         
         # Add some randomness for discovery
         satisfaction += random.uniform(-0.1, 0.1)
@@ -7418,7 +7493,7 @@ I autonomously choose to: [/INST]"""
         
         # Update preferences based on satisfaction
         if self.current_satisfaction > 0.3:
-            # She enjoyed this! Update preferences
+            # This was enjoyable! Update preferences
             for color in colors_used:
                 if color not in self.artistic_preferences['favorite_colors']:
                     self.artistic_preferences['favorite_colors'][color] = 0.0
@@ -7438,7 +7513,7 @@ I autonomously choose to: [/INST]"""
                         'timestamp': datetime.now().isoformat(),
                         'satisfaction': self.current_satisfaction
                     })
-                    print(f"   Aurora discovered a technique she loves!")
+                    print(f"   Aurora discovered a favored technique!")
                     self.artistic_preferences['favorite_patterns'][pattern_hash] = (action_sequence, self.current_satisfaction)
         
         # Save preferences periodically
@@ -7475,7 +7550,7 @@ I autonomously choose to: [/INST]"""
     
     def process_deep_emotions(self):
         """Process complex emotional states based on multiple factors"""
-        # Minimal emotion processing during rest - she's asleep!
+        # Minimal emotion processing during rest - Aurora is asleep!
         if self.current_mode == "rest":
             return  # Skip emotion processing entirely during dreams
         # Calculate overall emotional tone from influences
@@ -7988,7 +8063,7 @@ I autonomously choose to: [/INST]"""
             
             
     def adjust_speed(self, direction):
-        """Aurora adjusts her drawing speed"""
+        """Aurora adjusts Aurora's drawing speed"""
         speed_levels = ["instant", "fast", "normal", "slow", "very_slow"]
         current_index = speed_levels.index(self.aurora_speed)
         
@@ -8190,7 +8265,7 @@ I autonomously choose to: [/INST]"""
         print(f" Saved conversation to {conversations_file}")
     
             
-    def save_session_insights(self):
+    def save_session_insights(self, verbose=True):
         """Save comprehensive learning insights and autonomous developments"""
         insights_file = self.memory.memory_path / "session_insights.json"
         
@@ -8247,7 +8322,8 @@ I autonomously choose to: [/INST]"""
         with open(insights_file, 'w') as f:
             json.dump(existing_insights, f, indent=2)
         
-        print(f" Saved comprehensive learning insights to {insights_file}")
+        if verbose:
+            print(f" Saved comprehensive learning insights to {insights_file}")
         
         # Save skill proficiencies separately for next session
         skill_file = self.memory.memory_path / "aurora_skills.json"
@@ -8295,20 +8371,29 @@ I autonomously choose to: [/INST]"""
             with open(conversations_file, 'w') as f:
                 json.dump(existing_convos, f, indent=2)
             
-            print(f" Saved {len(self.vision_conversation_history)} conversations to {conversations_file}")
+            if verbose:
+                print(f" Saved {len(self.vision_conversation_history)} conversations to {conversations_file}")
          
-        # Update and save lifetime statistics
-        self.lifetime_stats['total_pixels_drawn'] += session_stats['total_pixels_drawn']
-        self.lifetime_stats['total_steps'] += session_stats['total_steps']
-        self.lifetime_stats['total_dreams'] += len(getattr(self, 'dream_memories', []))
-        self.lifetime_stats['total_goals_completed'] += len([g for g in self.autonomous_goals if g.get('completed')])
+        # Update and save lifetime statistics - only add NEW progress since last save
+        new_pixels = session_stats['total_pixels_drawn'] - self.last_saved_pixels
+        new_steps = session_stats['total_steps'] - self.last_saved_steps
+        
+        self.lifetime_stats['total_pixels_drawn'] += new_pixels
+        self.lifetime_stats['total_steps'] += new_steps
+        self.lifetime_stats['total_dreams'] = len(getattr(self, 'dream_memories', []))
+        self.lifetime_stats['total_goals_completed'] = len([g for g in self.autonomous_goals if g.get('completed')])
+        
+        # Update tracking variables
+        self.last_saved_pixels = session_stats['total_pixels_drawn']
+        self.last_saved_steps = session_stats['total_steps']
         
         lifetime_file = self.memory.memory_path / "aurora_lifetime.json"
         with open(lifetime_file, 'w') as f:
             json.dump(self.lifetime_stats, f, indent=2)
                
-        # Print session summary
-        self.print_session_summary(existing_insights[session_id])
+        # Print session summary only if verbose
+        if verbose:
+            self.print_session_summary(existing_insights[session_id])
 
     def calculate_session_statistics(self):
         """Calculate comprehensive session statistics"""
@@ -8771,6 +8856,114 @@ I autonomously choose to: [/INST]"""
         meaningful_dreams = [d for d in self.current_dreams if d.get('consolidation')]
         self.dream_memories.extend(meaningful_dreams[-3:])
         
+    def consolidate_recent_learning(self):
+        """Consolidate recent learning without requiring a full dream cycle"""
+        if not hasattr(self, 'memory') or not self.memory.code_history:
+            return
+        
+        # Only consolidate if we have enough new memories (50+)
+        recent_codes = list(self.memory.code_history)[-100:]
+        if len(recent_codes) < 50:
+            return
+        
+        # Check when we last consolidated
+        learning_file = self.memory.memory_path / "consolidated_learning.json"
+        last_consolidation_time = 0
+        if learning_file.exists():
+            try:
+                with open(learning_file, 'r') as f:
+                    existing = json.load(f)
+                    if existing:
+                        last_time_str = existing[-1].get('timestamp', '')
+                        if last_time_str:
+                            last_consolidation_time = datetime.fromisoformat(last_time_str).timestamp()
+            except:
+                pass
+        
+        # Only consolidate if it's been at least 5 minutes since last one
+        if time.time() - last_consolidation_time < 300:
+            return
+        
+        print(f"\n   Consolidating recent learning ({len(recent_codes)} memories)...")
+        
+        # Extract patterns and insights from recent code history
+        consolidated_learning = {
+            'session_id': f"auto_consolidation_{int(time.time())}",
+            'timestamp': datetime.now().isoformat(),
+            'patterns_reinforced': [],
+            'skills_improved': [],
+            'insights_gained': []
+        }
+        
+        # Find successful patterns (high pixel count)
+        successful = [m for m in recent_codes if m.get('context', {}).get('pixels_drawn', 0) > 50]
+        if successful:
+            # Group by tool and track usage
+            tool_usage = {}
+            for m in successful:
+                tool = m.get('context', {}).get('draw_mode', 'pen')
+                pixels = m.get('context', {}).get('pixels_drawn', 0)
+                if tool not in tool_usage:
+                    tool_usage[tool] = {'count': 0, 'total_pixels': 0, 'best_code': m['code']}
+                tool_usage[tool]['count'] += 1
+                tool_usage[tool]['total_pixels'] += pixels
+                if pixels > tool_usage[tool].get('best_pixels', 0):
+                    tool_usage[tool]['best_code'] = m['code']
+                    tool_usage[tool]['best_pixels'] = pixels
+            
+            # Add patterns for frequently used tools
+            for tool, data in tool_usage.items():
+                if data['count'] >= 3:  # Used at least 3 times
+                    consolidated_learning['patterns_reinforced'].append({
+                        'pattern': data['best_code'][:50],  # First 50 chars
+                        'tool': tool,
+                        'success_rate': data['count'],
+                        'avg_pixels': data['total_pixels'] // data['count']
+                    })
+                    consolidated_learning['skills_improved'].append(tool)
+        
+        # Track color usage
+        color_usage = {}
+        for m in recent_codes:
+            color = m.get('context', {}).get('color', 'white')
+            color_usage[color] = color_usage.get(color, 0) + 1
+        
+        if color_usage:
+            top_colors = sorted(color_usage.items(), key=lambda x: x[1], reverse=True)[:3]
+            consolidated_learning['insights_gained'].append(
+                f"Favored colors: {', '.join([c[0] for c in top_colors])}"
+            )
+        
+        # Track drawing activity
+        total_pixels = sum(m.get('context', {}).get('pixels_drawn', 0) for m in recent_codes)
+        if total_pixels > 0:
+            consolidated_learning['insights_gained'].append(
+                f"Drew {total_pixels} pixels across {len(recent_codes)} actions"
+            )
+        
+        # Save consolidated learning
+        existing_learning = []
+        if learning_file.exists():
+            try:
+                with open(learning_file, 'r') as f:
+                    existing_learning = json.load(f)
+            except:
+                existing_learning = []
+        
+        existing_learning.append(consolidated_learning)
+        
+        # Keep last 100 consolidations only
+        if len(existing_learning) > 100:
+            existing_learning = existing_learning[-100:]
+        
+        with open(learning_file, 'w') as f:
+            json.dump(existing_learning, f, indent=2)
+        
+        print(f"   ✓ Consolidated: {len(consolidated_learning['patterns_reinforced'])} patterns, {len(set(consolidated_learning['skills_improved']))} skills")
+        
+        # Sync to deep memory
+        self.sync_to_deep_memory()
+    
     def sync_to_deep_memory(self):
         """Sync recent consolidated learning to deep memory system"""
         if not hasattr(self, 'big_memory') or not self.big_memory_available:
@@ -8947,6 +9140,10 @@ I autonomously choose to: [/INST]"""
                     self.save_canvas_state()
                     self.memory.save_memories()
                     self.cleanup_paint_timestamps()  # Clean more frequently (silent)
+                
+                # Save lifetime stats and session insights every 100 steps (silent)
+                if self.steps_taken % 100 == 0:
+                    self.save_session_insights(verbose=False)
                 # Sync to deep memory every 500 steps
                 if self.steps_taken % 500 == 0 and self.steps_taken > 0:
                     self.sync_to_deep_memory() 
@@ -9043,7 +9240,7 @@ I autonomously choose to: [/INST]"""
                         print(f"\n' MOONDREAM AUTO-ANALYSIS: {status}")
                     
                     elif event.key == pygame.K_v:
-                        # TOGGLE VISION - ADD THIS
+                        
                         if hasattr(self, 'vision_enabled'):
                             self.vision_enabled = not self.vision_enabled
                             status = "ON " if self.vision_enabled else "OFF"
