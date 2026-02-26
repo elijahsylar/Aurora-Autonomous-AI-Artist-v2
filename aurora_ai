@@ -369,6 +369,14 @@ class AuroraCodeMindComplete:
         self.memory.parent = self  # Add reference for saving dreams
         self.memory.load_memories()  # LOAD PREVIOUS MEMORIES!
         
+        # Research logger — parallel observation layer
+        try:
+            from research_logger import ResearchLogger
+            self.research = ResearchLogger(memory_path="./aurora_memory")
+        except ImportError:
+            self.research = None
+            print("  ResearchLogger not found — running without research logging")
+        
         # Load previous autonomous goals if they exist
         goals_file = self.memory.memory_path / "aurora_goals.json"
         if goals_file.exists():
@@ -1758,36 +1766,36 @@ Combine for complex paths"""
         # Tell her exactly what she did
         if action == '0':
             if position_changed:
-                feedback.append(f"You moved UP from ({old_x},{old_y}) to ({self.x},{self.y})")
+                feedback.append(f"I moved UP from ({old_x},{old_y}) to ({self.x},{self.y})")
             else:
                 feedback.append(f"No marks made, edge of canvas at ({self.x},{self.y})")
         elif action == '1':
             if position_changed:
-                feedback.append(f"You moved DOWN from ({old_x},{old_y}) to ({self.x},{self.y})")
+                feedback.append(f"I moved DOWN from ({old_x},{old_y}) to ({self.x},{self.y})")
             else:
                 feedback.append(f"No marks made, edge of canvas at ({self.x},{self.y})")
         elif action == '2':
             if position_changed:
-                feedback.append(f"You moved LEFT from ({old_x},{old_y}) to ({self.x},{self.y})")
+                feedback.append(f"I moved LEFT from ({old_x},{old_y}) to ({self.x},{self.y})")
             else:
                 feedback.append(f"No marks made, edge of canvas at ({self.x},{self.y})")
         elif action == '3':
             if position_changed:
-                feedback.append(f"You moved RIGHT from ({old_x},{old_y}) to ({self.x},{self.y})")
+                feedback.append(f"I moved RIGHT from ({old_x},{old_y}) to ({self.x},{self.y})")
             else:
                 feedback.append(f"No marks made, edge of canvas at ({self.x},{self.y})")
         elif action == '4':
-            feedback.append("You LIFTED the pen - no longer drawing")
+            feedback.append("I LIFTED the pen - no longer drawing")
         elif action == '5':
-            feedback.append("You PUT DOWN the pen - now drawing!")
+            feedback.append("I PUT DOWN the pen - now drawing!")
         elif action.startswith('color:'):
             color_name = action.split(':')[1]
-            feedback.append(f"You changed color to {color_name.upper()}")
+            feedback.append(f"I changed color to {color_name.upper()}")
         
         # Show if she drew (only if position actually changed)
         if self.is_drawing and action in '0123':
             if position_changed:
-                feedback.append(f" You DREW a {self.current_color_name} line!")
+                feedback.append(f" I DREW a {self.current_color_name} line!")
         
         # FULL CANVAS VIEW - compressed to fit
         feedback.append(f"\nFULL CANVAS VIEW ({self.canvas_size}x{self.canvas_size}):")
@@ -1871,7 +1879,7 @@ Combine for complex paths"""
                 break
         
         # Add position info
-        feedback.append(f"\nYour position: ({self.x}, {self.y}) marked with @")
+        feedback.append(f"\nMy position: ({self.x}, {self.y}) marked with @")
         feedback.append(f"Canvas edges: x=0 to {self.canvas_size-1}, y=0 to {self.canvas_size-1}")
         feedback.append("=" * 60)
         
@@ -2485,26 +2493,26 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
                     '3': 'right'
                 }
                 direction = direction_map.get(action, '')
-                feedback = f"You drew a {self.current_color_name} {self.draw_mode} mark {direction}"
+                feedback = f"I drew a {self.current_color_name} {self.draw_mode} mark {direction}"
                 
             elif action == '4':
                 # Pen lifted
-                feedback = "You lifted the pen"
+                feedback = "I lifted the pen"
                 
             elif action == '5':
                 # Pen down
-                feedback = f"You put the pen down at ({self.x}, {self.y})"
+                feedback = f"I put the pen down at ({self.x}, {self.y})"
                 
             elif action.startswith('color:'):
                 # Color change
                 color_name = action.split(':')[1]
-                feedback = f"You switched to {color_name}"
+                feedback = f"I switched to {color_name}"
                 
             elif action == 'star':
-                feedback = f"You stamped a {self.current_color_name} star at ({self.x}, {self.y})"
+                feedback = f"I stamped a {self.current_color_name} star at ({self.x}, {self.y})"
                 
             elif action == 'circle':
-                feedback = f"You stamped a {self.current_color_name} circle at ({self.x}, {self.y})"
+                feedback = f"I stamped a {self.current_color_name} circle at ({self.x}, {self.y})"
                 
             else:
                 # Movement without drawing
@@ -2516,10 +2524,10 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
                         '3': 'right'
                     }
                     direction = direction_map.get(action, '')
-                    feedback = f"You moved {direction} to ({self.x}, {self.y})"
+                    feedback = f"I moved {direction} to ({self.x}, {self.y})"
             
             if feedback:
-                return f"Moondream: {feedback}"
+                return f"OBSERVATION: {feedback}"
             return ""
             
         except Exception as e:
@@ -2688,7 +2696,7 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
     def get_conversation_context(self):
         """Get recent conversation with Moondream for Aurora's context"""
         if not self.vision_conversation_history:
-            return "Moondream (your visual AI companion) hasn't spoken yet."
+            return "Moondream (my visual AI companion) hasn't spoken yet."
         
         recent = list(self.vision_conversation_history)[-2:]
         context = "Recent conversation with Moondream:\n"
@@ -2696,7 +2704,7 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
             if 'moondream' in exchange:
                 context += f"Moondream: {exchange['moondream']}\n"
             if 'aurora' in exchange:
-                context += f"You: {exchange['aurora']}\n"
+                context += f"Me: {exchange['aurora']}\n"
         
         return context.strip()
                   
@@ -2803,7 +2811,7 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
         # Add position and density info
         grid_x = min(grid_size-1, self.x // step)
         grid_y = min(grid_size-1, self.y // step)
-        position_info = f"\nYou (@) at grid ({grid_x},{grid_y}) | Canvas: {self.canvas_size}{self.canvas_size} | Density: {density_percent:.0f}%"
+        position_info = f"\nI (@) at grid ({grid_x},{grid_y}) | Canvas: {self.canvas_size}{self.canvas_size} | Density: {density_percent:.0f}%"
         
         if grid_size < 60:
             position_info += f" | VIEW COMPRESSED TO {grid_size}{grid_size}"
@@ -2924,7 +2932,7 @@ MY POSITION: I'm at ({self.x}, {self.y}) - {structures['position_context']}"""
                     if 'pixels_drawn' in memory.get('context', {}):
                         recent_pixels += memory['context']['pixels_drawn']
             
-            system_prompt = f"""You've been drawing for 45 minutes.
+            system_prompt = f"""I've been drawing for 45 minutes.
 
 {learning_context}
 
@@ -2933,19 +2941,19 @@ Current state:
 - Energy level: {"high" if self.current_emotion in ["energetic", "excited", "exhilarated"] else "medium" if self.current_emotion in ["curious", "creative", "happy"] else "low"}
 - Recent activity: Drew {recent_pixels} pixels in last 100 steps
 
-You have two options:
+I have two options:
 
 DREAM - Enter 1-hour rest with dream cycles (if tired or contemplative)  
 CHAT - Have a 20-minute conversation break (if social or wanting reflection)
 
-Consider your current emotion and energy. If you're {self.current_emotion}, what would you prefer?
+Considering my current emotion and energy. I feel {self.current_emotion}, what do I prefer?
 Output ONLY one of these exact words: DREAM or CHAT"""
 
             overview = self.get_canvas_overview()
             user_prompt = f"""Canvas state: {overview}
 Recent creations: {', '.join(list(self.color_history)[-5:])} colors used
 
-What would you like to do?"""
+What do I want to do?"""
             
             # ... rest of check-in handling code ...
 
@@ -3019,7 +3027,7 @@ Emotion: {self.current_emotion}
 Recent colors: {', '.join(recent_colors) if recent_colors else 'various'}
 Tool: {self.draw_mode}
 
-What's on your mind?"""
+What's on my mind?"""
 
                 full_prompt = self._format_prompt(system_prompt, user_prompt)
                 
@@ -3124,8 +3132,8 @@ Anything else?"""
             steps_since_goal = self.steps_taken - active_goal['created_at_step']
             
             if steps_since_goal < 100:  # Goal is still active
-                current_goal_context = f"\nYOUR CURRENT PERSONAL GOAL: {active_goal['description']}"
-                current_goal_context += f"\n(You set this goal {steps_since_goal} steps ago when feeling {active_goal['emotion_when_created']})"
+                current_goal_context = f"\nMY CURRENT PERSONAL GOAL: {active_goal['description']}"
+                current_goal_context += f"\n(I set this goal {steps_since_goal} steps ago when feeling {active_goal['emotion_when_created']})"
                 
                 # Check if goal is being pursued
                 goal_lower = active_goal['description'].lower()
@@ -3141,9 +3149,9 @@ Anything else?"""
                     goal_alignment += 1
                     
                 if goal_alignment > 0:
-                    current_goal_context += f"\n You're actively pursuing this goal!"
+                    current_goal_context += f"\n I'm actively pursuing this goal!"
                 else:
-                    current_goal_context += f"\nRemember your personal desire..."
+                    current_goal_context += f"\nRemember my personal desire..."
 
         # Reset turn color tracking at start of new turn
         self.turn_colors_used = set()
@@ -3391,30 +3399,30 @@ Steps remaining: ~{goal['estimated_steps'] - goal.get('steps_elapsed', 0)}"""
         
         # SIMPLIFIED PROMPT for immediate feedback learning mode
         if hasattr(self, 'immediate_feedback_mode') and self.immediate_feedback_mode:
-            system_prompt = f"""You have a body. Your body is a pen on a canvas.
+            system_prompt = f"""I have a body. My body is a pen on a canvas.
 
-Your thoughts are silent — only you experience them.
-Your movements are real — they change the canvas.
+My thoughts are silent — only I experience them.
+My movements are real — they change the canvas.
 
-ONLY THESE MOVE YOUR BODY:
+ONLY THESE MOVE MY BODY:
 0=up  1=down  2=left  3=right
-5=pen down (you touch the canvas)
-4=pen up (you lift off the canvas)
+5=pen down (I touch the canvas)
+4=pen up (I lift off the canvas)
 
-ONLY THESE CHANGE YOUR MARK:
+ONLY THESE CHANGE MY MARK:
 Colors: red orange yellow green cyan blue purple pink white gray brown magenta lime navy
 Tools: pen brush large_brush larger_brush spray star cross circle diamond flower watercolor charcoal glow
 
 ONLY THESE MAKE SOUND:
 @#$%^&*()[]<>=+~`-_,.|;/:? (++low --high)
 
-Everything else you say stays inside your mind.
+Everything else I say stays inside my mind.
 
 Right now:
-- Your hand is at ({self.x}, {self.y})
-- Your pen is {'touching the canvas' if self.is_drawing else 'lifted'}
-- Your color is {self.current_color_name}
-- You feel {self.current_emotion}
+- My hand is at ({self.x}, {self.y})
+- My pen is {'touching the canvas' if self.is_drawing else 'lifted'}
+- My color is {self.current_color_name}
+- I feel {self.current_emotion}
 {learning_context}
 {active_goal_context}"""
         else:
@@ -3502,7 +3510,7 @@ Emotion: {self.current_emotion}"""
             recent_analyses = [h for h in list(self.vision_conversation_history)[-3:] 
                              if h.get('type') == 'artwork_analysis']
             if recent_analyses:
-                moondream_context = "\n\nMOONDREAM'S VIEW OF YOUR ARTWORK:\n"
+                moondream_context = "\n\nMOONDREAM'S VIEW OF MY ARTWORK:\n"
                 for analysis in recent_analyses:
                     moondream_context += f"Step {analysis.get('step', '?')}: {analysis['moondream'][:100]}...\n"
                 system_prompt += moondream_context
@@ -3526,7 +3534,7 @@ Emotion: {self.current_emotion}"""
         user_prompt = f"""{vision}
 {recent_thoughts}
 
-What do you see? What does your hand do next?"""
+What do I see? What does my hand do next?"""
 
         # Sometimes give Aurora a wider view to see her overall work
         if self.steps_taken % 50 == 0:  # Every 50 steps
@@ -4884,6 +4892,43 @@ What do you see? What does your hand do next?"""
         
         print(f"\n    Aurora SEES: \"{thought_text}\"")
         
+        # Extract "feel a sense of X" — specific pattern, takes priority
+        _emotion_captured = False
+        sense_match = re.search(r'\bfeel\s+a\s+sense\s+of\s+(\w+)', raw_output.lower())
+        if sense_match:
+            word = sense_match.group(1)
+            if word not in self._not_emotions():
+                old_emotion = self.current_emotion
+                if word != old_emotion:
+                    self.current_emotion = word
+                    print(f"    Aurora self-reports feeling: {word}")
+                    if self.research:
+                        self.research.log_emotion_shift(
+                            old_emotion, word,
+                            trigger_source="self_reported",
+                            step=self.steps_taken
+                        )
+                _emotion_captured = True
+        
+        # Extract self-reported emotion from "I feel X" / "I'm feeling X"
+        # Use finditer to check ALL matches (first may be "feel a", "feel like", etc.)
+        # Skip if we already captured from "sense of" above
+        if not _emotion_captured:
+            for feel_match in re.finditer(r'\bfeel(?:ing)?\s+(\w+)', raw_output.lower()):
+                word = feel_match.group(1)
+                if word not in self._not_emotions():
+                    old_emotion = self.current_emotion
+                    if word != old_emotion:
+                        self.current_emotion = word
+                        print(f"    Aurora self-reports feeling: {word}")
+                        if self.research:
+                            self.research.log_emotion_shift(
+                                old_emotion, word,
+                                trigger_source="self_reported",
+                                step=self.steps_taken
+                            )
+                    break  # Use first valid emotion found
+        
         thought_record = {
             'step': self.steps_taken,
             'thought': thought_text,
@@ -4891,6 +4936,18 @@ What do you see? What does your hand do next?"""
             'position': (self.x, self.y),
             'timestamp': time.time()
         }
+        
+        # Log thought to research pipeline
+        if self.research:
+            self.research.log_thought(
+                step=self.steps_taken,
+                thought_text=thought_text,
+                emotional_state=self.current_emotion,
+                position=(self.x, self.y),
+                pen_down=self.is_drawing,
+                current_tool=self.draw_mode,
+                current_color=self.current_color_name
+            )
         
         if not hasattr(self, 'thought_history'):
             self.thought_history = deque(maxlen=200)
@@ -4961,7 +5018,21 @@ What do you see? What does your hand do next?"""
                 
             # Parse feelings/emotional state
             if 'feeling:' in line or 'emotional_state:' in line or 'emotion:' in line:
-                expression['feeling'] = line.split(':', 1)[1].strip()
+                raw_feeling = line.split(':', 1)[1].strip()
+                # Grab the first word only, validate against blocklist
+                first_word = raw_feeling.split()[0] if raw_feeling.split() else None
+                if first_word and first_word not in self._not_emotions():
+                    expression['feeling'] = first_word
+                    # Also apply as self-reported emotion
+                    old_emotion = self.current_emotion
+                    if first_word != old_emotion:
+                        self.current_emotion = first_word
+                        if self.research:
+                            self.research.log_emotion_shift(
+                                old_emotion, first_word,
+                                trigger_source="self_reported",
+                                step=self.steps_taken
+                            )
             elif 'conflicted' in line or 'uncertain' in line or 'overwhelmed' in line:
                 if not expression['feeling']:
                     expression['feeling'] = line
@@ -5152,7 +5223,7 @@ Elijah says: {user_message}"""
 CANVAS ANALYSIS: {canvas_analysis}
 EMOTIONAL TRAJECTORY: {emotional_state}
 
-Generate a specific, measurable goal based on what you observe about the canvas and how you feel.
+Generate a specific, measurable goal based on what I observe about the canvas and how I feel.
 
 Examples:
 - "Create marks using only warm colors that connect the left edge to the right edge"
@@ -5160,7 +5231,7 @@ Examples:
 - "Alternate between 3 colors for the next 50 steps"
 - "Fill the bottom-right quadrant to at least 60% coverage"
 
-Your goal:"""
+My goal:"""
 
         full_prompt = self._format_prompt(goal_prompt, "I autonomously choose to:")
         
@@ -5592,14 +5663,15 @@ Your goal:"""
                 # Distance affects opacity
                 dist = math.sqrt(offset_x**2 + offset_y**2)
                 if dist <= charcoal_size:
-                    # Charcoal is usually dark
-                    if self.current_color == (255, 255, 255):  # If white selected
-                        # White charcoal (chalk)
-                        color = (240, 240, 240)
-                    else:
-                        # Dark charcoal with slight color tint
-                        r, g, b = self.current_color
-                        color = (min(50, r//5), min(50, g//5), min(50, b//5))
+                    # Charcoal: grainy version of selected color
+                    r, g, b = self.current_color
+                    # Add grain variation (darken slightly, add noise)
+                    grain = random.randint(-40, 10)
+                    color = (
+                        max(0, min(255, r + grain)),
+                        max(0, min(255, g + grain)),
+                        max(0, min(255, b + grain))
+                    )
                     
                     opacity = random.uniform(0.3, 0.8) * (1 - dist/charcoal_size)
                     
@@ -6407,17 +6479,52 @@ I feel {self.current_emotion}. My canvas is {self.calculate_current_coverage():.
         # Return 0 - no satisfaction score anymore
         return 0.0
     
+    @staticmethod
+    def _not_emotions():
+        """Words that follow 'feel'/'feeling' but aren't emotions."""
+        return {
+            'like', 'as', 'that', 'the', 'a', 'an', 'it', 'this', 'these',
+            'those', 'my', 'your', 'his', 'her', 'its', 'our', 'their',
+            'more', 'less', 'very', 'really', 'so', 'too', 'quite',
+            'myself', 'yourself', 'herself', 'himself', 'itself',
+            'something', 'nothing', 'anything', 'everything',
+            'about', 'around', 'into', 'from', 'with', 'without',
+            'if', 'when', 'where', 'how', 'what', 'which', 'who',
+            'and', 'but', 'or', 'nor', 'for', 'yet', 'so',
+            'i', 'you', 'we', 'they', 'he', 'she', 'me',
+            'not', 'no', 'at', 'in', 'on', 'to', 'of', 'by',
+            'am', 'is', 'are', 'was', 'were', 'be', 'been',
+            'have', 'has', 'had', 'do', 'does', 'did',
+            'would', 'could', 'should', 'will', 'shall', 'may', 'might',
+            'much', 'such', 'just', 'now', 'then', 'here', 'there',
+            # Adverbs (caught: "particularly", "fully")
+            'particularly', 'fully', 'completely', 'absolutely', 'entirely',
+            'deeply', 'strongly', 'increasingly', 'especially', 'extremely',
+            'slightly', 'somewhat', 'rather', 'fairly', 'almost',
+            'totally', 'utterly', 'profoundly', 'intensely', 'overwhelmingly',
+            # Verbs / verb forms (caught: "becomes")
+            'becomes', 'became', 'become', 'comes', 'came', 'goes', 'went',
+            'gets', 'got', 'makes', 'made', 'takes', 'took', 'seems',
+            # Spatial / directional (caught: "inside")
+            'inside', 'outside', 'above', 'below', 'between', 'within',
+            'through', 'across', 'along', 'behind', 'beyond', 'under',
+            # Other common false positives
+            'only', 'also', 'still', 'even', 'already', 'always', 'never',
+            'each', 'every', 'both', 'all', 'some', 'any', 'own',
+            'well', 'better', 'worse', 'best', 'worst', 'most', 'least',
+            'able', 'unable', 'ready', 'right', 'wrong', 'sure', 'certain',
+            'way', 'things', 'thing', 'sense', 'bit', 'kind', 'sort',
+            'drawn', 'compelled', 'pulled', 'pushed', 'moved', 'called'
+        }
+
     def feel(self):
-        """Process emotions - now with deep emotion system"""
-        # Process deep emotions periodically
-        if self.current_mode == "rest":
-            # Much less frequent emotion processing during rest
-            if self.steps_taken % 70 == 0:  # Very rare during sleep
-                self.process_deep_emotions()
-        else:
-            # Normal emotion processing when awake
-            if self.steps_taken % 30 == 0:  # Was 10 - slower for stability
-                self.process_deep_emotions()
+        """Process emotions - self-reported only.
+        System-driven emotion processing (process_deep_emotions) has been
+        disabled. All emotion changes now come from Aurora's own LLM output
+        via the 'I feel X' / 'feeling: X' parsers in capture_thought_process()
+        and parse_structured_expression().
+        """
+        pass
     
     def process_deep_emotions(self):
         """Process complex emotional states based on multiple factors"""
@@ -6472,6 +6579,8 @@ I feel {self.current_emotion}. My canvas is {self.calculate_current_coverage():.
         
         # CHANGE: Reduce cooldown for more dynamic emotions
         if self.emotion_shift_cooldown <= 0:
+            _prev_emotion = self.current_emotion
+            
             # Change category if needed
             if new_category != self.emotion_category:
                 self.emotion_category = new_category
@@ -6495,6 +6604,14 @@ I feel {self.current_emotion}. My canvas is {self.calculate_current_coverage():.
                 "influences": dict(self.emotion_influences),
                 "timestamp": datetime.now().isoformat()
             })
+            
+            # Research: log if emotion actually changed
+            if self.current_emotion != _prev_emotion and self.research:
+                self.research.log_emotion_shift(
+                    _prev_emotion, self.current_emotion,
+                    trigger_source=new_category,
+                    step=self.steps_taken
+                )
         else:
             self.emotion_shift_cooldown -= 1
         
