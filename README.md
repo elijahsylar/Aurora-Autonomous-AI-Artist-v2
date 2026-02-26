@@ -21,22 +21,7 @@ When all explicit reward shaping constraints were removed (~600 lines of prescri
 
 ---
 
-## 📋 Project Status & Opportunities
 
-**Current Stage**: Active research with publication potential  
-**Last Updated**: February 2026
-
-**🎓 EURēCA! Fellows Program Opportunity**  
-This project is being considered for the CU Denver EURēCA! Summer Fellows program (2026):
-- **8-week summer fellowship** ($2,500-$5,000 stipend)
-- Collaborative research with faculty mentor
-- Weekly professional development & cohort meetings
-- Public presentation at CU Denver
-- Application deadline: **March 13, 2026**
-
-If interested in collaborating on this research or learning more about the EURēCA! opportunity, contact: **elijah.sylar [at] ucdenver.edu**
-
----
 
 ## 🤖 What is Aurora?
 
@@ -619,29 +604,7 @@ If you use Aurora for research, please cite:
 
 ---
 
-## 🤝 Collaboration & Research Opportunities
 
-### For Faculty Interested in Collaborating
-
-Aurora is suitable for research in:
-- **Explainable AI**: Direct observation of decision-making
-- **Creative Computing**: Emergent behavior, aesthetic development
-- **Behavioral AI**: Application of behavioral psychology to artificial agents
-- **HCI**: Human-AI artistic collaboration
-- **Cognitive Science**: Model of creative cognition
-
-**Current Research Lead**: Elijah Sylar (elijah.sylar@ucdenver.edu)  
-**Faculty Mentor**: Professor [Name], CU Denver
-
-### EURēCA! Fellows Program
-
-This project qualifies for the **EURēCA! Summer Fellows program** (2026):
-- **8-week summer research fellowship**
-- **Stipend**: $2,500-$5,000 (based on 20-40 hrs/week)
-- **Deadline**: March 13, 2026
-- **Focus**: Emergent creativity in autonomous AI agents
-
-If interested in mentoring this research or collaborating, contact: **elijah.sylar@ucdenver.edu**
 
 ---
 
@@ -650,8 +613,6 @@ If interested in mentoring this research or collaborating, contact: **elijah.syl
 - **2025 (Weeks 1-2)**: Built V1 pattern generator in two weeks
 - **2025 (Months 2-12)**: Evolved to V2 drawing architecture, removed reward shaping, discovered emergent behavior improvements
 - **2026 (Feb)**: Research validation, publication exploration, faculty interest
-- **2026 (Mar-May)**: Prepare EURēCA! submission, refine research documentation
-- **2026 (Jun-Jul)**: EURēCA! Fellowship (if selected) - publication-focused summer
 
 ---
 
