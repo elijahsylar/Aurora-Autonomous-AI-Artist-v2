@@ -150,9 +150,15 @@ pyaudio (optional - for hearing mode)
 scipy/numpy (audio analysis)
 ```
 
+### Required Files
+- `aurora_ai.py` - Main Aurora implementation
+- `aurora_adapter.py` - LLM model adapter & switcher (handles all model loading)
+
 ### Model Options (via AuroraLLMAdapter)
 
-Aurora can run with different LLMs by changing one parameter:
+Aurora uses **AuroraLLMAdapter** — a drop-in model switcher that lets you swap different LLMs without changing Aurora's core code.
+
+**Quick switch:**
 
 ```python
 aurora = AuroraCodeMindComplete(
@@ -165,21 +171,67 @@ Then in `__init__`, modify the model preset:
 
 ```python
 self.llm = AuroraLLMAdapter(
-    model_preset="mistral",  # ← Change this
+    model_preset="mistral",  # ← Change this to switch models
     gpu_layers=10,
     n_ctx=6500
 )
 ```
 
 **Available presets**:
-- `"llama3-abliterated"` - Uncensored Llama 3
-- `"llama3"` - Standard Llama 3 7B
-- `"mistral"` - Mistral 7B (recommended)
-- `"mistral-base"` - Base Mistral
-- `"qwen"` - Qwen 7B
-- `"openhermes"` - OpenHermes 2.5
-- `"llama2"` - Llama 2 7B
-- `"llama2-base"` - Base Llama 2
+
+| Preset | Model | Speed | Creativity | Notes |
+|--------|-------|-------|-----------|-------|
+| `mistral` | Mistral 7B v0.2 | 🚀 Fast | 🎨 High | **Recommended** - best balance |
+| `llama3` | Llama 3 8B | ⚡ Medium | 🎨 High | Balanced, guardrails enabled |
+| `llama3-abliterated` | Llama 3 (uncensored) | ⚡ Medium | 🎨🎨 Very High | Most creative, no filters |
+| `openhermes` | OpenHermes 2.5 | 🚀 Fast | 🎨 High | Creative + uncensored |
+| `qwen` | Qwen 2.5 3B | 🚀🚀 Fastest | 🎨 Medium | Smallest, runs on anything |
+| `llama2` | Llama 2 7B | ⚡ Medium | 🎨 Medium | Older, very stable |
+| `llava` | LLaVA v1.6 Mistral | ⚡ Medium | 🎨 High | **MULTIMODAL** - one brain with eyes |
+
+#### Using AuroraLLMAdapter
+
+The adapter handles everything:
+
+**List available models:**
+```bash
+python aurora_adapter.py presets
+```
+
+**Test a model:**
+```bash
+python aurora_adapter.py test mistral
+```
+
+**Load with custom path:**
+```python
+self.llm = AuroraLLMAdapter(
+    model_path="./models/my-custom-model.gguf",
+    model_format="llama3",
+    gpu_layers=10,
+    n_ctx=6500
+)
+```
+
+**Multimodal (LLaVA - Aurora sees):**
+```python
+self.llm = AuroraLLMAdapter(
+    model_preset="llava",
+    gpu_layers=10
+)
+# Aurora can now see AND think about her canvas
+# Requires: llava-v1.6-mistral-7b.Q4_K_M.gguf + mmproj file
+```
+
+#### What AuroraLLMAdapter Does
+
+- **Automatic prompt formatting**: Different models need different prompt structures. The adapter handles Llama3, Llama2, Mistral, ChatML, Gemma, Phi3, DeepSeek formats automatically
+- **Multimodal support**: LLaVA models can see images (Aurora perceives her own artwork)
+- **GPU acceleration**: Configurable GPU layers for speed vs. memory
+- **Stop tokens**: Automatically configured per model to stop at appropriate points
+- **Easy switching**: Change one preset parameter, completely different "brain"
+
+See `aurora_adapter.py` for implementation details and all available presets.
 
 ---
 
@@ -233,7 +285,7 @@ huggingface-cli download TheBloke/Mistral-7B-Instruct-v0.2-GGUF mistral-7b-instr
 
 #### 5. **Update Model Path in Code**
 
-In `aurora_small_2.py` (or your main file), the adapter auto-detects models. If needed, specify path:
+In `aurora_ai.py`, the adapter auto-detects models. If needed, specify path:
 
 ```python
 self.llm = AuroraLLMAdapter(
@@ -245,7 +297,7 @@ self.llm = AuroraLLMAdapter(
 
 #### 6. **Run Aurora**
 ```bash
-python aurora_small_2.py
+python aurora_ai.py
 ```
 
 Aurora will launch with a full-screen canvas. She'll start drawing autonomously.
