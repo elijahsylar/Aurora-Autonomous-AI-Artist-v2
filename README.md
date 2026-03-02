@@ -1,12 +1,12 @@
-# Aurora — Autonomous AI Artist with Emergent Creativity
+# Aurora: Autonomous AI Artist with Emergent Creativity
 
 **I removed 600 lines of reward shaping from an AI artist and it got 15-25% better.**
 
-Aurora is an autonomous AI system that creates visual art through behavioral reinforcement learning — no diffusion models, no GANs, no neural style transfer, no predefined aesthetic targets. It draws on a canvas, perceives its own output through ASCII vision, and adapts in real-time through natural contingency: the direct feedback loop between action and observed result.
+Aurora is an autonomous AI system that creates visual art through behavioral reinforcement learning. No diffusion models, no GANs, no neural style transfer, no predefined aesthetic targets. It draws on a canvas, perceives its own output through ASCII vision, and adapts in real-time through natural contingency: the direct feedback loop between action and observed result.
 
-When all explicit reward shaping was removed (rules for "good" colors, "good" compositions), Aurora's output became denser, more compositionally sophisticated, and less stereotypically "AI-generated." Natural contingency alone — the agent simply seeing what it made — was sufficient to drive creative development.
+When all explicit reward shaping was removed (rules for "good" colors, "good" compositions), Aurora's output became denser, more compositionally sophisticated, and less stereotypically "AI-generated." Natural contingency alone, the agent simply seeing what it made, was sufficient to drive creative development.
 
-This approach is grounded in seven years of applied behavioral analysis (ABA) therapy with nonverbal autistic children. The same principles that govern how humans develop behavior through environmental feedback — action → perception → adaptation — are the foundation of Aurora's architecture.
+This approach is grounded in seven years of applied behavioral analysis (ABA) therapy with nonverbal autistic children. The same principles that govern how humans develop behavior through environmental feedback (action, perception, adaptation) are the foundation of Aurora's architecture.
 
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org)
 [![GPU](https://img.shields.io/badge/GPU-Optional-green.svg)](https://github.com)
@@ -19,7 +19,7 @@ This approach is grounded in seven years of applied behavioral analysis (ABA) th
 
 **Constraint removal improves output.** V1 used ~600 lines of prescriptive reward shaping. Removing all of it in V2 produced a 15-25% improvement in output density, more complex compositions, and more diverse color palettes. Constraints were limiting exploration, not guiding it.
 
-**Aesthetic identity emerges per model.** Running the same environment with four different LLMs (Llama 2, Llama 3, Mistral/OpenHermes, Qwen) produces distinct visual signatures — consistent color preferences, compositional strategies, and tool specialization — none of which were explicitly trained.
+**Aesthetic identity emerges per model.** Running the same environment with four different LLMs (Llama 2, Llama 3, Mistral/OpenHermes, Qwen) produces distinct visual signatures: consistent color preferences, compositional strategies, and tool specialization, none of which were explicitly trained.
 
 **The process is fully observable.** Unlike diffusion models or GANs, Aurora reasons through an LLM. You can read its thought process, track its emotional state across sessions, and trace exactly why it made each creative decision. 18,000+ memories across 300+ sessions of documented autonomous behavior.
 
@@ -46,7 +46,7 @@ Aurora learns to draw by:
 4. **Receiving immediate visual feedback** of the results
 5. **Adapting behavior** based on observed outcomes
 
-Aurora operates without pre-trained generative models, neural style transfer, explicit aesthetic reward functions, or human-crafted optimization targets. Creativity emerges through natural contingency — the same mechanism through which humans learn from environmental feedback.
+Aurora operates without pre-trained generative models, neural style transfer, explicit aesthetic reward functions, or human-crafted optimization targets. Creativity emerges through natural contingency, the same mechanism through which humans learn from environmental feedback.
 
 ---
 
