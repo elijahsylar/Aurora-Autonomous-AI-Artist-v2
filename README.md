@@ -1,6 +1,6 @@
 # Aurora: Autonomous AI Artist with Emergent Creativity
 
-**I removed 600 lines of reward shaping from an AI artist and it got 15-25% better.**
+**I removed 600 lines of reward shaping from an AI artist and its overall creative output exploded.**
 
 Aurora is an autonomous AI system that creates visual art through behavioral reinforcement learning. No diffusion models, no GANs, no neural style transfer, no predefined aesthetic targets. It draws on a canvas, perceives its own output through ASCII vision, and adapts in real-time through natural contingency: the direct feedback loop between action and observed result.
 
