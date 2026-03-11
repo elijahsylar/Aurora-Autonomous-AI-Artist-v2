@@ -88,7 +88,7 @@ Each model runs in the same environment with the same prompt structure. All beha
 | **DeepSeek-R1 8B** | 3,159 | 12,886 | 1 | stuck |
 | **Gemma2 9B** | 2,457 | 3,734 | 9 | hollow |
 
-Additional presets available in the adapter: Llama 2 Base, Llama 3 Abliterated, Mistral 7B Instruct, DeepSeek V2 Lite, Phi-3 Medium 14B, and LLaVA v1.6 (multimodal - vision-equipped model that sees the canvas directly instead of through ASCII).
+Additional presets available in the adapter: Llama 2 Base, Llama 3 Abliterated, Mistral 7B Instruct, DeepSeek V2 Lite, and Phi-3 Medium 14B.
 
 ---
 
@@ -145,9 +145,7 @@ Live MySQL logging via `aurora_db.py` - every thought, emotion, goal, dream, and
 ### Interactive Features
 
 - **Chat mode** - Aurora takes 20-minute conversation breaks between drawing sessions, generating reflective prose about its creative process
-- **Hearing** - Optional microphone input; ambient sound volume influences emotional state
-- **Vision** - LLaVA multimodal support (experimental) allows a model to see the canvas as a pixel image rather than ASCII text
-- **Keyboard controls** - Snapshot (S), turbo mode (T), fullscreen (F11), hearing toggle (H), chat mode (C), vision toggle (V), Moondream analysis (M)
+- **Keyboard controls** - Snapshot (S), turbo mode (T), fullscreen (F11), chat mode (C), immediate feedback toggle (I)
 
 ---
 
@@ -186,9 +184,6 @@ CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --force-reinstall --no-
 # Optional: For deep memory (ChromaDB semantic search)
 pip install chromadb
 
-# Optional: For multimodal vision
-pip install transformers torch
-
 # Optional: For database logging
 pip install mysql-connector-python
 ```
@@ -223,7 +218,7 @@ In `aurora_synth_dreams_chats.py`, set your model around line 309:
         self.model_key = "mistral-base"  # CHANGE THIS TO SWAP MODELS
 ```
 
-Available presets: `llama2`, `llama3`, `llama3-abliterated`, `mistral`, `mistral-base`, `openhermes`, `qwen`, `deepseek-r1-8b`, `deepseek-lite`, `gemma2-9b`, `phi3-medium`, `llava`
+Available presets: `llama2`, `llama3`, `llama3-abliterated`, `mistral`, `mistral-base`, `openhermes`, `qwen`, `deepseek-r1-8b`, `deepseek-lite`, `gemma2-9b`, `phi3-medium`
 
 ### Run Aurora
 
@@ -244,10 +239,7 @@ Aurora will:
 |-----|--------|
 | `S` | Save canvas snapshot |
 | `T` | Toggle turbo mode |
-| `H` | Toggle hearing (microphone input) |
 | `C` | Enter chat mode |
-| `V` | Toggle LLaVA vision |
-| `M` | Toggle Moondream auto-analysis |
 | `I` | Toggle immediate feedback mode |
 | `F11` | Toggle fullscreen |
 | `ESC` | Exit fullscreen |
@@ -314,7 +306,7 @@ Model-specific prompt templates handle architectural differences (Llama 2's `[IN
 
 ## Author
 
-**Elijah Camp** - Database administrator, full-stack developer, and painter with 30 years of exhibition history. Seven years as an RBT-certified behavioral therapist implementing ABA therapy and AAC systems for nonverbal autistic children. Aurora applies the same behavioral principles - natural contingency, environmental feedback, constraint removal - to artificial systems.
+**Elijah Camp** - Database administrator, full-stack developer, and painter with 15+ years of exhibition history. Seven years as an RBT-certified behavioral therapist implementing ABA therapy and AAC systems for nonverbal autistic children. Aurora applies the same behavioral principles - natural contingency, environmental feedback, constraint removal - to artificial systems.
 
 - Research terminal: [aurora.elijah-sylar.com](https://aurora.elijah-sylar.com)
 - Art & portfolio: [elijah-sylar.com](https://elijah-sylar.com)
