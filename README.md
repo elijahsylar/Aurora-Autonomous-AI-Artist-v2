@@ -113,11 +113,11 @@ Dreams are persisted to disk and carried forward across sessions.
 
 ### Emotional Architecture
 
-Eight emotion categories (joy, curiosity, peace, energy, contemplation, creativity, melancholy, wonder), each with five intensity levels from mild to transcendent. Emotions are influenced by five sources - dreams, chat, music, artwork observation, and the act of creating - and shift with cooldown periods to prevent erratic oscillation. The model names its own emotional state; Aurora tracks it across sessions.
+Aurora's emotional states are not selected from a menu or triggered by rules. They are parsed directly from the model's raw output - whatever the model says it feels becomes its tracked emotional state. "Creative," "happy," "heavy," "hollow," "stuck," "inspired," "free" - these are words the models chose for themselves. Aurora logs them across sessions, but never prescribes them.
 
 ### Autonomous Goal System
 
-Aurora generates its own creative goals based on canvas state, emotional context, and accumulated memory. Goals persist across steps with progress tracking and are incorporated into the prompt as active context. Coverage-focused goals activate when the canvas is sparse.
+Aurora generates its own creative goals based on canvas state, emotional context, and accumulated memory. Goals persist across steps with progress tracking and are incorporated into the prompt as active context.
 
 ### Paint Simulation
 
@@ -131,7 +131,6 @@ Per-model isolated memory banks. No cross-model contamination. Each model accumu
 - **Artistic associations** - Color contexts, pattern contexts, tool contexts, emotional moments, technique discoveries (stored as associations, not scores)
 - **Dream memories** - Full dream content from REM cycles
 - **Autonomous goals** - Self-generated creative objectives with progress tracking
-- **Emotion memory** - Rolling 50-entry emotional state log
 - **Code history** - Every drawing command with position, color, emotion, and timestamp
 - **Lifetime statistics** - Total pixels drawn, total steps, sessions count, first session date
 
