@@ -46,7 +46,7 @@ def strip_think_blocks(text, model_key):
 # Mirrors the FM synthesis base_notes table exactly
 CHAR_TO_NOTE = {
     ';': 'C3',  ':': 'D3',  '?': 'E3',  '/': 'F3',
-    ',': 'G3',  '.': 'A3',  '|': 'B3',
+    ',': 'G3',  '|': 'B3',
     '!': 'C4',  '@': 'D4',  '#': 'E4',  '$': 'F4',
     '%': 'G4',  '^': 'A4',  '&': 'B4',  '*': 'C5',
     '(': 'D5',  ')': 'E5',  '[': 'F5',  ']': 'G5',
@@ -56,7 +56,7 @@ CHAR_TO_NOTE = {
 }
 
 SONIC_KEYBOARD_LEGEND = (
-    '; =C3 : =D3 ? =E3 / =F3 , =G3 . =A3 | =B3 '
+    '; =C3 : =D3 ? =E3 / =F3 , =G3 | =B3 '
     '! =C4 @ =D4 # =E4 $ =F4 % =G4 ^ =A4 & =B4 * =C5 '
     '( =D5 ) =E5 [ =F5 ] =G5 < =A5 > =B5 = =C6 + =D6 ~ =E6 ` =F6 - =G6 _ =A6'
 )
@@ -306,7 +306,7 @@ class AuroraCodeMindComplete:
         from aurora_adapter import AuroraLLMAdapter
         
         print("Loading base model...")
-        self.model_key = "llama3"  # CHANGE THIS TO SWAP MODELS
+        self.model_key = "mistral-base"  # CHANGE THIS TO SWAP MODELS
         self.llm = AuroraLLMAdapter(
             model_preset=self.model_key,
             gpu_layers=gpu_layers_setting,
@@ -803,7 +803,7 @@ class AuroraCodeMindComplete:
             version_stamp = cache_dir / "fm_v1.stamp"
             cache_valid = version_stamp.exists()
 
-            sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
+            sound_chars = '!@#$%^&*()[]<>=+~`-_,|;:?/{}\\'
             sample_rate = 44100
 
             # Musically correct frequencies — each char is a real note
@@ -1056,7 +1056,7 @@ class AuroraCodeMindComplete:
         if color_votes:
             # Return the most common color in the region
             return max(color_votes.items(), key=lambda x: x[1])[0]
-        return " "
+        return "."
     
     
     def _scale_to_internal(self, coord):
@@ -1770,14 +1770,14 @@ Combine for complex paths"""
                         if len(pixel) == 4:  # RGBA
                             r, g, b, a = pixel
                             if a == 0:
-                                row += " "
+                                row += "."
                                 continue
                         else:  # RGB
                             r, g, b = pixel[:3]
                         
                         # Color detection with tolerance
                         if r <= 10 and g <= 10 and b <= 10:
-                            row += " "  # Empty/Black
+                            row += "."  # Empty/Black
                         elif r >= 245 and g >= 245 and b >= 245:
                             row += "W"  # White
                         elif r >= 245 and g >= 245 and b <= 20:
@@ -1797,7 +1797,7 @@ Combine for complex paths"""
                         elif r > 10 or g > 10 or b > 10:
                             row += self.get_closest_color_char(r, g, b)
                         else:
-                            row += " "  # Empty
+                            row += "."  # Empty
             
             feedback.append(row[:grid_size])  # Ensure row doesn't exceed grid size
             
@@ -1881,7 +1881,7 @@ Combine for complex paths"""
                             
                             density_ratio = density / sample_count if sample_count > 0 else 0
                             if density_ratio == 0:
-                                row += " "
+                                row += "."
                             elif density_ratio < 0.2:
                                 row += ""
                             elif density_ratio < 0.4:
@@ -2003,7 +2003,7 @@ Combine for complex paths"""
                         # Use the new closest color detection
                         row += self.get_closest_color_char(r, g, b)
                     else:
-                        row += " "  # No color found
+                        row += "."  # No color found
             ascii_view.append(row)
         
         # ADD MULTI-RESOLUTION: Include compressed wide view for context
@@ -2054,11 +2054,11 @@ Combine for complex paths"""
                                 elif r > 100 or g > 100 or b > 100:
                                     row += "+"  # Some color present
                                 else:
-                                    row += " "  # Empty/black
+                                    row += "."  # Empty/black
                             else:
-                                row += " "
+                                row += "."
                         else:
-                            row += " "
+                            row += "."
                 compressed_rows.append(row)
             
             ascii_view.extend(compressed_rows)
@@ -3246,7 +3246,7 @@ Colors: red orange yellow green cyan blue purple pink white gray brown magenta l
 Tools: pen brush large_brush larger_brush spray star cross circle diamond flower watercolor charcoal glow
 Controls: clear_all center faster slower
 ONLY THESE MAKE SOUND:
-@#$%^&*()[]<>=+~`-_,.|;/:? (++low --high){sonic_legend_hint}
+@#$%^&*()[]<>=+~`-_,|;/:? (++low --high){sonic_legend_hint}
 
 Everything else stays inside my mind.
 {learning_context}
@@ -3267,7 +3267,7 @@ PEN: 4=up, 5=down
 COLORS: red orange yellow green cyan blue purple pink white gray brown magenta lime navy
 TOOLS: pen brush large_brush larger_brush spray star cross circle diamond flower watercolor charcoal glow
 SPECIAL: 8=blend 9=roller
-SOUNDS: @#$%^&*()[]<>=+~`-_,.|;/:? (++low --high){sonic_legend_hint}
+SOUNDS: @#$%^&*()[]<>=+~`-_,|;/:? (++low --high){sonic_legend_hint}
 CONTROLS: clear_all center faster slower
 VISION: ask_moondream:[question]"""
 
@@ -3434,7 +3434,7 @@ What am I thinking? What am I drawing? I am..."""
                 'faster', 'slower', 'clear_all', 'examples',
                 'shorter_notes', 'longer_notes', 'staccato', 'legato',
             }
-            valid_code_chars = set('0123456789.!@#$%^&*()[]<>=+~`-_,.|;:?/')
+            valid_code_chars = set('0123456789!@#$%^&*()[]<>=+~`-_,|;:?/')
             
             # First: extract any ask_moondream commands intact
             moondream_match = re.search(r'ask_moondream:\[([^\]]*)\]', raw_output)
@@ -3867,7 +3867,7 @@ What am I thinking? What am I drawing? I am..."""
                 return
             
             # Clean the remaining output - find longest continuous sequence of valid commands
-            valid_chars = '0123456789!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\+-'  # Movement + sounds
+            valid_chars = '0123456789!@#$%^&*()[]<>=+~`-_,|;:?/{}\\+-'  # Movement + sounds
             color_words = list(self.palette.keys())  # All valid color names
             
             # Convert to list of tokens (numbers + color words)
@@ -3930,7 +3930,7 @@ What am I thinking? What am I drawing? I am..."""
         pixels_by_color = {}
         # Helper function to play sounds and trigger cymatics
         def play_sound_and_cymatics(char):
-            if char in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\':
+            if char in '!@#$%^&*()[]<>=+~`-_,|;:?/{}\\':
                 sound_key = f"{char}_{self.current_pitch}_{self.current_sound_type}"
                 if sound_key in self.sounds:
                     # Play the sound (WAV files load cleanly, no delay needed)
@@ -3951,7 +3951,7 @@ What am I thinking? What am I drawing? I am..."""
                     # Aurora hears herself immediately
                     if self.hearing_enabled and self.immediate_feedback_mode:
                         # Calculate the frequency she just played
-                        char_index = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'.index(char)
+                        char_index = '!@#$%^&*()[]<>=+~`-_,|;:?/{}\\'.index(char)
                         
                         # Use the actual FM note frequencies (accurate self-hearing)
                         _fm_notes = {
@@ -3987,7 +3987,7 @@ What am I thinking? What am I drawing? I am..."""
                                 print(f" Aurora hears herself: {char} at {base_freq:.1f}Hz ({self.current_pitch})")
 
                 # Add cymatic circle for visualization — independent of audio loading
-                sound_chars = '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\'
+                sound_chars = '!@#$%^&*()[]<>=+~`-_,|;:?/{}\\'
                 char_index = sound_chars.index(char)
                 base_freq = 100 * (2 ** (char_index / 6.0))
 
@@ -4044,7 +4044,7 @@ What am I thinking? What am I drawing? I am..."""
                 char = ops[i]
                 
                 # Process sounds and special characters
-                if char in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\':
+                if char in '!@#$%^&*()[]<>=+~`-_,|;:?/{}\\':
                     # Check for pitch modifiers first
                     if i + 1 < len(ops) and ops[i:i+2] == '++':
                         self.current_pitch = 'low'
@@ -4114,7 +4114,7 @@ What am I thinking? What am I drawing? I am..."""
                 char = ops[i]
                 
                 # Check for sound characters
-                if char in '!@#$%^&*()[]<>=+~`-_,.|;:?/{}\\':
+                if char in '!@#$%^&*()[]<>=+~`-_,|;:?/{}\\':
                     play_sound_and_cymatics(char)
                     actions_taken.append(char)
                     i += 1
