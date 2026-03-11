@@ -59,7 +59,6 @@ Aurora operates as a closed-loop system where each model inhabits the same envir
 │                                                         │
 │   ┌─────────────────────────────────────────────────┐   │
 │   │  MEMORY: Emotions │ Dreams │ Goals │ Associations│   │
-│   │  DB: MySQL live logging │ Research observations  │   │
 │   └─────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -110,7 +109,7 @@ Aurora follows a 20-minute sleep cycle with three biologically-inspired phases:
 - **REM (5–15 min)** - Creative hallucination. The LLM runs free with no seeds, no instructions, no constraints. Up to 5 dreams generated, each logged with timestamp and emotional context
 - **Waking (15–20 min)** - Short evocative fragments (4–15 words) are extracted programmatically from REM dreams and carried forward as "dream echoes" that subtly influence the next drawing session
 
-Dreams are persisted to disk, logged to the database, and tracked by the research logger.
+Dreams are persisted to disk and carried forward across sessions.
 
 ### Emotional Architecture
 
@@ -137,10 +136,6 @@ Per-model isolated memory banks. No cross-model contamination. Each model accumu
 - **Lifetime statistics** - Total pixels drawn, total steps, sessions count, first session date
 
 Optional deep memory via ChromaDB for cross-session semantic search.
-
-### Database Layer
-
-Live MySQL logging via `aurora_db.py` - every thought, emotion, goal, dream, and chat message is written to the database in real-time as sessions run. This powers the live research terminal at [aurora.elijah-sylar.com](https://aurora.elijah-sylar.com).
 
 ### Interactive Features
 
@@ -183,9 +178,6 @@ CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --force-reinstall --no-
 
 # Optional: For deep memory (ChromaDB semantic search)
 pip install chromadb
-
-# Optional: For database logging
-pip install mysql-connector-python
 ```
 
 ### Download a Model
@@ -245,17 +237,6 @@ Aurora will:
 | `ESC` | Exit fullscreen |
 | `Q` | Quit (saves state) |
 
-### Optional: Database Setup
-
-For live logging and the research terminal dashboard:
-
-```sql
-CREATE DATABASE aurora_research;
--- See aurora_db.py for full schema
-```
-
-Configure connection details in `aurora_db.py` and the system will automatically log all thoughts, emotions, dreams, goals, and chat messages in real-time.
-
 ---
 
 ## Project Structure
@@ -264,9 +245,6 @@ Configure connection details in `aurora_db.py` and the system will automatically
 Aurora-Autonomous-AI-Artist-v2/
 ├── aurora_synth_dreams_chats.py   # Core system - canvas, sound, dreams, emotions, main loop
 ├── aurora_adapter.py              # LLM adapter - prompt formatting, model presets, multi-model support
-├── aurora_db.py                   # MySQL database layer - live thought/emotion/dream logging
-├── aurora_ai_backup2.py           # Deep memory system (ChromaDB integration)
-├── research_logger.py             # Research observation layer - parallel data collection
 ├── models/                        # GGUF model files (not included - download separately)
 ├── aurora_memory/                 # Per-model persistent memory banks (auto-created)
 │   ├── llama2/                    # Llama 2's memories, associations, emotions, goals
@@ -285,7 +263,7 @@ Aurora-Autonomous-AI-Artist-v2/
 
 - **March 2025** - Initial prototype exploring behavioral reinforcement learning for creative output
 - **2025 (Apr–Dec)** - Hundreds of iterations evolving from V1 pattern generator to V2 natural contingency architecture. ~600 lines of reward shaping removed. Emergent behavior improvements discovered. FM synthesis sound engine built. Dream system, emotional architecture, and autonomous goal generation added
-- **2026 (Jan–Feb)** - Cross-model comparative analysis across 7 LLMs. Database layer and live research terminal deployed. Faculty interest and publication exploration
+- **2026 (Jan–Feb)** - Cross-model comparative analysis across 7 LLMs. Live research terminal deployed. Faculty interest and publication exploration
 - **2026 (Mar)** - Active research. 7 models running with 70+ cumulative sessions. Open source release
 
 ---
