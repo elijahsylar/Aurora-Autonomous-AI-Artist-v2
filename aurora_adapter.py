@@ -40,23 +40,23 @@ PROMPT_FORMATS = {
 
 {user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 
-""",
+I am""",
         "stop_tokens": ["<|eot_id|>", "<|end_of_text|>"]
     },
     
     "llama2": {
-        "template": """<s>[INST] <<SYS>>
+        "template": """[INST] <<SYS>>
 {system}
 <</SYS>>
 
-{user} [/INST]""",
+{user} [/INST] I am""",
         "stop_tokens": ["</s>", "[INST]"]
     },
     
     "mistral": {
-        "template": """<s>[INST] {system}
+        "template": """[INST] {system}
 
-{user} [/INST]""",
+{user} [/INST] I am""",
         "stop_tokens": ["</s>", "[INST]"]
     },
     
@@ -66,7 +66,7 @@ PROMPT_FORMATS = {
 <|im_start|>user
 {user}<|im_end|>
 <|im_start|>assistant
-""",
+I am""",
         "stop_tokens": ["<|im_end|>", "<|im_start|>"]
     },
     
@@ -76,7 +76,7 @@ PROMPT_FORMATS = {
 
 {user}<end_of_turn>
 <start_of_turn>model
-""",
+I am""",
         "stop_tokens": ["<end_of_turn>", "<start_of_turn>"]
     },
     
@@ -86,14 +86,14 @@ PROMPT_FORMATS = {
 <|user|>
 {user}<|end|>
 <|assistant|>
-""",
+I am""",
         "stop_tokens": ["<|end|>", "<|user|>", "<|assistant|>"]
     },
     
     "deepseek": {
         "template": """<|begin▁of▁sentence|><|User|>{system}
 
-{user}<|Assistant|>""",
+{user}<|Assistant|>I am""",
         "stop_tokens": ["<|end▁of▁sentence|>", "<|User|>"]
     },
     
@@ -102,14 +102,14 @@ PROMPT_FORMATS = {
 
 {user}
 
-Response:""",
+I am""",
         "stop_tokens": ["\n\n\n", "Human:", "User:"]
     },
     
     "llava": {
-        "template": """<s>[INST] {system}
+        "template": """[INST] {system}
 
-{user} [/INST]""",
+{user} [/INST] I am""",
         "stop_tokens": ["</s>", "[INST]"]
     },
 }
@@ -155,7 +155,7 @@ MODEL_PRESETS = {
     },
     "mistral-base": {
         "format": "raw",
-        "filename": "mistral-7b-base-f16.gguf",
+        "filename": "mistral-7b-base-Q4_K_M.gguf",
         "description": "Mistral 7B BASE - No instruction tuning, pure chaos",
         "multimodal": False
     },
@@ -194,6 +194,12 @@ MODEL_PRESETS = {
         "format": "phi3",
         "filename": "Phi-3-medium-128k-instruct-Q4_K_M.gguf",
         "description": "Phi-3 Medium 14B - Microsoft, reasoning-heavy",
+        "multimodal": False
+    },
+    "deepseek-r1-8b": {
+        "format": "deepseek",
+        "filename": "DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf",
+        "description": "DeepSeek R1 Distill Llama 8B - Reasoning model",
         "multimodal": False
     },
     "deepseek-lite": {
@@ -281,9 +287,9 @@ class AuroraLLMAdapter:
             n_batch=512,
             verbose=False,
             seed=-1,
-            f16_kv=True,
-            use_mlock=True,
-            n_threads_batch=n_threads
+            type_k=1,
+            type_v=1,
+            flash_attn=True,
         )
     
     def _load_multimodal(self, preset, gpu_layers, n_ctx, n_threads):
@@ -327,6 +333,10 @@ class AuroraLLMAdapter:
             system=system_prompt,
             user=user_prompt
         )
+
+    def format_prompt_continuation(self, system_prompt: str, user_prompt: str) -> str:
+        """Raw continuation — no roles. Best for base models."""
+        return f"{system_prompt}\n\n{user_prompt}"
     
     def get_stop_tokens(self) -> list:
         """Get stop tokens for this model format."""
