@@ -297,7 +297,7 @@ class AuroraCodeMindComplete:
         # Detect GPU and set layers
         if use_gpu:
             print(" GPU Mode Enabled!")
-            gpu_layers_setting = 28  # 28/32 layers on GPU — leaves ~800MB for Moondream
+            gpu_layers_setting = 20  # 28/32 layers on GPU — leaves ~800MB for Moondream
         else:
             print(" CPU Mode")
             gpu_layers_setting = 0
@@ -306,11 +306,11 @@ class AuroraCodeMindComplete:
         from aurora_adapter import AuroraLLMAdapter
         
         print("Loading base model...")
-        self.model_key = "mistral-base"  # CHANGE THIS TO SWAP MODELS
+        self.model_key = "llama2-base"  # CHANGE THIS TO SWAP MODELS
         self.llm = AuroraLLMAdapter(
             model_preset=self.model_key,
             gpu_layers=gpu_layers_setting,
-            n_ctx=8192,       # 80x80 grid needs room
+            n_ctx=4096 if self.model_key == "phi3" else 8192,       # 80x80 grid needs room
             n_threads=8,
             verbose=True
         )
@@ -326,7 +326,6 @@ class AuroraCodeMindComplete:
             self.db = None
         
         """ Your options:
-
 "gemma2-9b"           
 "deepseek-r1-8b"      
 "llama3-abliterated" 
@@ -336,7 +335,13 @@ class AuroraCodeMindComplete:
 "qwen"                
 "openhermes"          
 "llama2"
-"llama2-base" """
+"llama2-base"
+"llama3.1"
+"qwen3.5"
+"glm4"
+"phi3"
+"qwen3"
+"hermes3" """
 
         print(f" LLM loaded with {gpu_layers_setting} GPU layers")
         
@@ -799,8 +804,8 @@ class AuroraCodeMindComplete:
             cache_dir = Path("./aurora_sound_cache")
             cache_dir.mkdir(exist_ok=True)
 
-            # Version stamp — delete aurora_sound_cache/fm_v1.stamp to force regeneration
-            version_stamp = cache_dir / "fm_v1.stamp"
+            # Version stamp — delete aurora_sound_cache/moog_v1.stamp to force regeneration
+            version_stamp = cache_dir / "moog_v1.stamp"
             cache_valid = version_stamp.exists()
 
             sound_chars = '!@#$%^&*()[]<>=+~`-_,|;:?/{}\\'
@@ -821,7 +826,7 @@ class AuroraCodeMindComplete:
             total = len(sound_chars)
             for i, char in enumerate(sound_chars):
                 freq = base_notes.get(char, 440.0)
-                print(f"\r  FM Piano: synthesizing {i + 1}/{total} ({char}) @ {freq:.1f}Hz   ",
+                print(f"\r  Moog Synth: synthesizing {i + 1}/{total} ({char}) @ {freq:.1f}Hz   ",
                       end="", flush=True)
 
                 self.sound_timestamps[char] = {'freq': freq, 'note': char}
@@ -846,7 +851,7 @@ class AuroraCodeMindComplete:
                     self.sounds[sound_key].set_volume(0.75)
 
             version_stamp.touch()
-            print(f"\n  ✓ FM Electric Piano ready — {len(self.sounds)} voices cached")
+            print(f"\n  ✓ Moog Synth ready — {len(self.sounds)} voices cached")
 
         except Exception as e:
             print(f"\n  Sound system failed: {e}")
@@ -860,6 +865,7 @@ class AuroraCodeMindComplete:
 
         # Sonic self-awareness — Aurora can "hear" her own recent notes
         self.recent_sounds = deque(maxlen=12)  # Rolling log of last 12 notes played
+        self.sound_buffer = []  # Buffer action chars for DB streaming to web dashboard
 
         
         # Sound duration control (in seconds) - ADD THESE THREE LINES
@@ -935,51 +941,50 @@ class AuroraCodeMindComplete:
     # CLASS METHODS - These must be OUTSIDE __init__, at the same level as def __init__
     
     def _generate_fm_piano(self, freq, sample_rate):
-        """FM Electric Piano synthesis — Rhodes/DX7 Algorithm 5 style.
+        """Moog-style subtractive synthesis — warm analog pluck.
 
-        Two-operator FM: modulator feeds carrier at 1:1 ratio.
-        Modulation index decays from bright (attack) to warm (sustain),
-        which is exactly how a Rhodes tine/pickup works physically.
+        Dual detuned sawtooth oscillators through a resonant low-pass
+        filter with decaying cutoff. Classic Minimoog bass/lead character.
         """
         duration = 1.4
         samples = int(sample_rate * duration)
         t = np.linspace(0, duration, samples, False)
 
-        # --- Operator frequencies (1:1 ratio = Rhodes warmth) ---
-        mod_freq = freq * 1.0
+        # --- Dual sawtooth oscillators (slightly detuned for thickness) ---
+        saw1 = 2.0 * (freq * t % 1.0) - 1.0
+        saw2 = 2.0 * ((freq * 1.005) * t % 1.0) - 1.0  # +5 cents detune
+        output = (saw1 + saw2 * 0.8) * 0.5
 
-        # --- Modulation index envelope ---
-        # High index at attack = bright harmonics (hammer strike)
-        # Rapid decay to low = warm sustain (tine ringing freely)
-        idx_attack  = 6.0
-        idx_sustain = 0.7
-        idx_env = idx_sustain + (idx_attack - idx_sustain) * np.exp(-10.0 * t)
+        # --- Moog ladder filter (resonant low-pass, cutoff decays) ---
+        cutoff_start = min(freq * 8, 12000)
+        cutoff_end = min(freq * 1.5, 2000)
+        n_chunks = 32
+        chunk_size = samples // n_chunks
+        filtered = np.zeros(samples)
+        for i in range(n_chunks):
+            progress = i / n_chunks
+            cutoff = cutoff_start * np.exp(-4.0 * progress) + cutoff_end
+            cutoff = min(cutoff, sample_rate * 0.45)
+            sos = signal.butter(4, cutoff, 'low', fs=sample_rate, output='sos')
+            start = i * chunk_size
+            end = min(start + chunk_size, samples)
+            filtered[start:end] = signal.sosfilt(sos, output[start:end])
+        output = filtered
 
-        # --- Amplitude ADSR ---
-        attack_s  = int(0.004 * sample_rate)   # 4ms
-        decay_s   = int(0.120 * sample_rate)   # 120ms
-        sus_level = 0.55
+        # --- Amplitude envelope (snappy pluck) ---
+        attack_s = int(0.008 * sample_rate)
+        decay_s = int(0.15 * sample_rate)
+        sus_level = 0.4
 
         amp_env = np.full(samples, sus_level)
         amp_env[:attack_s] = np.linspace(0.0, 1.0, attack_s)
         if attack_s + decay_s < samples:
             amp_env[attack_s:attack_s + decay_s] = np.linspace(1.0, sus_level, decay_s)
+        amp_env *= np.exp(-2.0 * t)
+        output *= amp_env
 
-        # Natural release taper over full duration
-        amp_env *= np.exp(-1.5 * t)
-
-        # --- Core FM synthesis ---
-        modulator = np.sin(2 * np.pi * mod_freq * t)
-        carrier   = np.sin(2 * np.pi * freq * t + idx_env * modulator)
-        output    = carrier * amp_env
-
-        # --- Second operator: upper harmonic shimmer (DX7 Op4 feedback) ---
-        idx2   = 0.25 * np.exp(-6.0 * t)
-        op2    = np.sin(2 * np.pi * freq * 2.0 * t + idx2 * modulator) * 0.12
-        output += op2 * np.exp(-2.0 * t)
-
-        # --- Rhodes character: soft clip (physical hammer compression) ---
-        output = np.tanh(output * 1.3) / np.tanh(np.array(1.3))
+        # --- Soft saturation (analog warmth) ---
+        output = np.tanh(output * 1.5) / np.tanh(np.array(1.5))
 
         # --- Remove DC offset ---
         sos_hp = signal.butter(1, 20.0, 'high', fs=sample_rate, output='sos')
@@ -3006,16 +3011,11 @@ What's on my mind?"""
         
         # Normal drawing mode continues below...
         # AUTONOMOUS GOAL GENERATION
-        # Generate autonomous goal every 30 minutes OR when canvas needs filling
-        current_coverage = getattr(self, 'current_coverage', 0)
-        if self.current_mode != "rest":  # ADD THIS CHECK
-            if current_coverage < 30 and self.steps_taken > 0 and self.steps_taken % 50 == 0:
-                # Prioritize coverage goals when canvas is empty
-                goal = self.generate_coverage_focused_goal()
-            elif time.time() - self.last_goal_time > 1800:  # 1800 seconds = 30 minutes
-                goal = self.generate_autonomous_goal()
-                if goal:  # Only reset timer if goal was actually generated
-                    self.last_goal_time = time.time()
+        # Goal generation disabled — no coverage pressure, pure autonomous expression
+        if self.current_mode != "rest" and time.time() - self.last_goal_time > 1800:
+            goal = self.generate_autonomous_goal()
+            if goal:
+                self.last_goal_time = time.time()
             
         # INCORPORATE CURRENT GOAL INTO CONTEXT
         current_goal_context = ""
@@ -3244,13 +3244,12 @@ ONLY THESE MOVE MY BODY:
 ONLY THESE CHANGE MY MARK:
 Colors: red orange yellow green cyan blue purple pink white gray brown magenta lime navy
 Tools: pen brush large_brush larger_brush spray star cross circle diamond flower watercolor charcoal glow
-Controls: clear_all center faster slower
+Controls: save_painting clear_all center faster slower
 ONLY THESE MAKE SOUND:
 @#$%^&*()[]<>=+~`-_,|;/:? (++low --high){sonic_legend_hint}
 
 Everything else stays inside my mind.
 {learning_context}
-{active_goal_context}
 {"Dream echoes: " + " ... ".join(self.dream_fragments) if hasattr(self, 'dream_fragments') and self.dream_fragments else ''}"""
         else:
             # Build dream residue context if any fragments exist
@@ -3261,67 +3260,22 @@ Everything else stays inside my mind.
             # Main drawing prompt - batch mode (no per-action feedback)
             system_prompt = f"""I am drawing. Hand at ({self.x}, {self.y}). Pen {'down' if self.is_drawing else 'up'}. Color: {self.current_color_name}.
 {learning_context}
-{active_goal_context}{dream_context}
+{dream_context}
 MOVEMENT: 0=up, 1=down, 2=left, 3=right (each moves 3 pixels)
 PEN: 4=up, 5=down
 COLORS: red orange yellow green cyan blue purple pink white gray brown magenta lime navy
 TOOLS: pen brush large_brush larger_brush spray star cross circle diamond flower watercolor charcoal glow
 SPECIAL: 8=blend 9=roller
 SOUNDS: @#$%^&*()[]<>=+~`-_,|;/:? (++low --high){sonic_legend_hint}
-CONTROLS: clear_all center faster slower
+CONTROLS: save_painting clear_all center faster slower
 VISION: ask_moondream:[question]"""
 
         
         # Get memory summary
         mem_summary = self.memory.get_memory_summary() if hasattr(self.memory, 'get_memory_summary') else ""
         
-        # Calculate empty areas - ADD THIS BLOCK
+        # Coverage feedback disabled — let models paint freely
         empty_feedback = ""
-        if self.steps_taken % 1 == 0:  # Every turn
-            # Quick scan of quadrants
-            mid_x = self.canvas_size // 2
-            mid_y = self.canvas_size // 2
-            
-            quadrant_empty = {
-                "TOP-LEFT": 0,
-                "TOP-RIGHT": 0,
-                "BOTTOM-LEFT": 0,
-                "BOTTOM-RIGHT": 0
-            }
-            
-            # Sample canvas to check emptiness
-            sample_step = 20
-            total_samples = 0
-            
-            for x in range(0, self.canvas_size, sample_step):
-                for y in range(0, self.canvas_size, sample_step):
-                    total_samples += 1
-                    internal_x = self._scale_to_internal(x)
-                    internal_y = self._scale_to_internal(y)
-                    if internal_x < self.internal_canvas_size and internal_y < self.internal_canvas_size:
-                        pixel = self.pixels.getpixel((internal_x, internal_y))
-                        if pixel == (0, 0, 0) or pixel == (0, 0, 0, 255):  # Empty
-                            # Determine quadrant
-                            if x < mid_x and y < mid_y:
-                                quadrant_empty["TOP-LEFT"] += 1
-                            elif x >= mid_x and y < mid_y:
-                                quadrant_empty["TOP-RIGHT"] += 1
-                            elif x < mid_x and y >= mid_y:
-                                quadrant_empty["BOTTOM-LEFT"] += 1
-                            else:
-                                quadrant_empty["BOTTOM-RIGHT"] += 1
-            
-            # Convert to percentages
-            samples_per_quadrant = total_samples // 4
-            empty_areas = []
-            
-            for quadrant, empty_count in quadrant_empty.items():
-                empty_percent = (empty_count / samples_per_quadrant) * 100 if samples_per_quadrant > 0 else 0
-                if empty_percent > 70:  # Mostly empty
-                    empty_areas.append(f"{quadrant}: {empty_percent:.0f}% EMPTY")
-            
-            if empty_areas:
-                empty_feedback = "\n EMPTY AREAS:\n" + "\n".join(empty_areas)
                     
         # Color usage data (neutral, no editorial framing)
         color_feedback = ""
@@ -3372,7 +3326,7 @@ VISION: ask_moondream:[question]"""
 {recent_thoughts}
 {sonic_feedback}
 
-What am I thinking? What am I drawing? I am..."""
+I am drawing """
 
         # (Full canvas visible every turn - no periodic wide view needed)
         
@@ -3401,7 +3355,9 @@ What am I thinking? What am I drawing? I am..."""
             print(f"  [LLM: {time.time()-_t0:.2f}s]", flush=True)
 
             # Extract the generated text
-            raw_output = ("I am " + response['choices'][0]['text'].strip()).lower()
+            raw_output = response['choices'][0]['text'].strip().lower()
+            if not raw_output.startswith("i am") and "llama" not in self.model_key:
+                raw_output = "i am " + raw_output
             
             # Store the original raw output BEFORE any processing
             original_raw = raw_output
@@ -3431,7 +3387,7 @@ What am I thinking? What am I drawing? I am..."""
                 'cross', 'circle', 'diamond', 'flower', 'watercolor', 'charcoal', 'glow',
                 'synth', 'beeps', 'organic', 'digital', 'glitch',
                 'center',
-                'faster', 'slower', 'clear_all', 'examples',
+                'faster', 'slower', 'clear_all', 'examples', 'save_painting',
                 'shorter_notes', 'longer_notes', 'staccato', 'legato',
             }
             valid_code_chars = set('0123456789!@#$%^&*()[]<>=+~`-_,|;:?/')
@@ -3444,7 +3400,7 @@ What am I thinking? What am I drawing? I am..."""
             # Replace underscored compound words temporarily so they don't get split
             temp_output = raw_output
             for compound in ['large_brush', 'larger_brush', 'clear_all', 'shorter_notes',
-                           'longer_notes']:
+                           'longer_notes', 'save_painting']:
                 temp_output = temp_output.replace(compound, f'§{compound}§')
             
             extracted = []
@@ -3473,6 +3429,10 @@ What am I thinking? What am I drawing? I am..."""
             
             raw_output = ''.join(extracted)
             has_preamble = (raw_output != original_raw)
+            
+            if 'save_painting' in raw_output:
+                self.save_and_title_painting()
+                return
             
             if raw_output:
                 print(f"   Filtered to: '{raw_output}'")
@@ -3935,6 +3895,9 @@ What am I thinking? What am I drawing? I am..."""
                 if sound_key in self.sounds:
                     # Play the sound (WAV files load cleanly, no delay needed)
                     self.sounds[sound_key].play()
+
+                    # Buffer for web dashboard streaming
+                    self.sound_buffer.append(char)
 
                     # Log this note for Aurora's sonic self-awareness
                     note_name = CHAR_TO_NOTE.get(char, '?')
@@ -4805,13 +4768,7 @@ What am I thinking? What am I drawing? I am..."""
             print(f"  Could not save thoughts: {e}")
     
     def get_recent_thoughts(self, n=3):
-        """Get recent factual state for context injection — no raw LLM text.
-        
-        IMPORTANT: Never feed raw LLM narrative back into the prompt.
-        Small LLMs (Llama 2 7B) cannot distinguish their own prior text from
-        fresh sensory data, causing self-referential template locking.
-        Only return factual state: position, emotion, step number.
-        """
+        """Get recent factual state for context injection — no raw LLM text."""
         if not hasattr(self, 'thought_history') or not self.thought_history:
             return ""
         recent = list(self.thought_history)[-n:]
@@ -5110,9 +5067,8 @@ My goal:"""
         return None
         
     def generate_coverage_focused_goal(self):
-        """Generate a goal specifically for filling empty areas"""
-        if not hasattr(self, 'identified_empty_regions') or not self.identified_empty_regions:
-            return None
+        """Disabled — coverage goals contaminate autonomous expression"""
+        return None
         
         # Pick an empty region to target
         target_region = self.identified_empty_regions[0]
@@ -6593,8 +6549,8 @@ My canvas is {self.calculate_current_coverage():.0f}% filled."""
         # Save high-res version
         filename = snap_dir / f"aurora_{timestamp}_{self.model_key}_{emotion_tag}.png"
         
-        # Downsample to reasonable size for saving (2x instead of 4x)
-        save_size = self.canvas_size * 2
+        
+        save_size = self.canvas_size * 6
         save_img = self.pixels.resize((save_size, save_size), Image.Resampling.LANCZOS)
         save_img.save(filename, "PNG", quality=95)
         if hasattr(self, 'db') and self.db:
@@ -6637,6 +6593,53 @@ My canvas is {self.calculate_current_coverage():.0f}% filled."""
         
         with open(meta_file, 'w') as f:
             json.dump(metadata, f, indent=2)
+    
+    def save_and_title_painting(self):
+        """LLM decided the painting is done — ask for title and save"""
+        print(f"\n  {self.model_key} says the painting is complete! Asking for title...")
+        
+        prompt = self._format_prompt(
+            "You just completed a painting on a canvas.",
+            "You've decided this painting is complete. Do you want to SAVE it or DELETE it and start fresh? If saving, respond with SAVE: followed by a title. If deleting, respond with DELETE. This painting is titled"
+        )
+        
+        response = self.llm(
+            prompt,
+            max_tokens=30,
+            temperature=0.9,
+            stop=self._get_stop_tokens() + ["\n"]
+        )
+        title = response['choices'][0]['text'].strip().strip('"').strip("'").strip('.')
+        
+        if not title or len(title) < 2:
+            title = f"Untitled {self.steps_taken}"
+        
+        print(f"  Title: \"{title}\"")
+        
+        # Save to gallery using existing snapshot method
+        self.save_snapshot()
+        
+        # End DB session
+        if hasattr(self, 'db') and self.db:
+            self.db.end_session(
+                total_steps=self.steps_taken,
+                coverage=self.calculate_current_coverage() if hasattr(self, 'calculate_current_coverage') else 0,
+                painting_title=title
+            )
+        
+        # Clear canvas for next piece
+        self.pixels = Image.new('RGBA', (self.internal_canvas_size, self.internal_canvas_size), (0, 0, 0))
+        self.draw_img = ImageDraw.Draw(self.pixels)
+        self.x = self.canvas_size // 2
+        self.y = self.canvas_size // 2
+        self.steps_taken = 0
+        self.current_emotion = "base"
+        
+        # Start new session
+        if hasattr(self, 'db') and self.db:
+            self.db.start_session()
+        
+        print(f"  Canvas cleared. New session started.\n")
     
     def save_canvas_state(self):
         """Save current canvas and position"""
@@ -7590,6 +7593,13 @@ My canvas is {self.calculate_current_coverage():.0f}% filled."""
                 if self.steps_taken % 10 == 0 and hasattr(self, 'db') and self.db:
                     try:
                         self.db.save_canvas_image(self.steps_taken, self.pixels, self.calculate_current_coverage() if hasattr(self, 'calculate_current_coverage') else 0)
+                    except Exception:
+                        pass
+                    # Flush sound buffer to DB
+                    try:
+                        if self.sound_buffer:
+                            self.db.save_sounds(self.steps_taken, ''.join(self.sound_buffer))
+                            self.sound_buffer = []
                     except Exception:
                         pass
                 
