@@ -40,7 +40,7 @@ PROMPT_FORMATS = {
 
 {user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 
-I am""",
+I am creating""",
         "stop_tokens": ["<|eot_id|>", "<|end_of_text|>"]
     },
     
@@ -49,14 +49,14 @@ I am""",
 {system}
 <</SYS>>
 
-{user} [/INST] I am""",
+{user} [/INST] I am creating""",
         "stop_tokens": ["</s>", "[INST]"]
     },
     
     "mistral": {
         "template": """[INST] {system}
 
-{user} [/INST] I am""",
+{user} [/INST] I am creating""",
         "stop_tokens": ["</s>", "[INST]"]
     },
     
@@ -66,7 +66,7 @@ I am""",
 <|im_start|>user
 {user}<|im_end|>
 <|im_start|>assistant
-I am""",
+I am creating""",
         "stop_tokens": ["<|im_end|>", "<|im_start|>"]
     },
     
@@ -76,7 +76,7 @@ I am""",
 
 {user}<end_of_turn>
 <start_of_turn>model
-I am""",
+I am creating""",
         "stop_tokens": ["<end_of_turn>", "<start_of_turn>"]
     },
     
@@ -86,14 +86,14 @@ I am""",
 <|user|>
 {user}<|end|>
 <|assistant|>
-I am""",
+I am creating""",
         "stop_tokens": ["<|end|>", "<|user|>", "<|assistant|>"]
     },
     
     "deepseek": {
         "template": """<|begin▁of▁sentence|><|User|>{system}
 
-{user}<|Assistant|>I am""",
+{user}<|Assistant|>I am creating""",
         "stop_tokens": ["<|end▁of▁sentence|>", "<|User|>"]
     },
     
@@ -102,14 +102,14 @@ I am""",
 
 {user}
 
-I am""",
+I am creating""",
         "stop_tokens": ["\n\n\n", "Human:", "User:"]
     },
     
     "llava": {
         "template": """[INST] {system}
 
-{user} [/INST] I am""",
+{user} [/INST] I am creating""",
         "stop_tokens": ["</s>", "[INST]"]
     },
 }
@@ -200,6 +200,42 @@ MODEL_PRESETS = {
         "format": "deepseek",
         "filename": "DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf",
         "description": "DeepSeek R1 Distill Llama 8B - Reasoning model",
+        "multimodal": False
+    },
+    "llama3.1": {
+        "format": "llama3",
+        "filename": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+        "description": "Llama 3.1 8B - Meta's improved small model (July 2024)",
+        "multimodal": False
+    },
+    "qwen3.5": {
+        "format": "chatml",
+        "filename": "Qwen3.5-9B-Q4_K_M.gguf",
+        "description": "Qwen 3.5 9B - Alibaba's newest (Feb 2026)",
+        "multimodal": False
+    },
+    "glm4": {
+        "format": "chatml",
+        "filename": "glm-4-9b-chat-Q4_K_M.gguf",
+        "description": "GLM-4 9B - Zhipu AI (Dec 2025)",
+        "multimodal": False
+    },
+    "phi3": {
+        "format": "phi3",
+        "filename": "Phi-3-mini-4k-instruct-Q4_K_M.gguf",
+        "description": "Phi-3 Mini 3.8B - Microsoft, tiny but smart",
+        "multimodal": False
+    },
+    "qwen3": {
+        "format": "chatml",
+        "filename": "Qwen3-8B-Q4_K_M.gguf",
+        "description": "Qwen3 8B - Alibaba, thinking/non-thinking (April 2025)",
+        "multimodal": False
+    },
+    "hermes3": {
+        "format": "chatml",
+        "filename": "Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
+        "description": "Hermes 3 Llama 3.1 8B - NousResearch fine-tune (Aug 2024)",
         "multimodal": False
     },
     "deepseek-lite": {
