@@ -40,23 +40,23 @@ PROMPT_FORMATS = {
 
 {user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 
-""",
+{prefix}""",
         "stop_tokens": ["<|eot_id|>", "<|end_of_text|>"]
     },
     
     "llama2": {
-        "template": """<s>[INST] <<SYS>>
+        "template": """[INST] <<SYS>>
 {system}
 <</SYS>>
 
-{user} [/INST]""",
+{user} [/INST] {prefix}""",
         "stop_tokens": ["</s>", "[INST]"]
     },
     
     "mistral": {
-        "template": """<s>[INST] {system}
+        "template": """[INST] {system}
 
-{user} [/INST]""",
+{user} [/INST] {prefix}""",
         "stop_tokens": ["</s>", "[INST]"]
     },
     
@@ -66,7 +66,7 @@ PROMPT_FORMATS = {
 <|im_start|>user
 {user}<|im_end|>
 <|im_start|>assistant
-""",
+{prefix}""",
         "stop_tokens": ["<|im_end|>", "<|im_start|>"]
     },
     
@@ -76,7 +76,7 @@ PROMPT_FORMATS = {
 
 {user}<end_of_turn>
 <start_of_turn>model
-""",
+{prefix}""",
         "stop_tokens": ["<end_of_turn>", "<start_of_turn>"]
     },
     
@@ -86,14 +86,14 @@ PROMPT_FORMATS = {
 <|user|>
 {user}<|end|>
 <|assistant|>
-""",
+{prefix}""",
         "stop_tokens": ["<|end|>", "<|user|>", "<|assistant|>"]
     },
     
     "deepseek": {
         "template": """<|begin▁of▁sentence|><|User|>{system}
 
-{user}<|Assistant|>""",
+{user}<|Assistant|>{prefix}""",
         "stop_tokens": ["<|end▁of▁sentence|>", "<|User|>"]
     },
     
@@ -102,14 +102,14 @@ PROMPT_FORMATS = {
 
 {user}
 
-Response:""",
+{prefix}""",
         "stop_tokens": ["\n\n\n", "Human:", "User:"]
     },
     
     "llava": {
-        "template": """<s>[INST] {system}
+        "template": """[INST] {system}
 
-{user} [/INST]""",
+{user} [/INST] I am creating""",
         "stop_tokens": ["</s>", "[INST]"]
     },
 }
@@ -145,7 +145,8 @@ MODEL_PRESETS = {
         "format": "raw",
         "filename": "llama-2-7b-base.Q4_K_M.gguf",
         "description": "Llama 2 7B BASE - No instruction tuning whatsoever",
-        "multimodal": False
+        "multimodal": False,
+        "prefix": ""
     },
     "mistral": {
         "format": "mistral",
@@ -155,9 +156,10 @@ MODEL_PRESETS = {
     },
     "mistral-base": {
         "format": "raw",
-        "filename": "mistral-7b-base-f16.gguf",
+        "filename": "mistral-7b-base-Q4_K_M.gguf",
         "description": "Mistral 7B BASE - No instruction tuning, pure chaos",
-        "multimodal": False
+        "multimodal": False,
+        "prefix": ""
     },
     "qwen": {
         "format": "chatml",
@@ -194,6 +196,48 @@ MODEL_PRESETS = {
         "format": "phi3",
         "filename": "Phi-3-medium-128k-instruct-Q4_K_M.gguf",
         "description": "Phi-3 Medium 14B - Microsoft, reasoning-heavy",
+        "multimodal": False
+    },
+    "deepseek-r1-8b": {
+        "format": "deepseek",
+        "filename": "DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf",
+        "description": "DeepSeek R1 Distill Llama 8B - Reasoning model",
+        "multimodal": False
+    },
+    "llama3.1": {
+        "format": "llama3",
+        "filename": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+        "description": "Llama 3.1 8B - Meta's improved small model (July 2024)",
+        "multimodal": False
+    },
+    "qwen3.5": {
+        "format": "chatml",
+        "filename": "Qwen3.5-9B-Q4_K_M.gguf",
+        "description": "Qwen 3.5 9B - Alibaba's newest (Feb 2026)",
+        "multimodal": False
+    },
+    "glm4": {
+        "format": "chatml",
+        "filename": "glm-4-9b-chat-Q4_K_M.gguf",
+        "description": "GLM-4 9B - Zhipu AI (Dec 2025)",
+        "multimodal": False
+    },
+    "phi3": {
+        "format": "phi3",
+        "filename": "Phi-3-mini-4k-instruct-Q4_K_M.gguf",
+        "description": "Phi-3 Mini 3.8B - Microsoft, tiny but smart",
+        "multimodal": False
+    },
+    "qwen3": {
+        "format": "chatml",
+        "filename": "Qwen3-8B-Q4_K_M.gguf",
+        "description": "Qwen3 8B - Alibaba, thinking/non-thinking (April 2025)",
+        "multimodal": False
+    },
+    "hermes3": {
+        "format": "chatml",
+        "filename": "Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
+        "description": "Hermes 3 Llama 3.1 8B - NousResearch fine-tune (Aug 2024)",
         "multimodal": False
     },
     "deepseek-lite": {
@@ -257,6 +301,9 @@ class AuroraLLMAdapter:
         
         self.format_config = PROMPT_FORMATS[self.model_format]
         
+        # Prefix injected at start of assistant response in chat template
+        self.prefix = preset.get("prefix", "I am") if preset else "I am"
+        
         # Load the model
         if verbose:
             print(f"Loading model: {self.model_path.name}")
@@ -281,9 +328,9 @@ class AuroraLLMAdapter:
             n_batch=512,
             verbose=False,
             seed=-1,
-            f16_kv=True,
-            use_mlock=True,
-            n_threads_batch=n_threads
+            type_k=1,
+            type_v=1,
+            flash_attn=True,
         )
     
     def _load_multimodal(self, preset, gpu_layers, n_ctx, n_threads):
@@ -325,8 +372,13 @@ class AuroraLLMAdapter:
         """Format system and user prompts for this model's expected format."""
         return self.format_config["template"].format(
             system=system_prompt,
-            user=user_prompt
+            user=user_prompt,
+            prefix=self.prefix
         )
+
+    def format_prompt_continuation(self, system_prompt: str, user_prompt: str) -> str:
+        """Raw continuation — no roles. Best for base models."""
+        return f"{system_prompt}\n\n{user_prompt}"
     
     def get_stop_tokens(self) -> list:
         """Get stop tokens for this model format."""
